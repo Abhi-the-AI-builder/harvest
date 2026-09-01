@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Harvest design preview — side panel</title>
+    <link rel="stylesheet" href="../src/sidepanel/sidepanel.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="icon-row" role="toolbar" aria-label="Harvest controls">
+        <button id="compare-toggle" class="icon-btn" type="button" aria-pressed="false" aria-label="Compare fonts" title="Pair a heading font with a body font"></button>
+        <button id="active-toggle" class="icon-btn" type="button" aria-pressed="false" aria-label="Toggle hover-capture" title="Hover-capture is paused — click to resume"></button>
+        <button id="density-toggle" class="icon-btn" type="button" aria-pressed="false" aria-label="Expanded view" title="Switch to expanded view"></button>
+        <div class="icon-row-divider" aria-hidden="true"></div>
+        <button id="collapse-btn" class="icon-btn" type="button" aria-label="Collapse to floating toolbar" title="Collapse — keep working from the floating toolbar on the page"></button>
+      </div>
+    </header>
+
+    <div id="site-line" class="site-line">
+      <button id="back-to-library-btn" class="back-btn" type="button" hidden>&larr; All sites</button>
+      <span id="site-line-text">Loading…</span>
+      <button id="select-toggle-btn" class="select-toggle-btn" type="button" hidden>Select</button>
+    </div>
+
+    <div id="library-tabs" class="library-tabs" hidden>
+      <div class="tab-group" role="tablist">
+        <button id="tab-sites" class="tab-chip" type="button" role="tab" aria-pressed="true">Sites</button>
+        <button id="tab-collections" class="tab-chip" type="button" role="tab" aria-pressed="false">Collections</button>
+      </div>
+      <button id="library-select-toggle" class="select-toggle-btn" type="button" aria-pressed="false">Select</button>
+    </div>
+
+
+    <main id="grid" class="grid" aria-live="polite"></main>
+
+    <div id="empty" class="empty" hidden>
+      <div class="empty-fan" aria-hidden="true">
+        <div class="empty-card card-1"><div class="empty-badge"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div></div>
+        <div class="empty-card card-2"><div class="empty-card-glyph empty-card-glyph-font">Aa</div><div class="empty-badge"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div></div>
+        <div class="empty-card card-3"><div class="empty-card-glyph empty-card-glyph-image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><circle cx="8.5" cy="10" r="1.8"/><path d="M21.5 15.5 16 10l-9.5 9.5"/></svg></div><div class="empty-badge"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div></div>
+      </div>
+      <div class="empty-title">Collect things</div>
+      <div class="empty-body">Hover anything on the page and click <strong>+ Collect</strong> to save it here.</div>
+    </div>
+
+    <main id="library-grid" class="library-grid" aria-live="polite" hidden></main>
+    <main id="collections-grid" class="library-grid" aria-live="polite" hidden></main>
+
+    <div id="library-empty" class="empty" hidden>
+      <div class="empty-fan" aria-hidden="true">
+        <div class="empty-card card-1"><div class="empty-badge"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div></div>
+        <div class="empty-card card-2"><div class="empty-card-glyph empty-card-glyph-font">Aa</div><div class="empty-badge"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div></div>
+        <div class="empty-card card-3"><div class="empty-card-glyph empty-card-glyph-image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><circle cx="8.5" cy="10" r="1.8"/><path d="M21.5 15.5 16 10l-9.5 9.5"/></svg></div><div class="empty-badge"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div></div>
+      </div>
+      <div class="empty-title">Nothing collected anywhere yet</div>
+      <div class="empty-body">Every site you collect from will show up here as its own folder.</div>
+    </div>
+
+    <div id="collections-empty" class="empty" hidden>
+      <div class="empty-fan" aria-hidden="true">
+        <div class="empty-card card-1"><div class="empty-badge"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div></div>
+        <div class="empty-card card-2"><div class="empty-card-glyph empty-card-glyph-font">Aa</div><div class="empty-badge"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div></div>
+        <div class="empty-card card-3"><div class="empty-card-glyph empty-card-glyph-image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><circle cx="8.5" cy="10" r="1.8"/><path d="M21.5 15.5 16 10l-9.5 9.5"/></svg></div><div class="empty-badge"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div></div>
+      </div>
+      <div class="empty-title">No Collections yet</div>
+      <div class="empty-body">Select a few items anywhere in your library and group them here.</div>
+    </div>
+
+    <div id="library-select-bar" class="select-bar" hidden>
+      <div class="select-bar-actions">
+        <span id="library-select-summary" class="select-bar-spacer"></span>
+        <button id="library-export-zip-btn" class="select-bar-btn" type="button">Export as ZIP</button>
+        <button id="library-export-figma-btn" class="select-bar-btn" type="button">Export to Figma</button>
+      </div>
+    </div>
+
+    <div id="select-bar" class="select-bar" hidden>
+      <div id="select-chips" class="select-chips"></div>
+      <div class="select-bar-actions">
+        <span class="select-bar-spacer"></span>
+        <button id="select-export-zip-btn" class="select-bar-btn" type="button">Export as ZIP</button>
+        <button id="select-export-figma-btn" class="select-bar-btn" type="button">Export to Figma</button>
+        <button id="select-add-btn" class="select-bar-btn" type="button">Add to Collection</button>
+        <button id="select-remove-btn" class="select-bar-btn select-bar-btn-danger" type="button">Remove</button>
+      </div>
+    </div>
+
+    <div id="compare-view" class="compare-view" hidden>
+      <div class="compare-pickers">
+        <label class="compare-field">
+          <span>Heading font</span>
+          <select id="compare-heading-select"></select>
+        </label>
+        <label class="compare-field">
+          <span>Body font</span>
+          <select id="compare-body-select"></select>
+        </label>
+      </div>
+      <div id="compare-empty" class="empty" hidden>
+        <div class="empty-title">Not enough fonts yet</div>
+        <div class="empty-body">Collect at least one heading font and one body-text font to try pairings.</div>
+      </div>
+      <div id="compare-sample" class="compare-sample" hidden>
+        <div id="compare-sample-heading" class="compare-sample-heading">The quick brown fox jumps</div>
+        <div id="compare-sample-body" class="compare-sample-body">over the lazy dog. Pack my box with five dozen liquor jugs — a sentence long enough to judge how this pairing actually reads in a real paragraph, not just a headline.</div>
+        <button id="compare-save-btn" class="compare-save-btn" type="button">Save this pairing</button>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <span>Saved permanently on this device — closing the browser won't lose it. It's never synced anywhere, so export if you need a copy elsewhere.</span>
+      <button id="restore-toolbar-btn" class="restore-toolbar-btn" type="button" hidden>Show the on-page toolbar again</button>
+    </footer>
+
+    <div id="modal-root"></div>
+    <div id="toast-root"></div>
+
+    <script>
+      // ---- chrome.* stub (see test/design-preview-tooltip.html for the
+      // matching content-script-side stub) ----
+      const listeners = { storage: [], runtime: [] };
+      const storageData = { harvestActive: true };
+      window.chrome = {
+        runtime: {
+          id: "preview",
+          getURL: (p) => new URL("../" + p.replace(/^\//, ""), window.location.href).href,
+          sendMessage: (msg, cb) => { cb && cb({ ok: true }); },
+          onMessage: { addListener: (fn) => listeners.runtime.push(fn) },
+          lastError: null,
+        },
+        storage: {
+          local: {
+            get: (keys, cb) => {
+              const out = {};
+              (Array.isArray(keys) ? keys : [keys]).forEach((k) => { if (k in storageData) out[k] = storageData[k]; });
+              cb(out);
+            },
+            set: (obj) => {
+              const changes = {};
+              Object.keys(obj).forEach((k) => { changes[k] = { oldValue: storageData[k], newValue: obj[k] }; storageData[k] = obj[k]; });
+              listeners.storage.forEach((fn) => fn(changes, "local"));
+            },
+          },
+          onChanged: { addListener: (fn) => listeners.storage.push(fn) },
+        },
+        tabs: {
+          query: (q, cb) => {
+            const result = [{ url: "https://stripe.com/pricing", id: 1, active: true }];
+            if (cb) { cb(result); return undefined; }
+            return Promise.resolve(result);
+          },
+          onActivated: { addListener: () => {} },
+          onUpdated: { addListener: () => {} },
+        },
+        sidePanel: { open: () => Promise.resolve(), setOptions: () => Promise.resolve() },
+        contextMenus: { update: () => {}, create: () => {}, onClicked: { addListener: () => {} } },
+        windows: { getCurrent: () => Promise.resolve({ id: 1 }) },
+      };
+    </script>
+    <script src="../src/content/shared.js?v=41"></script>
+    <script src="../src/db/db.js"></script>
+    <script src="../vendor/jszip.min.js"></script>
+    <script>
+      // Seed a realistic library BEFORE sidepanel.js's own init reads from
+      // HarvestDB, then inject sidepanel.js — guarantees ordering without
+      // relying on a reload race.
+      (async function seed() {
+        // Fresh DB every reload — this is a design preview, not a
+        // persistence test, and fixed seed IDs would collide on reload.
+        await new Promise((resolve) => {
+          const req = indexedDB.deleteDatabase("harvest-db");
+          req.onsuccess = resolve;
+          req.onerror = resolve;
+          req.onblocked = resolve;
+        });
+        const now = Date.now();
+        const iso = (daysAgo) => new Date(now - daysAgo * 86400000).toISOString();
+        const items = [
+          { id: "i1", type: "color", family: "other", hostname: "stripe.com", capturedAt: iso(0.1), sourceUrl: "https://stripe.com/pricing", sourcePageTitle: "Pricing", selector: ".hero", note: "", data: { hex: "#635BFF" } },
+          { id: "i2", type: "color", family: "other", hostname: "stripe.com", capturedAt: iso(0.2), sourceUrl: "https://stripe.com/pricing", sourcePageTitle: "Pricing", selector: ".bg", note: "", data: { hex: "#0A2540" } },
+          { id: "i3", type: "font", family: "heading", hostname: "stripe.com", capturedAt: iso(0.3), sourceUrl: "https://stripe.com/pricing", sourcePageTitle: "Pricing", selector: "h1", note: "Big display weight", data: { family: "Söhne", fallbackStack: "sans-serif", weight: "700", sizePx: 56, sampleText: "Financial infrastructure" } },
+          { id: "i4", type: "font", family: "body", hostname: "stripe.com", capturedAt: iso(0.4), sourceUrl: "https://stripe.com/pricing", sourcePageTitle: "Pricing", selector: "p", note: "", data: { family: "Söhne", fallbackStack: "sans-serif", weight: "400", sizePx: 16, sampleText: "Millions of businesses" } },
+          { id: "i5", type: "image", family: "other", hostname: "stripe.com", capturedAt: iso(0.5), sourceUrl: "https://stripe.com/pricing", sourcePageTitle: "Pricing", selector: "img.hero", note: "", data: { url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200'><rect width='300' height='200' fill='%23E8734A'/><circle cx='150' cy='100' r='50' fill='%23fff' opacity='0.3'/></svg>", width: 300, height: 200 } },
+          { id: "i6", type: "component", family: "other", hostname: "stripe.com", capturedAt: iso(0.6), sourceUrl: "https://stripe.com/pricing", sourcePageTitle: "Pricing", selector: ".card", note: "", data: { outerHTML: "<div>card</div>", boundingBoxWidth: 320, boundingBoxHeight: 180 } },
+          { id: "i7", type: "color", family: "other", hostname: "linear.app", capturedAt: iso(1), sourceUrl: "https://linear.app", sourcePageTitle: "Linear", selector: ".accent", note: "", data: { hex: "#5E6AD2" } },
+          { id: "i8", type: "font", family: "heading", hostname: "linear.app", capturedAt: iso(1.2), sourceUrl: "https://linear.app", sourcePageTitle: "Linear", selector: "h1", note: "", data: { family: "Inter", fallbackStack: "sans-serif", weight: "600", sizePx: 44, sampleText: "Linear is a purpose-built tool" } },
+          { id: "i9", type: "image", family: "other", hostname: "linear.app", capturedAt: iso(1.4), sourceUrl: "https://linear.app", sourcePageTitle: "Linear", selector: "img", note: "", data: { url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200'><rect width='300' height='200' fill='%235E6AD2'/><rect x='90' y='60' width='120' height='80' fill='%23fff' opacity='0.25'/></svg>", width: 300, height: 200 } },
+          { id: "i10", type: "color", family: "other", hostname: "vercel.com", capturedAt: iso(2), sourceUrl: "https://vercel.com", sourcePageTitle: "Vercel", selector: ".bg", note: "", data: { hex: "#000000" } },
+        ];
+        for (const item of items) await HarvestDB.addItem(item);
+        const col = await HarvestDB.createCollection("Q3 moodboard");
+        await HarvestDB.addItemsToCollection(col.id, [
+          { folderHostname: "stripe.com", itemId: "i1" },
+          { folderHostname: "stripe.com", itemId: "i3" },
+          { folderHostname: "linear.app", itemId: "i7" },
+        ]);
+        await HarvestDB.createCollection("Empty state check");
+
+        const s = document.createElement("script");
+        s.src = "../src/sidepanel/sidepanel.js?nocache=" + Date.now();
+        document.body.appendChild(s);
+      })();
+    </script>
+  </body>
+</html>

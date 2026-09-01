@@ -1,0 +1,1454 @@
+/* Bundled locally (extension pages can reference their own packaged files
+   by relative path directly, no web_accessible_resources/getURL needed —
+   that's only required for content scripts reaching into extension
+   resources from a page's own origin). */
+@font-face {
+  font-family: "Inter";
+  src: url("../../fonts/Inter-var.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  /* Color — see design-tokens.md for why these six, not more */
+  --color-bg: #FAFAFA;
+  --color-surface: #FFFFFF;
+  --color-text: #17181A;
+  --color-text-muted: #6B6E76;
+  --color-accent: #1D3461;
+  --color-accent-wash: rgba(29,52,97,0.10);
+  --color-danger: #C33D2E;
+  --color-danger-wash: rgba(195,61,46,0.08);
+  --color-border: rgba(23,24,26,0.09);
+  --color-border-strong: rgba(23,24,26,0.18);
+  --color-warning-bg: #FFF4E5;
+  --color-warning-text: #8A5A10;
+
+  /* Spacing — 4px base scale, nothing off-scale anywhere below */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+
+  /* Type */
+  --text-caption: 12px;
+  --text-body: 14px;
+  --text-subheading: 16px;
+  --text-heading: 20px;
+
+  /* Radius — a strict 4px grid throughout (v3 pass): every corner radius
+     anywhere in this product resolves to one of these three, no ad hoc
+     values. radius-lg is 20px to literally match the reference tooltip/
+     folder-grid images (design-tokens.md v2); radius-xs is for small
+     badges (type chips, icon buttons) that previously used inconsistent
+     one-off values like 5px/6px/10px. */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+
+  /* Pattern 3 (design-tokens.md v2) — pastel type badges, the one
+     deliberate exception to the single-accent rule. */
+  --type-color-bg: #FDE8E1; --type-color-fg: #C1552F;
+  --type-font-bg: #EDEAFB; --type-font-fg: #5B4FC4;
+  --type-image-bg: #DFF3EC; --type-image-fg: #1E8F72;
+  --type-component-bg: #FBF0DC; --type-component-fg: #B07D1F;
+  --type-note-bg: #E3EEFB; --type-note-fg: #2A6CA8;
+
+  /* Shadow — 3 levels only */
+  --shadow-resting: 0 1px 2px rgba(23,24,26,0.06);
+  --shadow-raised: 0 2px 6px rgba(23,24,26,0.08), 0 8px 20px rgba(23,24,26,0.10);
+  --shadow-overlay: 0 8px 24px rgba(23,24,26,0.14), 0 24px 48px rgba(23,24,26,0.16);
+
+  /* Motion */
+  --ease-fast: 120ms ease-out;
+  --ease-base: 180ms cubic-bezier(.2,.7,.3,1);
+  --ease-spring: 320ms cubic-bezier(.34,1.56,.64,1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+/* MUST come before any rule that sets `display` on a class also toggled
+   via the `hidden` attribute (.grid, .empty, .library-grid, etc.). The
+   browser's own [hidden]{display:none} UA-stylesheet rule has the same
+   specificity as a plain class selector — without !important here, a
+   later class rule setting display:flex/grid silently wins the cascade
+   tie, and el.hidden = true stops actually hiding anything. This is
+   exactly what caused the empty-state illustration and the real item
+   grid to render on screen at the same time despite one being "hidden". */
+[hidden] { display: none !important; }
+html, body {
+  height: 100%;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: var(--text-body);
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+body { display: flex; flex-direction: column; }
+
+/* Keyboard focus only — never on mouse click, so hover-driven UI doesn't
+   get a ring on every click. One ring style, reused everywhere, per
+   Section 6's "hover/focus/active/empty/error states all designed" bar —
+   the previous build had no focus-visible treatment anywhere. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.topbar {
+  display: flex; align-items: center; justify-content: flex-end;
+  padding: var(--space-2) var(--space-4); background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Same icon-button system as the floating on-page toolbar (toolbar.js) —
+   identical button size, hover, and active-highlight treatment, so
+   "collapsed" (the on-page pill) and "expanded" (this panel) read as one
+   consistent design system instead of two different UIs bolted together. */
+.icon-row { display: flex; align-items: center; gap: var(--space-1); }
+.icon-btn {
+  border: none; background: transparent; width: 32px; height: 32px; border-radius: var(--radius-full);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--color-text-muted); flex: none; transition: background var(--ease-fast), color var(--ease-fast);
+}
+.icon-btn:hover { background: var(--color-bg); color: var(--color-text); }
+.icon-btn[aria-pressed="true"] { background: var(--color-accent-wash); color: var(--color-accent); }
+/* Harvest.ICONS.note is intrinsically 10x10 (sized for the small 18px
+   note-badge it was originally built for, elsewhere) — every other icon
+   in this row is ~15x15, so reused as-is here it read as noticeably
+   smaller/harder to see than its neighbors. Forced consistent here rather
+   than resizing the shared icon itself, which would shrink it back down
+   wherever the 18px badge context still wants it small. */
+.icon-btn svg { width: 15px; height: 15px; }
+.icon-row-divider { width: 1px; height: 18px; background: var(--color-border); margin: 0 var(--space-1); flex: none; }
+
+.site-line {
+  padding: var(--space-2) var(--space-4); font-size: var(--text-caption); color: var(--color-text-muted); background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  display: flex; align-items: center; gap: var(--space-2);
+}
+/* The hostname is the one thing in this row that should read as bold —
+   "← All sites" was set at the same weight, so the row had two competing
+   bold elements with only the thin "On"/"— N items" text between them
+   instead of one clear focal point. The back-link now reads through its
+   accent color alone, the same way every other text-link in this panel
+   does (.back-btn is exactly that pattern already, this just stops
+   overriding it with a second, heavier weight). */
+.site-line .hostname { font-weight: 600; color: var(--color-text); }
+#site-line-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+/* Only applied while showing "All sites" at the top of Library — see
+   showLibrary/showSiteViewChrome. Doubles as the exit-Library action that
+   used to be a "← Back" button reading confusingly at the actual top of
+   the hierarchy. */
+.site-line-clickable { cursor: pointer; transition: color var(--ease-fast); }
+.site-line-clickable:hover { color: var(--color-accent); }
+.back-btn {
+  border: none; background: none; padding: 0; margin-right: var(--space-2); flex: none;
+  color: var(--color-accent); font-size: var(--text-caption); font-weight: 500; cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+.back-btn:hover { text-decoration: underline; }
+
+.grid {
+  flex: 1; overflow-y: auto; padding: var(--space-3);
+  display: flex; flex-direction: column; gap: var(--space-4);
+}
+/* Pattern 1 — a small caption above each group instead of one flat mixed
+   grid. "You are putting everything dumping kind" was the accurate
+   complaint: colors, fonts, images, and components landed in one
+   undifferentiated grid with no structure at all. */
+/* align-items: center, not the old baseline — baseline alignment is fine
+   for text-only content (the label vs. the old text-only "Download all"
+   link) but an icon button has no real text baseline of its own, so
+   adding one here would sit visibly off against the label at the old
+   baseline setting. Center keeps every combination (label alone, label +
+   icon, label + icon + text link) aligned correctly with no per-case
+   fixup needed. */
+.grid-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
+.grid-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; color: var(--color-text-muted); }
+/* The Notes tab's own two sub-groups ("Sites", "My folders") sit inside
+   one grid alongside the folder/collection cards themselves — grid-
+   column:1/-1 makes the label span every column instead of just
+   occupying one card's worth of width like a stray label would. */
+/* .library-tabs and .library-grid share the same var(--space-4) left
+   padding, so their CONTAINERS line up — but a tab chip's own text sits
+   further in than that, inset by .tab-group's 2px padding plus the chip's
+   own var(--space-3) horizontal padding. Matching that exact offset here
+   is what makes "SITES" visually start under "Sites" instead of under the
+   pill's outer edge. */
+.notes-tab-section-label { grid-column: 1 / -1; margin-top: var(--space-2); padding-left: calc(2px + var(--space-3)); }
+.notes-tab-section-label:first-child { margin-top: 0; }
+.grid-section-actions { display: flex; align-items: center; gap: var(--space-2); }
+.grid-section-action { border: none; background: none; color: var(--color-accent); font-size: var(--text-caption); font-weight: 700; cursor: pointer; padding: 0; }
+.grid-section-action:hover { text-decoration: underline; }
+/* Sized to the header's own 11px label, not the 32px topbar .icon-btn —
+   that scale would visually dominate this compact, all-caps row instead
+   of sitting quietly beside it the way "Download all" already does. */
+.grid-section-copy-btn {
+  border: none; background: none; width: 20px; height: 20px; padding: 0; border-radius: var(--radius-xs);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none;
+  color: var(--color-text-muted); transition: background var(--ease-fast), color var(--ease-fast);
+}
+.grid-section-copy-btn:hover { background: var(--color-bg); color: var(--color-accent); }
+.grid-section-copy-btn.is-copied { color: var(--color-accent); }
+.grid-section-copy-btn svg { width: 12px; height: 12px; }
+.grid-section-copy-btn:disabled { opacity: 0.5; cursor: default; }
+/* Fixed 3 columns (not auto-fill) — a real, deliberate 3-across grid,
+   sized closer to design-extractor's own card proportions instead of the
+   much smaller 72px tiles that made everything (the swatch, the note
+   text) too cramped to read comfortably. */
+/* align-items:start — without it, grid items default to stretch: every
+   tile in a row is forced to match the height of its tallest sibling (one
+   with a note, adding an extra line), leaving a dead empty strip at the
+   bottom of every shorter tile in that row instead of each tile just
+   ending where its own content does. */
+.grid-section-items { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); align-items: start; }
+/* A single full-width column used to stretch every row edge-to-edge with
+   a 48px thumb on the left and a lot of dead space on the right — a
+   responsive multi-column grid instead gives each card a sane width, and
+   is what makes room for the color/font swatch-card treatment below
+   (buildRichCard) to actually read as a card, not a thin strip. */
+.grid.expanded .grid-section-items { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: var(--space-3); align-items: start; }
+
+/* Folder grid — "All sites" library view (Section 7's by-website Library,
+   reference: fanned thumbnail cover, favicon badge to identify the site,
+   hostname, and an item-count/recency line below each card). */
+.library-grid {
+  flex: 1; overflow-y: auto; padding: var(--space-4);
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-4);
+  align-content: start;
+}
+/* Folder card — reference-02: a solid pastel-tinted card (not white),
+   fanned previews overlapping the top, hostname + favicon living inside
+   the tint at the bottom, delete always visible (not hover-only), and the
+   count/recency caption living OUTSIDE/below the card as its own line —
+   matching the reference exactly rather than the previous flat-white-card
+   +hover-only-delete +everything-crammed-inside version. */
+.folder-card {
+  display: flex; flex-direction: column; gap: var(--space-2); cursor: pointer; border: none;
+  background: none; padding: 0; text-align: left; position: relative;
+}
+/* A literal folder silhouette (the user pointed at a specific reference
+   for this): a colored top band holding the fanned previews, with a white
+   paper "flap" peeling up over it carrying the name + metadata — instead
+   of one flat tinted rectangle. `.folder-tint` is the band, `.folder-flap`
+   is the peel; together they read as one card via the shared radius and a
+   deliberate overlap, not two stacked boxes. */
+.folder-cover { position: relative; transition: transform var(--ease-fast); }
+/* Reference proportion: the white flap is the dominant ~70% of the card,
+   the colored band only ~30% — the opposite of a snug-fit strip under a
+   big cover photo. Tint shrunk and the fan thumbnails scaled down to
+   match, flap given real bottom breathing room below the meta line. */
+.folder-tint {
+  position: absolute; top: 0; left: 0; right: 0; height: 58px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0; overflow: hidden;
+  border: 1px solid rgba(23,24,26,0.08); border-bottom: none;
+}
+/* Extends well down past the tint into the flap's own territory (the tab
+   sits at z-index 2, above the fan's z-index 1) so the previews read as
+   tucked inside the folder — partially covered by the flap — rather than
+   floating entirely above it with a visible gap. */
+.folder-fan {
+  position: absolute; top: -8px; left: var(--space-2); right: var(--space-2); height: 78px; z-index: 1;
+}
+.folder-cover-empty {
+  position: absolute; top: 6px; left: 0; right: 0; height: 60px;
+  display: flex; align-items: center; justify-content: center; opacity: 0.55;
+}
+.folder-thumb {
+  position: absolute; top: 0; width: 40px; height: 70px; border-radius: var(--radius-sm);
+  border: 2px solid var(--color-surface); box-shadow: var(--shadow-raised);
+  overflow: hidden; background: var(--color-surface); display: flex; align-items: center; justify-content: center;
+}
+.folder-thumb img, .folder-thumb video { width: 100%; height: 100%; object-fit: cover; }
+.folder-thumb .mini-icon { color: var(--color-text-muted); font-size: var(--text-subheading); }
+.folder-thumb .mini-font { font-size: var(--text-caption); font-weight: 700; }
+.folder-favicon {
+  width: 26px; height: 26px; border-radius: var(--radius-full); flex: none;
+  background: var(--color-bg); border: 2px solid var(--color-surface); box-shadow: var(--shadow-raised);
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+}
+.folder-favicon img { width: 15px; height: 15px; object-fit: contain; }
+.folder-favicon-fallback { color: var(--color-text-muted); }
+.folder-pin-badge { color: var(--color-text-muted); }
+/* Pinned at the card's bottom-right corner, overlapping the flap —
+   matching the reference exactly, not inline next to the hostname text. */
+.folder-corner-badge { position: absolute; z-index: 3; bottom: var(--space-2); right: var(--space-2); }
+/* Pattern 5 — overflow count instead of silently dropping items past what
+   the 3-card fan can show. */
+.folder-thumb-more {
+  background: rgba(23,24,26,0.72); color: #fff; font-size: 11px; font-weight: 700;
+}
+/* The actual folder-tab silhouette: a raised tab on the left (the name)
+   with a concave curve where it meets the lower body (meta + corner
+   badge) — a real tab shape, not one smoothly-curved edge. The negative
+   margin pulls the whole thing up to overlap the tint so the tab reads as
+   peeling up out of the colored band. `--folder-tab-w`/`--folder-notch`
+   are shared by the tab/notch/body rules below so the three pieces always
+   line up exactly, however they're tuned later. */
+.folder-flap {
+  --folder-tab-h: 36px;
+  --folder-notch: 16px;
+  position: relative; z-index: 2; margin-top: 40px;
+  /* A single drop-shadow on the composite shape (tab + notch + body
+     together), not a box-shadow on the tab/body individually — a
+     box-shadow follows an element's own rectangular box even where its
+     corners are square, so it was casting a hard rectangular shadow right
+     at the tab's sharp bottom-right corner, next to the concave notch —
+     exactly the "looks pasted on top" seam the user flagged. drop-shadow
+     follows the actual rendered (alpha-composited) silhouette instead, so
+     it wraps the curve correctly. */
+  filter: drop-shadow(0 1px 2px rgba(23,24,26,0.08)) drop-shadow(0 6px 14px rgba(23,24,26,0.12));
+  transition: filter var(--ease-fast);
+}
+/* Width is now `fit-content` (capped), not a fixed px value — a fixed tab
+   width happened to fit "stripe.com" but truncated anything longer (real
+   hostnames, and Collection names are free-form user text with no length
+   guarantee). The notch lives INSIDE the tab now (`left/top: 100%`, i.e.
+   the tab's own bottom-right corner in the tab's own coordinate space) so
+   it automatically tracks wherever the tab's real rendered edge ends up,
+   instead of needing to know that width in advance via a fixed variable. */
+.folder-flap-tab {
+  position: relative; z-index: 2; width: fit-content; max-width: 78%; height: var(--folder-tab-h);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg) var(--radius-sm) 0 0;
+  padding: var(--space-2) var(--space-2) 0 var(--space-3);
+  /* No right border: that edge is where the tab curves into the notch —
+     a real folder-tab silhouette has one continuous line there, not a
+     straight segment that dead-ends into a curve. A border-right was
+     drawing exactly that unwanted straight seam. */
+  border: 1px solid rgba(23,24,26,0.1); border-bottom: none; border-right: none;
+}
+/* The concave fillet — standard CSS technique for an "inverted" rounded
+   corner: transparent inside the quarter-circle nearest the tab (revealing
+   the tint behind), filled outside it. Bumped to 18px (from 14px) and the
+   tab to 36px tall — the smaller version read as a vague, barely-there
+   curve rather than an unmistakable folder tab. */
+.folder-flap-notch {
+  position: absolute; z-index: 2; top: 100%; left: 100%;
+  width: var(--folder-notch); height: var(--folder-notch);
+  background: radial-gradient(circle at top left, transparent var(--folder-notch), var(--color-surface) calc(var(--folder-notch) + 0.5px));
+}
+.folder-flap-body {
+  position: relative; z-index: 1; margin-top: calc(-1 * var(--folder-notch));
+  background: var(--color-surface);
+  border-radius: 0 var(--radius-sm) var(--radius-lg) var(--radius-lg);
+  padding: calc(var(--folder-notch) + var(--space-1)) var(--space-3) var(--space-4);
+  min-height: 54px;
+  border: 1px solid rgba(23,24,26,0.1); border-top: none;
+  /* Was plain block flow — min-height forcing extra room below a short
+     name left that slack sitting BELOW the meta line (between meta and
+     the card's own bottom edge) instead of between the name and meta,
+     since nothing pinned the meta row to the bottom. The corner badge is
+     independently anchored to the cover's own actual bottom edge (a fixed
+     8px inset — see .folder-corner-badge), so the two drifted out of
+     alignment by however much slack min-height happened to add. A flex
+     column with the meta pushed down via margin-top:auto keeps the name
+     at top and the meta row flush against the same bottom edge the badge
+     is anchored to, with the same consistent gap every time regardless of
+     how much (if any) slack min-height adds. */
+  display: flex; flex-direction: column;
+}
+.folder-name { font-size: var(--text-caption); font-weight: 700; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 4px; }
+/* Label-above-value (Pattern 1): recency first (quiet), bold count second
+   (announces itself) — not one flat sentence at even weight. Right padding
+   keeps the text clear of the favicon/pin badge pinned at the corner — 40px
+   (badge itself is 26px + 8px inset + a real safety gap, not a hairline
+   clearance that reads as text running into the badge). margin-top:auto —
+   see the comment on .folder-flap-body above. */
+.folder-flap-meta { margin-top: auto; font-size: 11px; line-height: 1.5; color: var(--color-text-muted); padding-right: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-flap-meta strong { color: var(--color-text); font-weight: 700; }
+.folder-card:hover .folder-cover { transform: translateY(-1px); }
+.folder-card:hover .folder-flap { filter: drop-shadow(0 2px 4px rgba(23,24,26,0.08)) drop-shadow(0 8px 18px rgba(23,24,26,0.10)); }
+
+/* × delete on a folder/collection cover — always visible per reference-02
+   (a gray circular button, top-right, present regardless of hover), not a
+   hover-only affordance. */
+.card-delete-btn {
+  position: absolute; top: var(--space-1); right: var(--space-1); z-index: 3; width: 24px; height: 24px; border-radius: var(--radius-full);
+  background: rgba(23,24,26,0.28); border: none; backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; color: #fff;
+  transition: background var(--ease-fast); cursor: pointer;
+}
+.card-delete-btn:hover, .card-delete-btn:focus-visible { background: var(--color-danger); }
+/* On individual item tiles/cards (not a folder cover) it stays hover-only
+   — a dense multi-item grid with a permanently-visible delete circle on
+   every single tile is real clutter reference-02 doesn't have to deal
+   with (it only ever shows one delete per folder, not one per item). */
+.tile .card-delete-btn, .card .card-delete-btn {
+  top: -6px; right: -6px; width: 22px; height: 22px;
+  background: var(--color-surface); border: 1px solid var(--color-border-strong); backdrop-filter: none;
+  color: var(--color-text-muted); box-shadow: var(--shadow-raised);
+  /* pointer-events: none while invisible — .tile switched from
+     overflow:hidden to visible so these corner buttons could hang past
+     the tile's own edge, which means an "invisible" (opacity:0) button on
+     one tile now physically overlaps its neighbor's edge in a dense grid
+     (8px gap, 22px button hanging 6px out on each side). Without this, a
+     click that visually looks like it landed on tile A's own hover state
+     could actually fire tile A's neighbor's hidden button instead. */
+  opacity: 0; pointer-events: none; transition: opacity var(--ease-fast), background var(--ease-fast), color var(--ease-fast);
+}
+.tile:hover .card-delete-btn, .card:hover .card-delete-btn, .tile .card-delete-btn:focus-visible, .card .card-delete-btn:focus-visible { opacity: 1; pointer-events: auto; }
+.tile .card-delete-btn:hover, .card .card-delete-btn:hover { background: var(--color-danger-wash); color: var(--color-danger); border-color: rgba(195,61,46,0.3); }
+
+/* Per-image/component quick download — bottom-left, mirroring delete's
+   top-right, hover-only same as delete on individual tiles/cards. Built for
+   image and component items (see buildTile/buildRichCard) — image
+   downloads the live source file, component downloads its own captured
+   screenshot (downloadOneImage/downloadOneComponent). */
+.card-download-btn {
+  position: absolute; bottom: 6px; left: 6px; z-index: 3; width: 22px; height: 22px; border-radius: var(--radius-full);
+  background: var(--color-surface); border: 1px solid var(--color-border-strong);
+  display: flex; align-items: center; justify-content: center; color: var(--color-text-muted);
+  box-shadow: var(--shadow-raised); opacity: 0; pointer-events: none; cursor: pointer;
+  transition: opacity var(--ease-fast), background var(--ease-fast), color var(--ease-fast);
+}
+.tile:hover .card-download-btn, .card:hover .card-download-btn, .folder-card:hover .card-download-btn, .card-download-btn:focus-visible { opacity: 1; pointer-events: auto; }
+.card-download-btn:hover { background: var(--color-accent-wash); color: var(--color-accent); border-color: var(--color-accent); }
+.card-download-btn svg { width: 12px; height: 12px; }
+
+/* "Add a note" — bottom-right, tucked inside the corner the same way
+   download sits inset at bottom-left (not hanging off the edge like delete
+   does) — the two used to use different conventions, which read as
+   inconsistent, and made this button visibly jump position the moment a
+   note got added and it swapped for .tile-note-badge below (same slot,
+   different inset amount). Both now line up exactly. Built on tiles AND
+   rich cards (buildTile/buildRichCard) — only rendered when there's no
+   note yet; .tile-note-badge takes this same corner once there is one, so
+   the two never show at once. */
+.tile-edit-btn {
+  position: absolute; bottom: 6px; right: 6px; z-index: 3; width: 22px; height: 22px; border-radius: var(--radius-full);
+  background: var(--color-surface); border: 1px solid var(--color-border-strong);
+  display: flex; align-items: center; justify-content: center; color: var(--color-text-muted);
+  box-shadow: var(--shadow-raised); opacity: 0; pointer-events: none; cursor: pointer;
+  transition: opacity var(--ease-fast), background var(--ease-fast), color var(--ease-fast);
+}
+.tile:hover .tile-edit-btn, .card:hover .tile-edit-btn, .tile-edit-btn:focus-visible { opacity: 1; pointer-events: auto; }
+.tile-edit-btn:hover { background: var(--color-accent-wash); color: var(--color-accent); border-color: var(--color-accent); }
+
+/* Select mode toggle + selection checkboxes on item tiles/cards */
+.select-toggle-btn {
+  border: 1px solid var(--color-border-strong); background: var(--color-surface); border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3); font-size: var(--text-caption); color: var(--color-text); cursor: pointer; flex: none; margin-left: auto;
+  transition: background var(--ease-fast), color var(--ease-fast), border-color var(--ease-fast);
+}
+.select-toggle-btn:hover { background: var(--color-bg); }
+.select-toggle-btn[aria-pressed="true"] { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-surface); }
+/* Nothing to select ⇒ the control that selects it shouldn't look
+   clickable — real disabled state (not just a visual dim, so it also
+   can't be focused/activated via keyboard) rather than leaving an
+   always-live button sitting over an empty grid. */
+.select-toggle-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.select-toggle-btn:disabled:hover { background: var(--color-surface); }
+
+.tile, .card { position: relative; }
+.select-check {
+  position: absolute; top: var(--space-1); left: var(--space-1); width: 18px; height: 18px; border-radius: var(--radius-xs);
+  background: rgba(255,255,255,0.92); border: 1.5px solid var(--color-border-strong); z-index: 2;
+  display: flex; align-items: center; justify-content: center; transition: background var(--ease-fast), border-color var(--ease-fast);
+}
+.select-check[data-checked="true"] { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-surface); }
+.tile.selectable .card-delete-btn, .card.selectable .card-delete-btn { display: none; } /* selection and per-item delete don't coexist visually */
+
+/* Sites / Collections sub-tabs inside the library view. A real segmented
+   control (one tinted track, the active side riding a raised white pill)
+   instead of two loose same-weight outline chips sitting directly on the
+   page background — the loose-chip version had no visual home of its own
+   and read as two filter buttons rather than one control with two states.
+   Bottom padding added (was 0) so the row doesn't sit flush against the
+   first folder card below it. */
+.library-tabs { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4) var(--space-4); background: var(--color-surface); }
+.tab-group { display: flex; gap: 2px; background: var(--color-bg); border-radius: var(--radius-full); padding: 2px; flex: none; }
+.tab-chip {
+  border: none; background: none; border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3); font-size: var(--text-caption); font-weight: 600; color: var(--color-text-muted); cursor: pointer;
+  transition: background var(--ease-fast), color var(--ease-fast), box-shadow var(--ease-fast);
+}
+.tab-chip:hover { color: var(--color-text); }
+.tab-chip[aria-pressed="true"] { background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-raised); }
+
+/* Bottom action bar shown while items are selected. Two rows: a scrolling
+   chip strip (Pattern 4 — selected items as removable chips, not a bare
+   counter) above the action buttons. */
+.select-bar {
+  position: sticky; bottom: 0; display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4); background: var(--color-text); color: var(--color-surface); font-size: var(--text-caption);
+}
+.select-chips { display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: 2px; }
+.select-chip {
+  display: flex; align-items: center; gap: var(--space-1); flex: none;
+  background: rgba(255,255,255,0.12); border-radius: var(--radius-full); padding: 3px var(--space-2) 3px 3px;
+  font-size: 11px; max-width: 120px;
+}
+.select-chip-thumb {
+  width: 20px; height: 20px; border-radius: var(--radius-full); flex: none; overflow: hidden;
+  background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center;
+}
+.select-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-chip-remove {
+  border: none; background: none; color: rgba(255,255,255,0.6); padding: 0; margin-left: 1px;
+  display: flex; align-items: center; cursor: pointer; flex: none;
+}
+.select-chip-remove:hover { color: #fff; }
+.select-chip-overflow { background: none; color: rgba(255,255,255,0.65); padding: 3px var(--space-1); }
+.select-bar-actions { display: flex; align-items: center; gap: var(--space-3); }
+.select-bar-spacer { flex: 1; }
+.select-bar-btn {
+  border: 1px solid rgba(255,255,255,0.25); background: transparent; color: var(--color-surface);
+  border-radius: var(--radius-full); padding: var(--space-2) var(--space-3); font-size: var(--text-caption); font-weight: 600; cursor: pointer;
+  transition: background var(--ease-fast);
+}
+.select-bar-btn:hover { background: rgba(255,255,255,0.1); }
+.select-bar-btn-danger { border-color: rgba(238,140,131,0.5); color: #EE8C83; }
+
+/* Pattern 7 (CLAUDE.md) — a split button for the export action instead of
+   several same-weight buttons competing in one row. Radius-full pill
+   buttons only read cleanly with a single short word ("ZIP") — three of
+   them side by side, one carrying "Export for Figma Plugin," has no room
+   in this panel's width and wraps the label inside the pill instead of
+   the row, which is what turned every button into a stretched blob. A
+   fixed --radius-sm here holds its shape at any width; the extra export
+   destinations move into a menu instead of a fourth competing button. */
+.export-split { position: relative; display: flex; align-items: stretch; flex: none; }
+.export-primary-btn {
+  border: 1px solid rgba(255,255,255,0.25); border-right: none; background: transparent; color: var(--color-surface);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm); padding: var(--space-2) var(--space-3);
+  font-size: var(--text-caption); font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: background var(--ease-fast);
+}
+.export-primary-btn:hover { background: rgba(255,255,255,0.1); }
+.export-chevron-btn {
+  border: 1px solid rgba(255,255,255,0.25); background: transparent; color: var(--color-surface);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0; padding: 0 var(--space-2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; flex: none;
+  transition: background var(--ease-fast);
+}
+.export-chevron-btn:hover { background: rgba(255,255,255,0.1); }
+.export-chevron-btn svg { transition: transform var(--ease-fast); }
+.export-chevron-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+/* Figma export currently disabled (sidepanel.js, ENABLE_FIGMA_EXPORT) —
+   with the chevron hidden, the primary button is the whole control again,
+   so it gets its right side back instead of staying visibly cut off. */
+.export-split-solo .export-primary-btn { border-radius: var(--radius-sm); border-right: 1px solid rgba(255,255,255,0.25); }
+.export-menu {
+  position: absolute; bottom: calc(100% + var(--space-2)); right: 0; min-width: 200px;
+  background: var(--color-surface); border-radius: var(--radius-sm); box-shadow: var(--shadow-overlay);
+  padding: var(--space-1); display: flex; flex-direction: column; gap: 1px; z-index: 20;
+}
+.export-menu-item {
+  border: none; background: none; text-align: left; padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-xs); font-size: var(--text-caption); font-weight: 600; color: var(--color-text);
+  cursor: pointer; white-space: nowrap; transition: background var(--ease-fast);
+}
+.export-menu-item:hover { background: var(--color-bg); }
+
+/* Lightweight custom confirm modal — never a native window.confirm(),
+   same reasoning as the tooltip's size-cap confirm: it froze the tab and
+   looked like generic browser chrome, not this design system. */
+.sp-modal-overlay {
+  position: fixed; inset: 0; background: rgba(23,24,26,0.4); z-index: 50;
+  display: flex; align-items: center; justify-content: center; padding: var(--space-5);
+  animation: sp-fade-in var(--ease-base);
+}
+@keyframes sp-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.sp-modal {
+  /* Uniform on all sides — 24px top/bottom against only 14px left/right
+     made the box read as an odd, uneven rectangle ("boxy") rather than a
+     balanced card. One consistent inset all around is what actually
+     reads as deliberate. */
+  background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-4); width: 100%; max-width: 300px;
+  box-shadow: var(--shadow-overlay); animation: sp-modal-in var(--ease-base);
+}
+@keyframes sp-modal-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+/* 13px per direct spec — smaller than the type scale's own caption size,
+   an explicit value rather than a token. margin-bottom stays space-4
+   (16px) so the title still clearly separates from the field below it. */
+.sp-modal-title { font-size: 13px; font-weight: 700; margin-bottom: var(--space-4); }
+.sp-modal-body { font-size: var(--text-caption); color: var(--color-text-muted); line-height: 1.5; margin-bottom: var(--space-4); }
+.sp-modal-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+/* white-space:nowrap + flex:none on every button in this row — without
+   it, a flex item's default shrink behavior squeezes each button below
+   its own label's natural width once the row is tight (a two-word label
+   like "Save note" or "Remove note" next to a bordered/filled pair in a
+   300px-wide modal), wrapping the label to two lines instead of the row
+   just being as wide as it actually needs. */
+.sp-modal-cancel {
+  border: 1px solid var(--color-border-strong); background: var(--color-surface); border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4); font-size: var(--text-caption); font-weight: 600; color: var(--color-text); cursor: pointer;
+  transition: background var(--ease-fast); white-space: nowrap; flex: none;
+}
+.sp-modal-cancel:hover { background: var(--color-bg); }
+.sp-modal-confirm {
+  border: none; background: var(--color-danger); color: var(--color-surface); border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4); font-size: var(--text-caption); font-weight: 600; cursor: pointer;
+  transition: filter var(--ease-fast); white-space: nowrap; flex: none;
+}
+.sp-modal-confirm:hover { filter: brightness(1.08); }
+.sp-modal-confirm-accent { background: var(--color-accent); }
+
+.note-editor-textarea {
+  width: 100%; min-height: 72px; resize: none; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3); font-size: var(--text-caption); font-family: inherit; color: var(--color-text);
+  transition: border-color var(--ease-fast);
+}
+.note-editor-textarea:focus { border-color: var(--color-accent); outline: none; }
+/* An icon-only tertiary control, not a third bordered pill (or text
+   label) fighting Cancel/Save for the same visual weight — Pattern 9's
+   primary/secondary/tertiary hierarchy (design-tokens.md): Remove is a
+   rare, destructive tertiary action, not a peer of the two buttons
+   actually deciding this dialog's outcome. A quiet trash icon on the left
+   and one evenly-matched Cancel/Save pair on the right reads as one
+   deliberate row instead of competing controls. */
+.note-editor-remove {
+  margin-right: auto; border: none; background: none; padding: 0;
+  width: 34px; height: 34px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-danger); cursor: pointer; flex: none;
+}
+.note-editor-remove:hover, .note-editor-remove:focus-visible { background: var(--color-danger-wash); }
+
+/* Note editor popover — matched to GitHub's small anchored dialogs
+   (e.g. the comment/label editors): 12px corner radius (not the generic
+   20px --radius-lg), 16px padding on all sides, 8px between the title and
+   the field below it, 16px before the action row, GitHub's own two-layer
+   floating shadow (tight contact shadow + soft ambient one), and Primer's
+   exact button/field metrics (14px/20px line-height text, 6px control
+   radius, 5px/16px button padding, 8px/12px field padding). Scoped to this
+   one popup only — the shared .sp-modal shell (delete-confirm, hero,
+   collection picker) is untouched. */
+.sp-modal-note {
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 1px 3px rgba(140,149,159,0.15), 0 8px 24px rgba(27,31,36,0.24);
+}
+.sp-modal-note .sp-modal-title {
+  font-size: 14px; font-weight: 600; line-height: 20px; margin-bottom: 8px;
+}
+.sp-modal-note .note-editor-textarea {
+  padding: 8px 12px; font-size: 14px; line-height: 20px; border-radius: 6px;
+}
+.sp-modal-note .note-editor-textarea::placeholder { color: var(--color-text-muted); }
+.sp-modal-note .note-editor-textarea:focus {
+  border-color: #0969DA; box-shadow: 0 0 0 3px rgba(9,105,218,0.3);
+}
+.sp-modal-note .sp-modal-cancel,
+.sp-modal-note .sp-modal-confirm {
+  padding: 5px 16px; font-size: 14px; font-weight: 500; line-height: 20px; border-radius: 6px;
+}
+
+/* Pattern 12 — gradient hero band with a nested preview card, used only
+   for the pairing-save confirmation (design-tokens.md v2: the one
+   deliberate confirmation moment that earns this, not every modal). */
+.sp-modal-hero { padding: 0; overflow: hidden; }
+.sp-modal-hero-band {
+  background: linear-gradient(160deg, var(--color-accent), #3a5a9e);
+  padding: var(--space-5) var(--space-4);
+  display: flex; align-items: center; justify-content: center;
+}
+.sp-modal-hero-preview {
+  background: var(--color-surface); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4);
+  width: 100%; box-shadow: var(--shadow-raised); display: flex; flex-direction: column; gap: 4px; overflow: hidden;
+}
+.sp-modal-hero-heading { font-size: 17px; font-weight: 700; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-modal-hero-body { font-size: var(--text-caption); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-modal-hero-content { padding: var(--space-4); }
+.sp-modal-hero-content .sp-modal-title { margin-top: 0; }
+
+/* "Add to Collection" picker — reuses the same modal shell. Row shape
+   (icon swatch + stacked name/count + trailing action affordance,
+   hover-highlighted) follows the moodboard's account-switcher list
+   pattern rather than a bare text row. */
+.collection-picker-list { max-height: 220px; overflow-y: auto; margin-bottom: var(--space-3); }
+.collection-picker-row {
+  display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2);
+  border-radius: var(--radius-sm); cursor: pointer; transition: background var(--ease-fast);
+}
+.collection-picker-row:hover { background: var(--color-bg); }
+.collection-picker-row:hover .collection-picker-add { color: var(--color-accent); }
+.collection-picker-icon {
+  width: 32px; height: 32px; border-radius: var(--radius-sm); flex: none;
+  background: var(--color-accent-wash); color: var(--color-accent);
+  display: flex; align-items: center; justify-content: center;
+}
+.collection-picker-text { min-width: 0; flex: 1; }
+.collection-picker-name { font-size: var(--text-caption); font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.collection-picker-count { font-size: 11px; color: var(--color-text-muted); margin-top: 1px; }
+.collection-picker-add { color: var(--color-text-muted); display: flex; flex: none; transition: color var(--ease-fast); }
+.collection-picker-new { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.collection-picker-new input {
+  flex: 1; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); padding: var(--space-2);
+  font-size: var(--text-caption); font-family: inherit; color: var(--color-text);
+}
+.collection-picker-new input:focus { border-color: var(--color-accent); }
+.collection-picker-new button {
+  border: none; background: var(--color-accent); color: var(--color-surface); border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3); font-size: var(--text-caption); font-weight: 600; cursor: pointer;
+  transition: filter var(--ease-fast);
+}
+.collection-picker-new button:hover { filter: brightness(1.1); }
+
+/* GitHub-matched spacing for this modal shell too — same metrics as
+   .sp-modal-note (12px radius, 16px padding, GitHub's two-layer floating
+   shadow, 14px/20px text), plus GitHub's own ActionList row spacing
+   (8px/12px item padding, 6px item radius, 8px icon-to-text gap) applied
+   to the Collection rows and the "new Collection" field/button. Scoped
+   here only — the shared .sp-modal base (delete-confirm, hero) is
+   untouched. */
+.sp-modal-picker {
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 1px 3px rgba(140,149,159,0.15), 0 8px 24px rgba(27,31,36,0.24);
+}
+.sp-modal-picker .sp-modal-title {
+  font-size: 14px; font-weight: 600; line-height: 20px; margin-bottom: 8px;
+}
+.sp-modal-picker .collection-picker-list { margin-bottom: 12px; }
+.sp-modal-picker .collection-picker-row { padding: 8px 12px; border-radius: 6px; gap: 8px; }
+.sp-modal-picker .collection-picker-name { font-size: 14px; line-height: 20px; }
+.sp-modal-picker .collection-picker-count { font-size: 12px; }
+.sp-modal-picker .collection-picker-new { gap: 8px; margin-top: 8px; }
+.sp-modal-picker .collection-picker-new input { padding: 8px 12px; font-size: 14px; line-height: 20px; border-radius: 6px; }
+.sp-modal-picker .collection-picker-new input:focus {
+  outline: none; border-color: #0969DA; box-shadow: 0 0 0 3px rgba(9,105,218,0.3);
+}
+.sp-modal-picker .collection-picker-new button,
+.sp-modal-picker .sp-modal-cancel {
+  padding: 5px 16px; font-size: 14px; font-weight: 500; line-height: 20px; border-radius: 6px;
+}
+
+/* Undo toast */
+.sp-toast {
+  position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%); z-index: 60;
+  background: var(--color-text); color: var(--color-surface);
+  /* Was --radius-full (999px, a true pill) — correct for one line, but a
+     999px corner radius on a box that's grown tall from wrapped text
+     rounds the top/bottom into a squished, distorted oval instead of a
+     card. --radius-lg reads as a soft rounded capsule at the normal
+     one-line height and stays a normal, correctly-proportioned rounded
+     rect once a longer message wraps to 2-3 lines. */
+  border-radius: var(--radius-lg); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  font-size: var(--text-caption); display: flex; align-items: center; gap: var(--space-3);
+  /* max-width alone (previously 96%) still let the box collapse to a
+     narrower-than-available shrink-to-fit width before wrapping kicked
+     in — confirmed live, a normal-length message was breaking into 3
+     short, choppy lines well inside the panel's real width. width:
+     max-content forces the box to size to its own content first (so a
+     message that fits on one line stays on one line), with max-width
+     only capping it when it genuinely doesn't fit — and when it does
+     wrap, the box is already the full available width, so it wraps into
+     2 balanced lines instead of 3 narrow ones. */
+  box-shadow: var(--shadow-overlay); width: max-content; max-width: calc(100vw - 32px); animation: sp-toast-in var(--ease-base);
+}
+@keyframes sp-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.sp-toast-undo {
+  border: none; background: rgba(255,255,255,0.15); color: var(--color-surface); border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3); font-size: 11.5px; font-weight: 700; cursor: pointer; transition: background var(--ease-fast);
+}
+.sp-toast-undo:hover { background: rgba(255,255,255,0.25); }
+
+.tile {
+  /* overflow: visible (not hidden) on purpose — the delete/edit-note
+     corner buttons deliberately hang a few px past this box's own edge
+     (.card-delete-btn's -6px offset below), and overflow:hidden here was
+     silently clipping them to a half-circle on hover. Actual content
+     clipping to the rounded corners now happens one level down, on
+     whichever child actually fills the box (buildThumbNode's wrap, or
+     .tile-rich-top/-body for color/font) — see those rules. */
+  position: relative; aspect-ratio: 1; border-radius: var(--radius-sm); overflow: visible;
+  border: 1px solid var(--color-border); background: var(--color-surface); cursor: default;
+  display: flex; align-items: center; justify-content: center;
+  /* Grid items default to min-width:auto, not 0 — without this a tile
+     refuses to shrink below its own text's intrinsic width (e.g. a long
+     font name) and pushes past its 1fr track instead, forcing the whole
+     row wider than the panel and scrolling horizontally. The caption/
+     value/meta text already has its own ellipsis rules (below); this is
+     what lets that width constraint actually reach them. */
+  min-width: 0;
+}
+.tile img, .tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Ported from design-extractor's own .color-card/.color-info (sidepanel.css,
+   lines 781-807) — mask-image on the body panel itself, pulled up over the
+   swatch with a negative margin-top, not a separate notch element. Scaled
+   down from their 18px/74px/12px numbers to fit this grid's much smaller
+   tiles (72px+ wide vs. their 120-160px cards), same technique and ratios —
+   snapped to the 4px radius grid (--radius-sm, 8px) rather than the
+   in-between 6px/10px values that came out of the direct scale-down. */
+.tile-rich { aspect-ratio: auto; display: block; }
+.tile-rich-top {
+  /* 64px, up from 42px — the fixed 3-column grid gives each tile real
+     width now (~104px in a 360px panel), and 42px read as a thin strip
+     under it. Closer to design-extractor's own 74px-swatch/140px-card
+     ratio, scaled to this grid's narrower columns. */
+  height: 64px; position: relative; overflow: hidden;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+.tile-rich-glyph { font-size: 28px; line-height: 1; color: var(--type-font-fg); display: flex; align-items: center; justify-content: center; height: 100%; }
+.tile-rich-body {
+  position: relative;
+  margin-top: calc(-1 * var(--radius-sm));
+  padding: var(--space-2) var(--space-2) var(--space-1) var(--space-2);
+  background: var(--color-bg);
+  border-top-right-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+  -webkit-mask-image: radial-gradient(circle 8px at 0 0, transparent 7.5px, #000 8px);
+  mask-image: radial-gradient(circle 8px at 0 0, transparent 7.5px, #000 8px);
+}
+.tile-rich-caption {
+  font-size: 10px; font-weight: 650; color: var(--color-text-muted); margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tile-rich-value {
+  font-size: 13px; font-weight: 700; color: var(--color-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Inter throughout, including hex codes — no separate monospace treatment
+   for data values. */
+.tile-rich-meta { font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The note's actual text inside the tile body — no floating badge to
+   clear space for anymore, so no right-padding compensation needed.
+   Explicit height/line-height (not just relying on the font's natural
+   line-height) so this is pixel-identical to .tile-rich-note-spacer
+   below — same reserved row height whether or not there's a note. */
+.tile-rich-note {
+  display: block; width: 100%; text-align: left; border: none; background: none; padding: 0; font-family: inherit;
+  font-size: 11px; line-height: 14px; height: 14px; font-style: italic; color: var(--color-text-muted); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+.tile-rich-note:hover, .tile-rich-note:focus-visible { color: var(--color-accent); }
+.tile-rich-note-spacer { height: 14px; margin-top: 2px; }
+/* Pattern 3 — pastel badge per capture type, not a flat dark chip, same
+   four colors used everywhere a type appears (tooltip, tile, card,
+   folder-cover fallback). */
+.tile .type-chip {
+  position: absolute; top: var(--space-1); left: var(--space-1); width: 18px; height: 18px; border-radius: var(--radius-xs);
+  display: flex; align-items: center; justify-content: center;
+}
+.tile .type-chip svg { width: 11px; height: 11px; }
+.tile-note-badge {
+  /* Same inset as .tile-edit-btn (6px) — this occupies the exact same
+     bottom-right slot once a note exists, so the corner doesn't visibly
+     shift the moment a note gets added. */
+  position: absolute; bottom: 6px; right: 6px; width: 18px; height: 18px; border-radius: var(--radius-xs);
+  background: rgba(23,24,26,0.55); color: var(--color-surface); display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(2px); border: none; padding: 0;
+  transition: background var(--ease-fast);
+}
+button.tile-note-badge { cursor: pointer; }
+button.tile-note-badge:hover, button.tile-note-badge:focus-visible { background: var(--color-accent);
+}
+.type-chip-color, .type-label-color { background: var(--type-color-bg); color: var(--type-color-fg); }
+.type-chip-font, .type-label-font { background: var(--type-font-bg); color: var(--type-font-fg); }
+.type-chip-image, .type-label-image { background: var(--type-image-bg); color: var(--type-image-fg); }
+.type-chip-component, .type-label-component { background: var(--type-component-bg); color: var(--type-component-fg); }
+.type-chip-note, .type-label-note { background: var(--type-note-bg); color: var(--type-note-fg); }
+.tile .font-sample, .card .thumb .font-sample, .folder-thumb .font-sample {
+  font-size: 22px; line-height: 1; color: var(--type-font-fg); white-space: nowrap;
+}
+.select-chip-thumb .font-sample { font-size: 13px; color: var(--type-font-fg); }
+.tile .component-icon { color: var(--color-accent); display: flex; }
+.tile .component-icon svg { width: 22px; height: 22px; }
+
+/* Notes section — single full-width column, not the 3-col tile grid
+   everything else uses (see render()'s grid-section-items-notes class). */
+/* The reference's white rounded card holding the whole timeline (as
+   opposed to a flat gray page background) — one card per Notes view
+   (this section, or the aggregate Notes tab), date groups stacked inside
+   with real gap between them, entries within a group packed tight
+   (separated by their own dashed rule instead). */
+.grid-section-items-notes {
+  grid-template-columns: 1fr; gap: var(--space-5);
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+
+/* A text capture (src/content/notes.js), not a swatch/thumbnail — its own
+   horizontal excerpt-row shape instead of being forced into buildTile's
+   image-hero layout. Pattern 1: muted caption above, the text itself as
+   the bold "value" below. Literal journal-timeline treatment now (per the
+   reference image, requested exact-match three times over): a dashed
+   spine, entries separated by a dashed rule instead of individual card
+   borders, everything sitting inside one white rounded card (see
+   .grid-section-items-notes below) — matching the reference's structure,
+   not just borrowing its "group by time" idea. */
+.note-tile {
+  display: flex; align-items: flex-start; background: none;
+  border: none; border-top: 1px dotted var(--color-border); padding: var(--space-3) 0 var(--space-3) var(--space-3);
+  position: relative;
+  /* The per-note color-pick left stripe is gone — it sat directly next to
+     the timeline's own dashed spine, and two parallel vertical lines
+     (one dashed/gray, one solid/colored) right next to each other read
+     as clutter rather than two distinct signals. The color pick itself
+     is still saved on the item and still shown at capture time (the
+     tooltip's own badge) — just not duplicated again here. */
+}
+.note-date-group-items .note-tile:first-child { border-top: none; padding-top: 2px; }
+.note-tile-body { min-width: 0; flex: 1; }
+.note-tile-caption {
+  font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px;
+  display: flex; align-items: center; gap: 4px; min-width: 0;
+}
+/* Which site this came from — a real link (not just text), since a note
+   only ever shows next to OTHER sites in the flat Notes tab or a
+   multi-site Collection, exactly where "which site" stops being obvious
+   from context. */
+.note-tile-source-link {
+  display: inline-flex; align-items: center; gap: 3px; min-width: 0;
+  color: var(--color-text-muted); text-decoration: none;
+}
+.note-tile-source-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-tile-source-link svg { flex: none; }
+.note-tile-source-link:hover, .note-tile-source-link:focus-visible { color: var(--color-accent); text-decoration: underline; }
+.note-tile-time { flex: none; }
+/* Day-level grouping (see groupNotesByDate/appendGroupedNoteTiles) — a
+   small muted date heading of its own row, tiles stacked underneath, the
+   same "time label separated from content" idea the reference journal-app
+   mockup uses, adapted to this app's existing bordered-card tiles instead
+   of a borderless dotted timeline (every other item type in this Library
+   already renders as a bordered card — notes matching that, per Section 8
+   of design-tokens.md, mattered more here than matching the reference
+   literally). */
+/* The dashed vertical spine from the reference — a plain dashed left
+   border on the group itself rather than a separate absolutely-positioned
+   line element, so it never needs manual height math as entries are
+   added/removed. Starts below the date label (top offset) and stops
+   short of the last entry's bottom edge, matching the reference's spine,
+   which runs between entries, not past the first/last one. */
+.note-date-group {
+  display: flex; flex-direction: column;
+  /* One indent value, shared by the pill label and the spine below it —
+     both are direct children of this same padding box now, so they land
+     on the same left edge automatically instead of needing separate
+     negative-margin math to fake alignment (which is what previously left
+     the spine sitting further right than the pill above it). Also
+     smaller than before — less dead space between the card's own left
+     edge and the pill. */
+  padding-left: var(--space-2);
+}
+/* The spine as a plain border-left on the tiles wrapper itself — not an
+   absolutely-positioned pseudo-element trying to pass "through" the
+   label above it. Two earlier attempts at that (starting the line at a
+   calculated pixel offset, then trying to hide it behind the label via
+   z-index) both still rendered wrong in practice — fragile in a way a
+   real border on a real block-flow element simply isn't. The line now
+   starts cleanly where the notes themselves start, right below the
+   label, instead of trying to bisect it. */
+.note-date-group-items {
+  display: flex; flex-direction: column;
+  border-left: 2px dashed var(--color-border-strong);
+  padding-left: 3px;
+}
+.note-date-group.is-collapsed .note-date-group-items { display: none; }
+/* Shown once above a run of consecutive notes from the same source page,
+   in place of every one of those tiles repeating its own identical
+   "www.example.com · 43m ago" caption. Same dotted-rhythm/spacing as a
+   .note-tile's own top border, since visually it's standing in for what
+   would have been the first tile's own caption line in that run. */
+.note-source-group-header {
+  display: flex; align-items: center; font-size: 11px; color: var(--color-text-muted);
+  border-top: 1px dotted var(--color-border); padding: var(--space-3) 0 var(--space-1) var(--space-3);
+}
+.note-date-group-items > .note-source-group-header:first-child { border-top: none; padding-top: 2px; }
+/* The tile right after a header shouldn't ALSO draw its own top divider —
+   the header's own border-top above already separated this run from
+   whatever came before it; a second dotted line directly underneath would
+   just look like an accidental double rule. */
+.note-source-group-header + .note-tile { border-top: none; padding-top: 0; }
+/* Dashed-border pill, not plain text — the exact capsule shape the
+   reference's own time labels use ("10.30 AM" sits in a rounded, dashed-
+   outline badge, not a bare caption). No z-index/overlap tricks needed
+   now that the spine starts below it instead of behind it. */
+.note-date-group-label {
+  display: inline-flex; align-items: center; gap: 5px; align-self: flex-start;
+  cursor: pointer; font-family: inherit;
+  height: 22px; box-sizing: border-box;
+  font-size: 11px; font-weight: 700; color: var(--color-text-muted);
+  border: 1px dashed var(--color-border-strong); border-radius: var(--radius-full);
+  padding: 0 var(--space-2); margin: var(--space-1) 0 0 0;
+  background: var(--color-surface); transition: color var(--ease-fast), border-color var(--ease-fast);
+}
+.note-date-group-label:hover { color: var(--color-accent); border-color: var(--color-accent); }
+.note-date-group-chevron { display: flex; flex: none; transition: transform var(--ease-fast); }
+.note-date-group-chevron svg { width: 8px; height: 8px; }
+.note-date-group.is-collapsed .note-date-group-chevron { transform: rotate(-90deg); }
+/* Regular weight, not medium — the reference's own paragraph text reads
+   as plain body copy, not a bolded "value" the way a stat or hex code
+   gets weight elsewhere in this app (Pattern 1 is for numbers/labels;
+   a multi-line captured sentence is closer to prose). Still --color-text,
+   not the muted gray, since this is the note's actual content and needs
+   to stay the most legible thing on the tile — only its WEIGHT was too
+   heavy, not its contrast. */
+.note-tile-text {
+  font-size: var(--text-caption); font-weight: 400; color: var(--color-text); line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  cursor: text;
+  /* Selecting across a heading + a paragraph captures a real line break
+     between them (Selection.toString() inserts one at block boundaries) —
+     without this, default `white-space: normal` collapses it away and the
+     heading runs straight into the body text as one flat sentence. */
+  white-space: pre-line;
+}
+.note-tile-text-expanded { -webkit-line-clamp: unset; }
+.note-tile-expand-btn {
+  display: block; margin-top: var(--space-1); padding: 0; border: none; background: none;
+  font-size: 11px; font-weight: 600; color: var(--color-accent); cursor: pointer;
+}
+.note-tile-expand-btn:hover { text-decoration: underline; }
+/* Text captured from inside an h1-h6 on the source page — bold, same
+   color/size as the rest of the note (a heavier weight is what actually
+   distinguished it on the page; a bigger size here would fight the tile's
+   own 3-line clamp). No new color, just weight. */
+.note-tile-heading-text { font-weight: 700; }
+/* A real highlighter mark, not a new color — reuses NOTE_COLORS.yellow
+   (the same yellow already in the capture-time color picker), the
+   classic highlighter-pen tone, so this doesn't add a color the system
+   didn't already have a job for. */
+.note-tile-highlight {
+  background: #FCF1CF; color: inherit; border-radius: 2px; padding: 0 1px; cursor: pointer;
+}
+/* Floating "Highlight" button — same shape language as the capture-time
+   tooltip's own add-btn (circular accent action) and the tag/color
+   pickers (position:fixed, appears near the interaction, singleton). */
+.note-highlight-btn {
+  position: fixed; z-index: 600; display: flex; align-items: center; gap: 5px;
+  background: var(--color-text); color: var(--color-surface); border: none; border-radius: var(--radius-full);
+  padding: 5px var(--space-3) 5px var(--space-2); font-size: 11px; font-weight: 600; font-family: inherit;
+  cursor: pointer; box-shadow: var(--shadow-overlay); white-space: nowrap;
+}
+.note-highlight-btn svg { width: 11px; height: 11px; flex: none; }
+.note-highlight-btn:hover { filter: brightness(1.15); }
+/* Real thumbnails, not a text count — a captured image is meant to be
+   looked at. 36px squares (same footprint as .card .thumb elsewhere in
+   this app, so an image reads the same size whether it's on a note or a
+   dedicated image capture), capped at 4 with a "+N" overflow chip rather
+   than growing the row unbounded for a big selection. */
+.note-tile-images { display: flex; align-items: center; gap: 6px; margin-top: var(--space-2); }
+.note-tile-image-thumb {
+  width: 36px; height: 36px; border-radius: var(--radius-sm); flex: none; overflow: hidden;
+  border: 1px solid var(--color-border); display: block;
+}
+.note-tile-image-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.note-tile-image-overflow {
+  width: 36px; height: 36px; border-radius: var(--radius-sm); flex: none;
+  background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border);
+  display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+  /* Now a real <button> (was a plain <span> with no click handler at all —
+     the images past the shown cap of 4 had no way to ever be reached).
+     font-family/cursor explicitly set since browsers apply their own
+     button defaults for these two specifically (the global *{box-sizing;
+     margin:0;padding:0} reset already covers sizing). */
+  font-family: inherit; cursor: pointer; transition: background var(--ease-fast), color var(--ease-fast);
+}
+.note-tile-image-overflow:hover { background: var(--color-accent-wash); color: var(--color-accent); border-color: var(--color-accent); }
+/* Real links, not a count either — each one openable directly, same
+   tinted-pill language as the tag chips right below them so the two rows
+   read as siblings, not two different UI languages. */
+.note-tile-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
+.note-tile-link-chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 220px;
+  font-size: 11px; font-weight: 600; color: var(--color-text-muted);
+  background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-full);
+  padding: 2px var(--space-2) 2px 6px; text-decoration: none;
+}
+.note-tile-link-chip:hover { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-wash); }
+.note-tile-link-chip span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-tile-link-chip svg { width: 10px; height: 10px; flex: none; }
+/* Predefined tags (NOTE_TAGS) — Pattern 10, a tinted pill, not plain text.
+   One shared accent tint for every tag rather than a color per tag: five
+   different tag colors next to the four capture-type colors and four note
+   colors would be real color competition (Section 7's own rule) for
+   something that's just an organizing label, not a category with its own
+   visual identity the way a capture type is. */
+.note-tile-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: var(--space-2); }
+.note-tag-chip {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
+  padding: 2px var(--space-2) 2px 6px; border-radius: var(--radius-full);
+  background: var(--color-accent-wash); color: var(--color-accent);
+}
+.note-tag-chip-icon { width: 11px; height: 11px; flex: none; display: flex; }
+.note-tag-chip-icon svg { width: 11px; height: 11px; }
+/* Solid border, not dashed — dashed is already the timeline's own
+   language (the spine, the date pill), meaning "connector"/"marker" on
+   this screen. Reusing it here for an unrelated "add" action made three
+   different things all say "dashed" for three different reasons, which
+   is exactly what read as clutter in a tight view: several small dashed
+   circles with no clear single meaning. A solid border keeps this an
+   action control, visually distinct from the timeline itself. */
+.note-tag-add-btn {
+  font-size: 11px; font-weight: 600; color: var(--color-text-muted);
+  background: none; border: 1px solid var(--color-border-strong); border-radius: var(--radius-full);
+  padding: 2px var(--space-2); cursor: pointer; transition: color var(--ease-fast), border-color var(--ease-fast);
+  /* Lives inline in .note-tile-caption now (site link + time on the left),
+     not in the chip row below the text — auto margin pushes it flush to
+     the row's right edge instead of trailing right after the timestamp. */
+  flex: none; margin-left: auto;
+}
+.note-tag-add-btn:hover, .note-tag-add-btn:active { color: var(--color-accent); border-color: var(--color-accent); }
+.note-tag-add-btn:active { background: var(--color-accent-wash); }
+/* "+ Add note" — same solid ghost-pill language as "+ Tag" right next to
+   it (both optional-metadata affordances in the same row), not the
+   unstyled default <button> chrome it fell back to before (no .note-tile-
+   scoped rule existed at all; only .card had one). Once a real note
+   exists it's shown as its own italic text line below instead — see
+   .note-tile .note-editable/.note-tile .note further down. */
+.note-tile .note-add {
+  font-size: 11px; font-weight: 600; color: var(--color-text-muted);
+  background: none; border: 1px solid var(--color-border-strong); border-radius: var(--radius-full);
+  padding: 2px var(--space-2); cursor: pointer; opacity: 1; transition: color var(--ease-fast), border-color var(--ease-fast);
+}
+.note-tile .note-add:hover, .note-tile .note-add:active { color: var(--color-accent); border-color: var(--color-accent); }
+.note-tile .note-add:active { background: var(--color-accent-wash); }
+/* :not(.note-add) matters here — the add-note button also carries the
+   bare .note class (className = "note note-add"), so without this
+   exclusion it matched this "note has real text" rule too and its
+   display:block/width:100% silently overrode the pill styling above,
+   which is exactly why it was dropping to its own full-width line
+   instead of sitting inline next to "+ Tag". */
+.note-tile .note-editable, .note-tile .note:not(.note-editable):not(.note-add) {
+  display: block; width: 100%; text-align: left; border: none; background: none; padding: 0; font-family: inherit;
+  font-size: 12px; font-weight: 500; font-style: italic; color: var(--color-text-muted); line-height: 1.4;
+  margin-top: var(--space-1); overflow-wrap: break-word;
+}
+.note-tile .note-editable { cursor: pointer; }
+.note-tile .note-editable:hover, .note-tile .note-editable:focus-visible { color: var(--color-accent); }
+.note-tag-menu {
+  position: fixed; z-index: 500; min-width: 130px;
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-overlay); padding: var(--space-1); display: flex; flex-direction: column; gap: 1px;
+}
+.note-tag-menu-item {
+  display: flex; align-items: center; gap: 8px; border: none; background: none; text-align: left;
+  padding: 5px 6px; border-radius: var(--radius-xs); font-size: 12px; font-weight: 500; line-height: 1.3;
+  color: var(--color-text); cursor: pointer; font-family: inherit; transition: background var(--ease-fast);
+}
+.note-tag-menu-item:hover { background: var(--color-bg); }
+.note-tag-menu-item:active { background: var(--color-accent-wash); }
+.note-tag-menu-item[aria-checked="true"] { color: var(--color-accent); font-weight: 600; }
+/* Pattern 3 — soft tinted icon badge per row, not a plain glyph floating
+   on the item's own background, matching the same "categorization reads
+   by shape" language every other type badge in this app already uses. */
+.note-tag-menu-icon {
+  width: 20px; height: 20px; border-radius: var(--radius-xs); flex: none;
+  background: var(--color-accent-wash); color: var(--color-accent);
+  display: flex; align-items: center; justify-content: center;
+}
+.note-tag-menu-icon svg { width: 12px; height: 12px; }
+.note-tag-menu-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-tag-menu-check { width: 11px; height: 11px; flex: none; display: flex; color: var(--color-accent); }
+.note-tag-menu-check svg { width: 11px; height: 11px; }
+/* Absolutely positioned (off .note-tile's own `position: relative`), not a
+   normal flex sibling of .note-tile-body — a static flex column with
+   opacity:0 still occupies its full width in the row even while invisible,
+   which was quietly stealing ~35px from the text column on every tile,
+   all the time, not just while hovered — the actual cause of text wrapping
+   well before the tile's visible right edge. Overlaying it instead means
+   .note-tile-body gets the tile's real full width, and the buttons still
+   only visually appear on hover exactly as before. */
+.note-tile-actions {
+  /* Real document flow, not an absolutely-positioned overlay — that
+     version anchored to the tile's own top-right corner (first at the
+     same spot as the caption's "+ Tag", then lower to clear it) and, for
+     any tile shorter than the 4-icon column's own stacked height, spilled
+     straight past the tile's own bottom edge into whatever rendered next
+     below it on hover — a real element can't overlap outside its own box.
+     A horizontal row in the space already sitting empty below the text/
+     tags fixes this structurally instead of chasing another offset.
+     max-height (not just opacity) animated to 0 by default — a tile with
+     no tags previously always reserved this row's full height even while
+     not hovered, permanently spacing every tile apart more than a tile
+     that genuinely has nothing there. Collapsed to zero height at rest,
+     it expands on hover and pushes the next tile down for that moment —
+     still real flow, so this can't drift back into the overlap bug the
+     absolutely-positioned version had. */
+  display: flex; flex-direction: row; gap: var(--space-2); margin-top: 0; max-height: 0; overflow: hidden;
+  opacity: 0; pointer-events: none; transition: opacity var(--ease-fast), max-height var(--ease-fast), margin-top var(--ease-fast);
+}
+.note-tile:hover .note-tile-actions, .note-tile-actions:focus-within {
+  opacity: 1; pointer-events: auto; max-height: 28px; margin-top: var(--space-2);
+}
+/* Same circular, shadow-raised icon-button chrome as .card-delete-btn/
+   .card-download-btn/.tile-edit-btn use everywhere else in the Library
+   (Sites view, expanded cards) — this used to be a bespoke rounded-square,
+   no-shadow, 26px treatment instead, which read as a different, slightly
+   off-brand component sitting next to buttons built the exact same way one
+   tab over. Same 22px/circle/shadow-raised recipe, just stacked in a
+   column instead of hanging off tile corners (a note is a full-width row,
+   not a square swatch, so there's no "corner" for these to hang off of —
+   the shape/shadow language matches, the layout adapts to the shape it's in). */
+.note-tile-action-btn {
+  width: 22px; height: 22px; border-radius: var(--radius-full); border: 1px solid var(--color-border-strong);
+  background: var(--color-surface); color: var(--color-text-muted); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: var(--shadow-raised); transition: background var(--ease-fast), color var(--ease-fast);
+}
+.note-tile-action-btn svg { width: 12px; height: 12px; }
+.note-tile-action-btn:hover { background: var(--color-accent-wash); color: var(--color-accent); border-color: var(--color-accent); }
+/* .tile-edit-btn/.card-delete-btn are reused inside .note-tile-actions
+   (buildEditBtn/buildDeleteBtn) — neither .tile nor .card wraps a
+   .note-tile, so they'd otherwise fall back to .card-delete-btn's base
+   "folder cover" styling (always-visible dark circle, off-tile position)
+   instead of the tile-scoped hover-reveal treatment. Repositioned inline
+   in this flex column, but kept circular + shadow-raised (their own base
+   .card-delete-btn/.tile-edit-btn rule already is both — previously
+   overridden to box-shadow:none and 26px here, which is exactly what made
+   these two buttons look different from the download/copy pair right next
+   to them; now all four match). */
+.note-tile-actions .tile-edit-btn, .note-tile-actions .card-delete-btn {
+  position: static; opacity: 1; pointer-events: auto; width: 22px; height: 22px; box-shadow: var(--shadow-raised);
+  background: var(--color-surface); border: 1px solid var(--color-border-strong); color: var(--color-text-muted);
+  backdrop-filter: none;
+}
+.note-tile-actions .card-delete-btn:hover { background: var(--color-danger-wash); color: var(--color-danger); border-color: rgba(195,61,46,0.3); }
+.note-tile-actions .tile-edit-btn:hover { background: var(--color-accent-wash); color: var(--color-accent); border-color: var(--color-accent); }
+
+.card {
+  display: flex; gap: var(--space-3); align-items: center; background: var(--color-surface); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border); padding: var(--space-2);
+}
+.card .thumb {
+  width: 48px; height: 48px; border-radius: var(--radius-sm); flex: none; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; background: var(--color-bg);
+}
+.card .thumb img, .card .thumb video { width: 100%; height: 100%; object-fit: cover; }
+.card .details { min-width: 0; flex: 1; }
+/* Pattern 10 — tinted eyebrow pill (matching bg+text color), not plain
+   caps text. */
+.card .type-label {
+  display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  padding: 2px var(--space-2); border-radius: var(--radius-full); margin-bottom: 2px;
+}
+.card .headline { font-size: var(--text-caption); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .meta { font-size: 11px; color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .note {
+  font-size: 11px; color: var(--color-text-muted); font-style: italic; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: block; width: 100%; text-align: left; border: none; background: none; padding: 0; font-family: inherit;
+}
+.card .note-editable { cursor: pointer; }
+.card .note-editable:hover, .card .note-editable:focus-visible { color: var(--color-accent); }
+.card .note-add { color: var(--color-text-muted); font-style: normal; font-weight: 600; cursor: pointer; opacity: 0; transition: opacity var(--ease-fast), color var(--ease-fast); }
+.card:hover .note-add, .card .note-add:focus-visible { opacity: 1; }
+.card .note-add:hover { color: var(--color-accent); }
+
+/* Expanded-view color/font cards — the exact same swatch-card technique as
+   the tooltip's own .color-swatch-card (overlay.js) and the compact tile's
+   .tile-rich-body (mask-image notch pulling the info panel up over the
+   swatch), just re-proportioned for a wider card: taller swatch, bigger
+   notch radius, room for a type-label pill next to the value instead of
+   below it. Same coupled numbers moving together (margin-top, mask circle,
+   border-top-right-radius) as those other two — not a new one-off shape. */
+/* overflow: visible for the same reason as .tile above — the delete/
+   download corner buttons hang past this box's own edge on purpose, and
+   overflow:hidden here was clipping them to a half-circle on hover.
+   .card-rich-top/-body do their own clipping instead (see below). */
+.card.card-rich { display: block; padding: 0; overflow: visible; border-radius: var(--radius-lg); }
+.card-rich-top {
+  height: 84px; position: relative; overflow: hidden;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.card-rich-top-wash { background: var(--color-accent-wash); }
+.card-rich-top-wash .component-icon { color: var(--color-accent); display: flex; }
+.card-rich-top-wash .component-icon svg { width: 30px; height: 30px; }
+.card-rich-glyph { font-size: 30px; line-height: 1; color: var(--type-font-fg); display: flex; align-items: center; justify-content: center; height: 100%; }
+.card-rich-body {
+  position: relative;
+  margin-top: -16px;
+  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border-top-right-radius: 16px;
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
+  -webkit-mask-image: radial-gradient(circle 16px at 0 0, transparent 15.5px, #000 16px);
+  mask-image: radial-gradient(circle 16px at 0 0, transparent 15.5px, #000 16px);
+}
+.card-rich-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.card-rich-value { font-size: var(--text-subheading); font-weight: 700; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-rich-color .card-rich-value { font-size: var(--text-body); }
+.card-rich-row .type-label { margin-bottom: 0; flex: none; }
+.card-rich-meta { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
+.card-rich-body .note { margin-top: var(--space-2); }
+
+.empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: var(--space-6); gap: var(--space-2); }
+.empty-title { font-weight: 700; font-size: var(--text-subheading); margin-top: var(--space-4); color: var(--color-text); }
+.empty-body { font-size: var(--text-caption); color: var(--color-text-muted); max-width: 220px; line-height: 1.5; }
+
+/* The REAL hover-capture tooltip's session-capture stack CSS
+   (src/content/overlay.js: .stack-group/.stack-cards/.stack-card/
+   .collect-fab), copied verbatim — same class names, same values, not a
+   re-derived approximation. No collision risk: overlay.js injects this
+   into its own shadow-DOM host on the page, entirely separate from this
+   document. Interactive-only rules (hover lift, disabled/is-collected
+   states, the stack-entrance keyframe, .stack-overflow) are left out —
+   this is a static preview with no click handler behind it, not a second
+   copy of the live component. */
+.empty-fan { display: flex; justify-content: center; margin-bottom: var(--space-3); }
+.stack-group {
+  display: flex; align-items: center; gap: var(--space-3);
+  background: var(--color-bg); border-radius: var(--radius-full); padding: 5px var(--space-2) 5px var(--space-3);
+  border: 1px solid var(--color-border);
+  /* Lighter than the individual cards' own --shadow-raised — the pill
+     lifts subtly off the page as one group, the cards inside it (already
+     raised) stay the more prominent layer. */
+  box-shadow: var(--shadow-resting);
+}
+.stack-cards { display: flex; align-items: center; padding: var(--space-1) 0; }
+.stack-card {
+  width: 34px; height: 34px; border-radius: var(--radius-sm); flex: none;
+  border: 2px solid var(--color-surface); box-shadow: var(--shadow-raised);
+  overflow: hidden; background: var(--color-bg); margin-left: -14px;
+  display: flex; align-items: center; justify-content: center;
+}
+.stack-card:first-child { margin-left: 0; }
+/* nth-child(1)-(7) match overlay.js's own .stack-card rotation sequence
+   verbatim; 8-10 extend the same small alternating-angle pattern since
+   the empty-state preview intentionally shows more cards than the real
+   stack's width ever actually fits at once. */
+.stack-card:nth-child(1) { transform: rotate(-7deg); }
+.stack-card:nth-child(2) { transform: rotate(4deg); }
+.stack-card:nth-child(3) { transform: rotate(-3deg); }
+.stack-card:nth-child(4) { transform: rotate(6deg); }
+.stack-card:nth-child(5) { transform: rotate(-5deg); }
+.stack-card:nth-child(6) { transform: rotate(3deg); }
+.stack-card:nth-child(7) { transform: rotate(-6deg); }
+.stack-card:nth-child(8) { transform: rotate(5deg); }
+.stack-card:nth-child(9) { transform: rotate(-4deg); }
+.stack-card:nth-child(10) { transform: rotate(2deg); }
+.stack-card .mini-font { font-size: var(--text-caption); font-weight: 700; }
+.stack-card .mini-icon { color: var(--color-text-muted); font-size: 16px; }
+.collect-fab {
+  width: 38px; height: 38px; border-radius: var(--radius-full); flex: none;
+  background: var(--color-accent); color: var(--color-surface); border: none;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 10px rgba(29,52,97,0.4);
+}
+.collect-fab svg { width: 15px; height: 15px; }
+
+/* --- Compare / Pairing view (Section 7E) --- */
+.compare-view { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+.compare-pickers { display: flex; flex-direction: column; gap: var(--space-3); }
+.compare-field { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-caption); color: var(--color-text-muted); font-weight: 600; }
+.compare-field select {
+  border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--text-caption);
+  color: var(--color-text); background: var(--color-surface); font-family: inherit;
+}
+.compare-field select:focus { border-color: var(--color-accent); }
+.compare-sample {
+  border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-5);
+  background: var(--color-surface); display: flex; flex-direction: column; gap: var(--space-3);
+}
+/* Live-rendered from the user's actual captured font data — deliberately
+   exempt from the type scale above (that scale governs Harvest's own UI
+   chrome; this text IS the content being compared, so it must show the
+   real captured size/weight/line-height or the comparison is meaningless). */
+.compare-sample-heading { font-size: 22px; line-height: 1.2; color: var(--color-text); overflow-wrap: break-word; }
+.compare-sample-body { font-size: var(--text-body); line-height: 1.6; color: var(--color-text); overflow-wrap: break-word; }
+.compare-save-btn {
+  align-self: flex-start; border: none; background: var(--color-accent); color: var(--color-surface); border-radius: var(--radius-full);
+  padding: var(--space-2) var(--space-4); font-size: var(--text-caption); font-weight: 600; cursor: pointer; margin-top: var(--space-1);
+  transition: filter var(--ease-fast);
+}
+.compare-save-btn:hover { filter: brightness(1.08); }
+
+/* Export is now two direct-action buttons on the folder-select / item-select
+   bars (see .select-bar-btn) — there's no separate export screen anymore. */
+
+/* --- Empty-state composite illustration ---------------------------------
+   The hover-capture tooltip (content/overlay.js) is a content-script UI —
+   its CSS lives entirely inside overlay.js's own injected <style>, in a
+   separate document from this side panel, so none of it is available here
+   for free. The handful of rules below (.et-*) are the same values
+   overlay.js's .type-icon/.headline/.headline-meta/.contains-row/
+   .contains-chip/.thumb declare, copied over rather than re-derived, for
+   exactly the piece this illustration needs — a static, non-interactive
+   preview of that tooltip, composed with the real .folder-card (this file)
+   peeking from behind-right and a real .note-tile (this file) peeking from
+   behind-left, so one image teaches all three surfaces the app actually
+   has: hover-capture, Sites/Collections folders, and Notes. */
+/* zoom, not transform:scale — Chrome's side panel has a real minimum
+   width (320px total, so ~256px of content once .empty's own 32px side
+   padding is subtracted), narrower than this composite's natural 320px.
+   transform:scale only changes paint, not the box's own reserved layout
+   size, so the flex-centered .empty parent would still have tried to
+   fit the full 320px width and overflowed at that minimum. zoom affects
+   layout size too (Chrome-specific, fine here — this file only ever
+   runs in Chrome), so the whole thing actually fits. */
+.empty-composite { position: relative; width: 320px; height: 260px; margin: 0 auto var(--space-4); pointer-events: none; zoom: 0.6; }
+/* One shared frame for all three cards (same width/radius/shadow) — the
+   earlier version gave the side cards their own native component sizes
+   (a 130px folder card, a variable-height note tile) next to a 220px
+   tooltip card, which read as three mismatched pieces bolted together
+   rather than one tilted stack of similar cards, like the reference. */
+.et-card-frame {
+  width: 160px; height: 230px; overflow: hidden; background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-overlay); padding: var(--space-3); box-sizing: border-box;
+}
+.empty-composite-notes, .empty-composite-folder {
+  position: absolute; top: 20px; z-index: 1; filter: saturate(0.85);
+}
+/* Negative offsets, not 0 — the real .note-tile/.folder-card are wider
+   (170px/176px) than the center card (160px), so at left:0/right:0 most
+   of each side card's own width sat directly behind the center card,
+   hiding the exact content (the folder's fan+flap, the note's caption)
+   this illustration exists to show. Pushed out far enough to reveal
+   roughly half of each. */
+/* Reveal has to be large, not a modest peek — the folder card's fan of
+   thumbnails lives in its OWN left portion, and the note card's caption
+   + text live in ITS left portion too. A card "peeking from the right"
+   with only a small sliver exposed shows its RIGHT portion (the folder's
+   flap/badge, not the thumbnails) — the exact content this illustration
+   exists to show ends up the part hidden, no matter how the reveal
+   percentage is tuned in the abstract. Pushed out far enough that only
+   a small corner of each side card actually tucks behind the center
+   card, instead of the other way around. */
+.empty-composite-notes { left: -70px; transform: rotate(-6deg); }
+.empty-composite-folder { right: -76px; transform: rotate(6deg); }
+.empty-composite-center { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 2; }
+.et-row { display: flex; align-items: center; gap: var(--space-1); }
+/* Skeleton-loading style content for all three cards — small real UI
+   chrome (the Notes card's real Today-pill, caption row, and tag chip)
+   stays as itself since those are compact/iconic, not prose; anything
+   that was paragraph-length text, a headline, or a detailed image
+   becomes an abstract gray bar/block instead. Same tokens everywhere
+   else in this file (--color-border for the bars, --color-accent for
+   the one footer pill, the existing radius scale) — no new colors. */
+.et-skel-icon { width: 24px; height: 24px; border-radius: var(--radius-xs); background: var(--color-border); flex: none; }
+.et-skel-line { height: 8px; border-radius: var(--radius-xs); background: var(--color-border); }
+.et-skel-header-lines { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.et-skel-body { margin-top: var(--space-3); display: flex; flex-direction: column; gap: 7px; }
+.et-skel-photo { width: 100%; height: 60px; border-radius: var(--radius-sm); background: var(--color-border); }
+.et-skel-footer { margin-top: var(--space-3); display: flex; align-items: center; gap: var(--space-2); }
+.et-skel-pill { width: 56px; height: 20px; border-radius: var(--radius-full); background: var(--color-accent); opacity: 0.85; flex: none; }
+/* Folder-card skeleton — deliberately its own shape, not the same
+   icon+lines template the center/notes cards use, since the whole point
+   raised was that the folder card and the tooltip card had ended up
+   looking identical. Evokes the REAL folder card's own two-part
+   silhouette (a tinted band with a fan of item thumbnails peeking out of
+   it, a flap below with a name/meta row and a corner badge) using plain
+   shapes and the same tokens as everywhere else in this file — not the
+   real .folder-cover/.folder-fan components themselves, which already
+   broke once when forced into this flow container (see the folder-card
+   comment in sidepanel.html). */
+.et-skel-folder-tint { position: relative; height: 72px; border-radius: var(--radius-sm); background: var(--color-accent-wash); }
+.et-skel-folder-fan { position: absolute; right: var(--space-2); bottom: -10px; display: flex; }
+.et-skel-folder-thumb {
+  width: 30px; height: 30px; border-radius: var(--radius-xs); background: var(--color-surface);
+  border: 1px solid var(--color-border); box-shadow: var(--shadow-raised);
+}
+.et-skel-folder-thumb:nth-child(1) { transform: rotate(-6deg); margin-right: -14px; z-index: 1; }
+.et-skel-folder-thumb:nth-child(2) { transform: rotate(4deg); z-index: 2; }
+.et-skel-folder-flap { margin-top: var(--space-3); display: flex; flex-direction: column; gap: 6px; }
+.et-skel-folder-badge { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; border-radius: var(--radius-full); background: var(--color-accent); opacity: 0.85; }
+/* Notes card embeds the real .note-date-group/.note-tile timeline
+   markup directly inside the shared .et-card-frame — same classes as
+   the actual Notes tab, just a couple of tiles instead of a whole
+   scrolling list, and no outer .grid-section-items-notes card since
+   .et-card-frame is already that card here. */
+.et-card-frame .note-date-group { padding-left: 0; margin-left: 0; }
+.et-card-frame .note-tile { padding-left: 0; }

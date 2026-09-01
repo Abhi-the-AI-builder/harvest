@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Harvest design preview — tooltip &amp; toolbar</title>
+<style>
+  body { margin: 0; font-family: -apple-system, sans-serif; }
+  section { padding: 64px; }
+  .light { background: #f5f5f0; color: #111; }
+  .dark { background: #0e0e12; color: #eee; }
+  h1 { font-size: 40px; margin: 0 0 16px; font-family: Georgia, serif; }
+  p { font-size: 17px; line-height: 1.6; max-width: 480px; }
+  .swatch { width: 140px; height: 90px; background: #E8734A; border-radius: 10px; margin: 16px 0; }
+  .btn { display: inline-block; padding: 12px 22px; background: #2952E3; color: #fff; border-radius: 8px; font-weight: 600; margin-top: 12px; }
+  img.photo { width: 220px; height: 140px; object-fit: cover; border-radius: 8px; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<section class="light">
+  <h1 id="heading">Design that converts</h1>
+  <p id="body-text">Harvest lets you hover over anything on the web — a color, a font pairing, a component — and pull it straight into your own research library, without ever leaving the page you're studying.</p>
+  <div class="swatch" id="swatch"></div>
+  <a class="btn" id="btn">Get started</a>
+</section>
+
+<section class="dark">
+  <h1 id="heading2" style="font-family: -apple-system, sans-serif;">Built for the way you actually work</h1>
+  <p id="body-text2">Dark surfaces need the same tooltip to hold up — same legibility, same contrast, same confidence.</p>
+  <img class="photo" id="photo" src="https://picsum.photos/seed/harvest/220/140" alt="sample">
+</section>
+
+<script>
+  // ---- Minimal chrome.* stub so the real content scripts run unmodified ----
+  const listeners = { storage: [], runtime: [] };
+  const storageData = { harvestActive: true, harvestSeenHint: true };
+  window.chrome = {
+    runtime: {
+      getURL: (p) => "../" + p,
+      sendMessage: (msg, cb) => {
+        if (msg.type === "CONTENT_SCRIPT_READY") return;
+        if (msg.type === "OPEN_SIDE_PANEL") { console.log("[stub] open side panel"); return; }
+        if (msg.type === "CAPTURE_ITEM") {
+          window.HarvestDB.addItem(msg.payload).then(async () => {
+            const count = await window.HarvestDB.countByHostname(msg.payload.hostname);
+            cb && cb({ ok: true, count });
+          });
+          return;
+        }
+        if (msg.type === "CHECK_DUPLICATE") {
+          const { hostname, type, data, selector } = msg.payload;
+          window.HarvestDB.findSimilarItem(hostname, type, data, selector).then((similar) => {
+            cb && cb({ ok: true, similar });
+          });
+          return;
+        }
+        if (msg.type === "UPDATE_NOTE") { return; }
+        if (msg.type === "CAPTURE_VISIBLE_TAB") {
+          // No real chrome.tabs.captureVisibleTab in this static-file
+          // harness — stands in with a synthetic "screenshot" (a gradient
+          // canvas sized to the viewport) so the crop/scale pipeline in
+          // overlay.js's captureElementPreview can be exercised end to end.
+          // The actual pixels this produces are meaningless; only real
+          // Chrome can verify a genuine screenshot looks right.
+          const c = document.createElement("canvas");
+          c.width = innerWidth * devicePixelRatio;
+          c.height = innerHeight * devicePixelRatio;
+          const ctx = c.getContext("2d");
+          const grad = ctx.createLinearGradient(0, 0, c.width, c.height);
+          grad.addColorStop(0, "#635BFF");
+          grad.addColorStop(1, "#E8734A");
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, c.width, c.height);
+          cb && cb({ ok: true, dataUrl: c.toDataURL("image/png") });
+          return;
+        }
+        cb && cb({ ok: true });
+      },
+      onMessage: { addListener: (fn) => listeners.runtime.push(fn) },
+      lastError: null,
+    },
+    storage: {
+      local: {
+        get: (keys, cb) => {
+          const out = {};
+          (Array.isArray(keys) ? keys : [keys]).forEach((k) => { if (k in storageData) out[k] = storageData[k]; });
+          cb(out);
+        },
+        set: (obj) => {
+          const changes = {};
+          Object.keys(obj).forEach((k) => {
+            changes[k] = { oldValue: storageData[k], newValue: obj[k] };
+            storageData[k] = obj[k];
+          });
+          listeners.storage.forEach((fn) => fn(changes, "local"));
+        },
+      },
+      onChanged: { addListener: (fn) => listeners.storage.push(fn) },
+    },
+  };
+</script>
+<script src="../src/db/db.js?v=37"></script>
+<script src="../src/content/shared.js?v=37"></script>
+<script src="../src/content/sanitize.js?v=37"></script>
+<script src="../src/content/tagger.js?v=37"></script>
+<script src="../src/content/overlay.js?v=37"></script>
+<script src="../src/content/toolbar.js?v=37"></script>
+<script src="../src/content/content.js?v=37"></script>
+</body>
+</html>
