@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify export/copy pipeline
+        run: node test/verify-export-copy.js
+
+      - name: Trace export pipeline
+        run: node test/trace-export-pipeline.mjs
+
+      - name: Build Chrome Web Store zip
+        run: npm run build:store
+
+      - name: Verify store zip exists
+        run: test -f dist/harvest-v0.1.0-store.zip
