@@ -4,7 +4,7 @@
 // Compare / export) lands in later phases but the capture-time output here
 // is written assuming it will always be re-checked, never trusted alone.
 (function () {
-  const Harvest = window.Harvest;
+  const Acopio = window.Acopio;
 
   const DANGEROUS_TAGS = ["script", "iframe", "object", "embed"];
   // Attributes that commonly carry personal/session data, or that can
@@ -90,7 +90,7 @@
    * { html, nodeCount, byteLength, oversized, containsLikelyPII }.
    * Operates on a detached clone — never mutates the live page.
    */
-  Harvest.sanitizeCaptureElement = function sanitizeCaptureElement(liveEl) {
+  Acopio.sanitizeCaptureElement = function sanitizeCaptureElement(liveEl) {
     if (DANGEROUS_TAGS.includes(liveEl.tagName.toLowerCase())) {
       // Defense in depth: the UI already refuses to offer "+ Collect" for
       // these (see overlay.js's iframe special-case), but never trust a
@@ -121,17 +121,17 @@
     const html = clone.outerHTML || "";
     const byteLength = new Blob([html]).size;
     const oversized = nodeCount > MAX_NODES || byteLength > MAX_HTML_BYTES;
-    const containsLikelyPII = Harvest.PII_PATTERN.test(
+    const containsLikelyPII = Acopio.PII_PATTERN.test(
       clone.textContent || ""
     );
 
     return { html, nodeCount, byteLength, oversized, containsLikelyPII };
   };
 
-  Harvest.SANITIZE_LIMITS = { MAX_NODES, MAX_HTML_BYTES };
+  Acopio.SANITIZE_LIMITS = { MAX_NODES, MAX_HTML_BYTES };
   // Was private to this file — notes.js needs the same javascript: URI
   // check for links captured out of a text selection, and duplicating a
   // security check instead of sharing it is exactly the kind of drift
   // GROUND_RULES.md's sanitization rules are meant to prevent.
-  Harvest.isJavascriptUri = isJavascriptUri;
+  Acopio.isJavascriptUri = isJavascriptUri;
 })();

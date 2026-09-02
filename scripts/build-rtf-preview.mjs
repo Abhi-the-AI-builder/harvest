@@ -82,7 +82,7 @@ const entries = [
 ];
 
 let rtf = "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\fnil Helvetica;}}\\f0\\fs22\n";
-rtf += "\\b HARVEST - Images and components with notes (PREVIEW)\\b0\\par\n";
+rtf += "\\b ACOPIO - Images and components with notes (PREVIEW)\\b0\\par\n";
 rtf += `${entries.length} annotated items\\par\\par\n`;
 rtf += "DUMMY EXPORT - This is what notes-with-images.rtf looks like inside a ZIP.\\par\n";
 rtf += "Each image below is embedded with its note. The same image files also exist individually in the folder.\\par\\par\n";
@@ -109,7 +109,7 @@ for (let i = 0; i < entries.length; i++) {
   rtf += "\\line\\par\\par\n";
 }
 
-rtf += "\\par\\fs18 Dummy preview - Harvest Design Research Collector\\par\n";
+rtf += "\\par\\fs18 Dummy preview - Acopio — Gather. Connect. Simplify\\par\n";
 rtf += "}";
 
 const out = path.join(root, "test", "notes-with-images-preview.rtf");

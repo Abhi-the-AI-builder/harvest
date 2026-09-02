@@ -1,8 +1,8 @@
 // Notion export — OAuth gates, block builders, per-type handlers.
 (function () {
-  if (window.HarvestNotionExport) return;
+  if (window.AcopioNotionExport) return;
 
-  const H = window.HarvestExportHelpers;
+  const H = window.AcopioExportHelpers;
 
   async function ensureGoogleSignedIn(showFeedback) {
     const status = await chrome.runtime.sendMessage({ type: "GET_SUPABASE_STATUS" });
@@ -52,22 +52,76 @@
     };
   }
 
+  function notionExternalImageBlock(url) {
+    return {
+      object: "block",
+      type: "image",
+      image: {
+        type: "external",
+        external: { url: String(url).slice(0, 2000) },
+        caption: [],
+      },
+    };
+  }
+
+  function notionImageFallbackParagraph(item) {
+    const data = item.data || {};
+    const parts = ["Image couldn't be uploaded — hover and Collect again to refresh it."];
+    if (data.url && !String(data.url).startsWith("blob:")) parts.push(data.url);
+    return notionParagraphBlock(parts.join("\n"));
+  }
+
+  function bestExternalImageUrl(item) {
+    const data = item.data || {};
+    if (!data.url || String(data.url).startsWith("blob:")) return null;
+    const upgraded = typeof Acopio !== "undefined" && Acopio.upgradeImageUrl ? Acopio.upgradeImageUrl(data.url) : data.url;
+    return upgraded || data.url;
+  }
+
   async function uploadItemImageToNotion(item, filename) {
-    const bytes = await H.resolveExportImageBytes(item);
-    if (!bytes || !bytes.length) return null;
-    const pngBytes = (await H.ensurePngBytes(bytes)) || bytes;
+    const data = item.data || {};
+    const dataUrl =
+      (data.inlineDataUrl && String(data.inlineDataUrl).startsWith("data:") && data.inlineDataUrl) ||
+      (data.previewImage && String(data.previewImage).startsWith("data:") && data.previewImage) ||
+      null;
+
+    let payload;
+    if (dataUrl) {
+      payload = { dataUrl, filename };
+    } else {
+      const bytes = await H.resolveExportImageBytes(item);
+      if (!bytes || !bytes.length) return { ok: false, externalUrl: bestExternalImageUrl(item) };
+      const pngBytes = (await H.ensurePngBytes(bytes)) || bytes;
+      payload = { base64: H.bytesToBase64(pngBytes), filename, mime: "image/png" };
+    }
+
     const result = await chrome.runtime.sendMessage({
       type: "NOTION_UPLOAD_FILE",
-      payload: { base64: H.bytesToBase64(pngBytes), filename, mime: "image/png" },
+      payload,
     });
-    if (!result || !result.ok || !result.fileUploadId) return null;
-    return result.fileUploadId;
+    if (result && result.ok && result.fileUploadId) {
+      return { ok: true, fileUploadId: result.fileUploadId };
+    }
+    return { ok: false, externalUrl: bestExternalImageUrl(item), error: result && result.error };
+  }
+
+  async function appendNotionImageBlock(item, blocks, filename) {
+    const upload = await uploadItemImageToNotion(item, filename);
+    if (upload.ok && upload.fileUploadId) {
+      blocks.push(notionImageUploadBlock(upload.fileUploadId));
+      return true;
+    }
+    if (upload.externalUrl) {
+      blocks.push(notionExternalImageBlock(upload.externalUrl));
+      return true;
+    }
+    blocks.push(notionImageFallbackParagraph(item));
+    return false;
   }
 
   async function blocksForColor(item, blocks) {
     blocks.push(notionHeadingBlock(`Color — ${item.data.hex || "?"}`));
-    const uploadId = await uploadItemImageToNotion(item, `color-${item.id.slice(0, 6)}.png`);
-    if (uploadId) blocks.push(notionImageUploadBlock(uploadId));
+    await appendNotionImageBlock(item, blocks, `color-${item.id.slice(0, 6)}.png`);
     if (item.note) blocks.push(notionParagraphBlock(item.note));
   }
 
@@ -78,24 +132,23 @@
 
   async function blocksForFont(item, blocks) {
     blocks.push(notionHeadingBlock(`Font — ${item.data.family || "?"}`));
-    const uploadId = await uploadItemImageToNotion(item, `font-${item.id.slice(0, 6)}.png`);
-    if (uploadId) blocks.push(notionImageUploadBlock(uploadId));
+    await appendNotionImageBlock(item, blocks, `font-${item.id.slice(0, 6)}.png`);
     if (item.note) blocks.push(notionParagraphBlock(item.note));
   }
 
-  async function blocksForImage(item, blocks, counters) {
+  async function blocksForImage(item, blocks, counters, stats) {
     counters.imageIdx += 1;
     blocks.push(notionHeadingBlock(`Image ${counters.imageIdx}`));
-    const uploadId = await uploadItemImageToNotion(item, `image-${counters.imageIdx}.png`);
-    if (uploadId) blocks.push(notionImageUploadBlock(uploadId));
+    const ok = await appendNotionImageBlock(item, blocks, `image-${counters.imageIdx}.png`);
+    if (!ok) stats.missingImages += 1;
     if (item.note) blocks.push(notionParagraphBlock(item.note));
   }
 
-  async function blocksForComponent(item, blocks, counters) {
+  async function blocksForComponent(item, blocks, counters, stats) {
     counters.componentIdx += 1;
     blocks.push(notionHeadingBlock(`Component ${counters.componentIdx}`));
-    const uploadId = await uploadItemImageToNotion(item, `component-${counters.componentIdx}.png`);
-    if (uploadId) blocks.push(notionImageUploadBlock(uploadId));
+    const ok = await appendNotionImageBlock(item, blocks, `component-${counters.componentIdx}.png`);
+    if (!ok) stats.missingImages += 1;
     if (item.note) blocks.push(notionParagraphBlock(item.note));
   }
 
@@ -117,6 +170,7 @@
   async function buildNotionBlocksForItems(items) {
     const blocks = [];
     const counters = { componentIdx: 0, imageIdx: 0 };
+    const stats = { missingImages: 0 };
     const hostnames = new Set(items.map((item) => item.hostname || "unknown"));
     const multiSite = hostnames.size > 1;
     let currentHost = null;
@@ -134,14 +188,14 @@
       const builder = NOTION_BLOCK_BUILDERS[item.type];
       if (builder) {
         if (item.type === "image" || item.type === "component") {
-          await builder(item, blocks, counters);
+          await builder(item, blocks, counters, stats);
         } else {
           await builder(item, blocks);
         }
       }
       blocks.push({ object: "block", type: "divider", divider: {} });
     }
-    return blocks;
+    return { blocks, stats };
   }
 
   async function performNotionExport(exportContext, deps) {
@@ -161,8 +215,8 @@
     const parentPageId = await deps.showNotionPagePicker(searchResult.pages);
     if (!parentPageId) return;
     showFeedback("Creating the Notion page…");
-    const blocks = await buildNotionBlocksForItems(exportContext.items);
-    const title = `Harvest — ${exportContext.scopeLabel || exportContext.scopeKey}`;
+    const { blocks, stats } = await buildNotionBlocksForItems(exportContext.items);
+    const title = `Acopio — ${exportContext.scopeLabel || exportContext.scopeKey}`;
     const result = await chrome.runtime.sendMessage({ type: "NOTION_CREATE_PAGE", payload: { parentPageId, title, blocks } });
     if (!result || !result.ok) {
       showFeedback(`Notion export failed: ${(result && result.error) || "unknown error"}`, "error");
@@ -172,14 +226,15 @@
     const itemCount = exportContext.items.length;
     const siteNote =
       siteCount > 1 ? ` from ${siteCount} sites` : "";
-    showFeedback(
-      `Exported ${itemCount} item${itemCount === 1 ? "" : "s"}${siteNote} to Notion.`,
-      "success"
-    );
+    let successMsg = `Exported ${itemCount} item${itemCount === 1 ? "" : "s"}${siteNote} to Notion.`;
+    if (stats.missingImages > 0) {
+      successMsg += ` ${stats.missingImages} image${stats.missingImages === 1 ? "" : "s"} need re-collecting — hover and Collect again on those pins.`;
+    }
+    showFeedback(successMsg, stats.missingImages > 0 ? "error" : "success");
     if (result.url) chrome.tabs.create({ url: result.url });
   }
 
-  window.HarvestNotionExport = {
+  window.AcopioNotionExport = {
     performNotionExport,
     buildNotionBlocksForItems,
     NOTION_BLOCK_BUILDERS,

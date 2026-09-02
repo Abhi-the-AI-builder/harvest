@@ -70,7 +70,7 @@ const sandbox = {
       };
     },
   },
-  Harvest: { escapeHtml: (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;") },
+  Acopio: { escapeHtml: (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;") },
   chrome: { runtime: { sendMessage: async () => ({ ok: true, fileUploadId: "upload-trace" }) } },
 };
 sandbox.window = sandbox;
@@ -82,8 +82,8 @@ loadScript("src/sidepanel/copy/clipboard-copy.js");
 loadScript("src/sidepanel/export/zip-export.js");
 loadScript("src/sidepanel/export/notion-export.js");
 
-const H = sandbox.window.HarvestExportHelpers;
-const CH = sandbox.window.HarvestCopyHelpers;
+const H = sandbox.window.AcopioExportHelpers;
+const CH = sandbox.window.AcopioCopyHelpers;
 
 const componentItem = {
   id: "trace-comp-001",
@@ -103,21 +103,21 @@ async function run() {
   const blobs = await CH.resolveItemImages(componentItem);
   checks.push(["resolveItemImages returns one blob", blobs.length === 1 && blobs[0].size > 0]);
 
-  const htmlBlob = await sandbox.window.HarvestClipboardCopy.buildCopyHtml([componentItem]);
+  const htmlBlob = await sandbox.window.AcopioClipboardCopy.buildCopyHtml([componentItem]);
   const html = await htmlBlob.text();
   checks.push(["copy HTML embeds data:image", html.includes("data:image")]);
   checks.push(["copy HTML has note after image", html.indexOf("data:image") < html.indexOf("Trace note")]);
 
-  const text = sandbox.window.HarvestClipboardCopy.describeItemForCopy(componentItem, 0);
+  const text = sandbox.window.AcopioClipboardCopy.describeItemForCopy(componentItem, 0);
   checks.push(["plain text is label + note only", text === "Component 1\n\nTrace note"]);
   checks.push(["plain text has no dimensions", !text.includes("862") && !text.includes("×")]);
 
   const notedVisuals = [{ type: "component", note: "Trace note", imageBytes: bytes, imageFile: "component-hero.png" }];
-  const rtf = await sandbox.window.HarvestZipExport.buildNotedVisualsRtf(notedVisuals);
+  const rtf = await sandbox.window.AcopioZipExport.buildNotedVisualsRtf(notedVisuals);
   checks.push(["RTF has jpegblip", rtf.includes("\\jpegblip")]);
   checks.push(["RTF has picw/pich", /\\picw\d+/.test(rtf) && /\\pich\d+/.test(rtf)]);
 
-  const blocks = await sandbox.window.HarvestNotionExport.buildNotionBlocksForItems([componentItem]);
+  const { blocks } = await sandbox.window.AcopioNotionExport.buildNotionBlocksForItems([componentItem]);
   const imgBlock = blocks.find((b) => b.type === "image" && b.image && b.image.type === "file_upload");
   checks.push(["Notion image block uses file_upload", !!imgBlock]);
   checks.push(["Notion image caption is empty array", Array.isArray(imgBlock.image.caption) && imgBlock.image.caption.length === 0]);

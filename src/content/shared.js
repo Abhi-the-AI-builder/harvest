@@ -1,13 +1,13 @@
 // Shared namespace + small helpers used by every content-script file.
 // Plain scripts (no bundler) sharing one global on purpose — see PLAN.md
-// assumption #1. Everything hangs off window.Harvest to avoid polluting
+// assumption #1. Everything hangs off window.Acopio to avoid polluting
 // the host page's global scope with generic names.
 (function () {
-  if (window.Harvest) return; // guard against double-injection
+  if (window.Acopio) return; // guard against double-injection
 
-  const Harvest = {};
+  const Acopio = {};
 
-  Harvest.uuid = function uuid() {
+  Acopio.uuid = function uuid() {
     if (crypto.randomUUID) return crypto.randomUUID();
     // Fallback for older Chromium contexts.
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -17,7 +17,7 @@
     });
   };
 
-  Harvest.debounce = function debounce(fn, ms) {
+  Acopio.debounce = function debounce(fn, ms) {
     let t = null;
     return function debounced(...args) {
       clearTimeout(t);
@@ -25,7 +25,7 @@
     };
   };
 
-  Harvest.throttle = function throttle(fn, ms) {
+  Acopio.throttle = function throttle(fn, ms) {
     let last = 0;
     let pendingArgs = null;
     let timer = null;
@@ -51,7 +51,7 @@
   // Exact hostname, not eTLD+1 — www.x.com / x.com / accounts.x.com stay
   // separate folders by design (SPEC.md Section 8, confirmed by the
   // razorpay.com / accounts.razorpay.com example in the reference screenshot).
-  Harvest.hostname = function hostname() {
+  Acopio.hostname = function hostname() {
     return window.location.hostname;
   };
 
@@ -60,7 +60,7 @@
   // type chip, folder-cover fallback. The one deliberate, documented
   // exception to the single-accent rule, mandated by the reference images
   // rather than an ad hoc addition.
-  Harvest.TYPE_BADGE = {
+  Acopio.TYPE_BADGE = {
     color: { bg: "#FDE8E1", fg: "#C1552F" },
     font: { bg: "#EDEAFB", fg: "#5B4FC4" },
     image: { bg: "#DFF3EC", fg: "#1E8F72" },
@@ -87,7 +87,7 @@
     { bg: "#F0C2D8", ink: "#6B3550" },
     { bg: "#BEE0DA", ink: "#2E4F49" },
   ];
-  Harvest.folderTint = function folderTint(hostname) {
+  Acopio.folderTint = function folderTint(hostname) {
     let hash = 0;
     for (let i = 0; i < hostname.length; i++) {
       hash = (hash * 31 + hostname.charCodeAt(i)) | 0;
@@ -107,7 +107,7 @@
   // — content.js's actual capture path already checked both; the tooltip
   // preview only checked the element itself, so a <source>-only video
   // showed no thumbnail at all even though clicking Collect on it worked.
-  Harvest.videoSrcFor = function videoSrcFor(el) {
+  Acopio.videoSrcFor = function videoSrcFor(el) {
     const sourceEl = el.querySelector("source");
     const direct = el.currentSrc || el.src || (sourceEl && sourceEl.src);
     if (direct) return direct;
@@ -133,7 +133,7 @@
   // prefix, but xlink:href is still what many real-world SVGs, and older
   // export tools, actually emit — checked as a fallback, not a first
   // choice, since bare href wins when both happen to be present).
-  Harvest.resolveSvgImageHref = function resolveSvgImageHref(el) {
+  Acopio.resolveSvgImageHref = function resolveSvgImageHref(el) {
     return el.getAttribute("href") || el.getAttribute("xlink:href") || null;
   };
 
@@ -142,7 +142,7 @@
   // and .currentSrc is a MediaSource handle, not a static file). That
   // handle belongs to the ONE <video> element the page's own player bound
   // it to; copying the same string onto a second, independent <video>
-  // (Harvest's own preview, or worse, a permanently saved item) never
+  // (Acopio's own preview, or worse, a permanently saved item) never
   // loads anything — not a lazy-load or permission gap, a one-time-use
   // handle by design. A real, stable frame is usually sitting right there
   // anyway as the video's own `poster` attribute, so this returns THAT
@@ -150,8 +150,8 @@
   // originating element — as a plain static image, honestly reflecting
   // what can actually be captured, rather than a video reference that's
   // guaranteed to be dead the moment this tab closes.
-  Harvest.resolveVideoOrPoster = function resolveVideoOrPoster(el) {
-    const src = Harvest.videoSrcFor(el);
+  Acopio.resolveVideoOrPoster = function resolveVideoOrPoster(el) {
+    const src = Acopio.videoSrcFor(el);
     if (src && !src.startsWith("blob:")) return { url: src, isVideo: true };
     const poster = el.getAttribute("poster");
     if (poster) return { url: poster, isVideo: false };
@@ -180,7 +180,7 @@
   // full-resolution upload — not a hack, just the CDN's own URL scheme.
   // Only rewrites URLs matching this exact known pattern; every other
   // site's src passes through unchanged.
-  Harvest.upgradeImageUrl = function upgradeImageUrl(url) {
+  Acopio.upgradeImageUrl = function upgradeImageUrl(url) {
     if (!url) return url;
     const pinMatch = url.match(/^(https?:\/\/i\.pinimg\.com\/)\d+x\d*(\/.*)$/);
     if (pinMatch) return pinMatch[1] + "originals" + pinMatch[2];
@@ -194,7 +194,7 @@
   // One step back to /736x/ — a large-but-derivative size Pinterest keeps
   // for virtually every pin, originals or not — recovers almost every case
   // an <img>'s onerror hits after trying the upgraded URL first.
-  Harvest.pinterestFallbackUrl = function pinterestFallbackUrl(url) {
+  Acopio.pinterestFallbackUrl = function pinterestFallbackUrl(url) {
     if (!url) return null;
     const match = url.match(/^(https?:\/\/i\.pinimg\.com\/)originals(\/.*)$/);
     if (!match) return null;
@@ -205,8 +205,8 @@
   // given an upgradeImageUrl()'d src. Safe to call on any <img> regardless
   // of source — a no-op unless it's actually a Pinterest /originals/ URL,
   // and self-removing so a genuinely broken pin doesn't retry forever.
-  Harvest.withPinterestFallback = function withPinterestFallback(imgEl, src) {
-    const fallback = Harvest.pinterestFallbackUrl(src);
+  Acopio.withPinterestFallback = function withPinterestFallback(imgEl, src) {
+    const fallback = Acopio.pinterestFallbackUrl(src);
     if (!fallback) return;
     imgEl.addEventListener(
       "error",
@@ -217,13 +217,13 @@
     );
   };
 
-  Harvest.resolveImgSrc = function resolveImgSrc(img) {
+  Acopio.resolveImgSrc = function resolveImgSrc(img) {
     const real = img.currentSrc || img.src;
-    if (real) return Harvest.upgradeImageUrl(real);
+    if (real) return Acopio.upgradeImageUrl(real);
     const lazyAttrs = ["data-src", "data-lazy-src", "data-original", "data-lazy", "data-srcset", "srcset"];
     for (const attr of lazyAttrs) {
       const val = img.getAttribute(attr);
-      if (val) return Harvest.upgradeImageUrl(val.split(",")[0].trim().split(/\s+/)[0]);
+      if (val) return Acopio.upgradeImageUrl(val.split(",")[0].trim().split(/\s+/)[0]);
     }
     return null;
   };
@@ -240,7 +240,7 @@
   // exactly one real media element and no meaningful text of its own, so
   // this doesn't misfire on a card that merely happens to contain a small
   // thumbnail among a lot of unrelated text/UI.
-  Harvest.findRealMediaChild = function findRealMediaChild(el) {
+  Acopio.findRealMediaChild = function findRealMediaChild(el) {
     const media = el.querySelectorAll("img, video");
     if (media.length === 1 && (el.textContent || "").trim().length === 0) {
       return media[0];
@@ -262,13 +262,13 @@
     const stack = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
     for (const node of stack) {
       if (node === el || el.contains(node)) continue;
-      if (Harvest.isOwnNode(node)) break; // hit our own tooltip/toolbar — nothing real page content below is relevant
+      if (Acopio.isOwnNode(node)) break; // hit our own tooltip/toolbar — nothing real page content below is relevant
       if (/^(img|video)$/i.test(node.tagName)) return node;
     }
     return null;
   };
 
-  Harvest.componentIconFor = function componentIconFor(outerHTML) {
+  Acopio.componentIconFor = function componentIconFor(outerHTML) {
     const html = outerHTML || "";
     // A real photo (img/picture/video) is an unambiguous "this is an
     // image" signal regardless of what else is nearby. An <svg>, on the
@@ -294,7 +294,7 @@
     return "component";
   };
 
-  Harvest.escapeHtml = function escapeHtml(str) {
+  Acopio.escapeHtml = function escapeHtml(str) {
     return String(str)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -303,7 +303,7 @@
       .replace(/'/g, "&#39;");
   };
 
-  Harvest.rgbToHex = function rgbToHex(rgbString) {
+  Acopio.rgbToHex = function rgbToHex(rgbString) {
     const m = rgbString.match(/rgba?\(([^)]+)\)/);
     if (!m) return null;
     const parts = m[1].split(",").map((s) => parseFloat(s.trim()));
@@ -319,10 +319,10 @@
   // happened to report (often just a fallback, not any stop at all). Pulls
   // every rgb()/rgba() color literal out of the raw backgroundImage string
   // in the order they appear, which is the order the stops are declared.
-  Harvest.parseGradientStops = function parseGradientStops(bgImage) {
+  Acopio.parseGradientStops = function parseGradientStops(bgImage) {
     if (!bgImage || !bgImage.includes("gradient")) return [];
     const matches = bgImage.match(/rgba?\([^)]+\)/g) || [];
-    return matches.map((m) => Harvest.rgbToHex(m)).filter(Boolean).map((p) => p.hex);
+    return matches.map((m) => Acopio.rgbToHex(m)).filter(Boolean).map((p) => p.hex);
   };
 
   // Same extraction as parseGradientStops above, but keeps each stop's
@@ -338,11 +338,11 @@
   // strings) is left untouched — it only ever feeds the tooltip's own
   // color-swatch preview, where this doesn't matter — this is the version
   // the real Figma-bound component tree (walk(), content.js) uses.
-  Harvest.parseGradientStopsWithAlpha = function parseGradientStopsWithAlpha(bgImage) {
+  Acopio.parseGradientStopsWithAlpha = function parseGradientStopsWithAlpha(bgImage) {
     if (!bgImage || !bgImage.includes("gradient")) return [];
     const matches = bgImage.match(/rgba?\([^)]+\)/g) || [];
     return matches
-      .map((m) => Harvest.rgbToHex(m))
+      .map((m) => Acopio.rgbToHex(m))
       .filter(Boolean)
       .map((p) => ({ hex: p.hex, a: p.a }));
   };
@@ -359,7 +359,7 @@
   // always used before this fix existed, matching how CSS Grid and other
   // out-of-scope layout cases already fall back safely elsewhere in this
   // project rather than risk a wrong guess.
-  Harvest.parseGradientDirection = function parseGradientDirection(bgImage) {
+  Acopio.parseGradientDirection = function parseGradientDirection(bgImage) {
     if (!bgImage || !bgImage.includes("gradient")) return "down";
     const m = bgImage.match(/linear-gradient\(\s*(to\s+[a-z\s]+|-?[\d.]+deg)/i);
     if (!m) return "down"; // CSS default direction when none is specified is "to bottom"
@@ -378,7 +378,7 @@
     return "up";
   };
 
-  Harvest.PII_PATTERN =
+  Acopio.PII_PATTERN =
     /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|\b\d{6,}\b/;
 
   // A component's `data.layoutTree` (content.js's extractComponentLayers)
@@ -389,7 +389,7 @@
   // tree shape. Shared here (not just in content.js) since both the
   // content-script world and the sidepanel load shared.js and both need
   // this same flattening.
-  Harvest.flattenComponentTree = function flattenComponentTree(node, out) {
+  Acopio.flattenComponentTree = function flattenComponentTree(node, out) {
     out = out || [];
     if (!node) return out;
     if (node.kind !== "frame") {
@@ -397,12 +397,12 @@
       return out;
     }
     if (Array.isArray(node.children)) {
-      for (const child of node.children) Harvest.flattenComponentTree(child, out);
+      for (const child of node.children) Acopio.flattenComponentTree(child, out);
     }
     return out;
   };
 
-  Harvest.cssSelectorFor = function cssSelectorFor(el) {
+  Acopio.cssSelectorFor = function cssSelectorFor(el) {
     if (!el || el.nodeType !== 1) return "";
     const parts = [el.tagName.toLowerCase()];
     if (el.id) parts.push(`#${el.id}`);
@@ -412,26 +412,26 @@
     return parts.join("");
   };
 
-  // Shared registry of Harvest's own injected shadow-host roots (the
+  // Shared registry of Acopio's own injected shadow-host roots (the
   // tooltip overlay, the floating toggle pill). Both need to be excluded
   // from hover-target detection in content.js — a single shared registry
   // means each module just registers its own host once, instead of
   // content.js needing to know about every UI piece individually.
-  Harvest.ownRoots = [];
-  Harvest.registerOwnRoot = function registerOwnRoot(node) {
-    Harvest.ownRoots.push(node);
+  Acopio.ownRoots = [];
+  Acopio.registerOwnRoot = function registerOwnRoot(node) {
+    Acopio.ownRoots.push(node);
   };
-  Harvest.isOwnNode = function isOwnNode(node) {
-    return Harvest.ownRoots.some((root) => root && (node === root || root.contains(node)));
+  Acopio.isOwnNode = function isOwnNode(node) {
+    return Acopio.ownRoots.some((root) => root && (node === root || root.contains(node)));
   };
 
-  // One icon set, shared by every Harvest-owned surface (the floating
+  // One icon set, shared by every Acopio-owned surface (the floating
   // on-page toolbar AND the side panel) so "collapsed" and "expanded"
   // are genuinely the same design system at two sizes, not two different
   // UIs that happen to sit next to each other. Standard, generic UI
   // iconography (cursor/select tool, sidebar panel, grid/list density,
   // close) — not any product's brand mark.
-  Harvest.ICONS = {
+  Acopio.ICONS = {
     cursor: `<svg viewBox="0 0 16 16" width="15" height="15"><path d="M2 1.3 13 6.3 7.6 7.9 6.1 13.4 2 1.3Z" fill="currentColor"/></svg>`,
     panel: `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.6" y="2.6" width="12.8" height="10.8" rx="2"/><line x1="10.4" y1="2.6" x2="10.4" y2="13.4"/></svg>`,
     // Nav-arrow glyphs for the tooltip's parent/child DOM-tree-walk
@@ -511,5 +511,5 @@
     externalLink: `<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 3H3.6A1.1 1.1 0 0 0 2.5 4.1v8.3a1.1 1.1 0 0 0 1.1 1.1h8.3a1.1 1.1 0 0 0 1.1-1.1V9.4"/><path d="M9 2.5h4.5V7"/><line x1="13.2" y1="2.8" x2="7.3" y2="8.7"/></svg>`,
   };
 
-  window.Harvest = Harvest;
+  window.Acopio = Acopio;
 })();

@@ -3,7 +3,7 @@
 // DOM-tree-walk + note field + toast. content.js owns *when* to show it
 // (hover/context-menu/keyboard) and hands it a target element + tag info.
 (function () {
-  const Harvest = window.Harvest;
+  const Acopio = window.Acopio;
   const ACCENT = "#1D3461"; // deep navy — calmer, more premium than the earlier orange
 
   // Bundled locally (fonts/Inter-var.woff2, SIL Open Font License) and
@@ -65,9 +65,10 @@
       font-size: var(--text-body);
       line-height: 1.4;
       border: 1px solid var(--color-border);
-      animation: harvest-in var(--ease-base);
+      animation: acopio-in var(--ease-base);
     }
-    @keyframes harvest-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
+    .card.card--no-entrance { animation: none; }
+    @keyframes acopio-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
     /* A real divider under the selector — not just a margin gap — so the
        technical "what element is this" line reads as visually separate
        from the actual capture content below it, the same clean-tag
@@ -436,8 +437,8 @@
     /* New card entering the stack after a collect — the spring half of the
        signature moment (design-tokens.md): it visibly flies in and settles
        with a slight overshoot, rather than just appearing. */
-    .stack-card.is-entering { animation: harvest-stack-in var(--ease-spring); }
-    @keyframes harvest-stack-in { from { transform: scale(0.4) translateY(-10px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+    .stack-card.is-entering { animation: acopio-stack-in var(--ease-spring); }
+    @keyframes acopio-stack-in { from { transform: scale(0.4) translateY(-10px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
     .stack-card img, .stack-card video { width: 100%; height: 100%; object-fit: cover; }
     .stack-card .mini-font { font-size: var(--text-caption); font-weight: 700; }
     .stack-card .mini-icon { color: var(--color-text-muted); font-size: 16px; }
@@ -493,7 +494,7 @@
       position: fixed; z-index: 2147483647; bottom: var(--space-5); left: 50%; transform: translateX(-50%);
       background: var(--color-surface); color: var(--color-text-muted); padding: var(--space-2) var(--space-3);
       border-radius: var(--radius-sm); font-size: var(--text-caption); border: 1px solid var(--color-border);
-      box-shadow: var(--shadow-raised); animation: harvest-toast-in var(--ease-base);
+      box-shadow: var(--shadow-raised); animation: acopio-toast-in var(--ease-base);
       display: flex; align-items: center; gap: var(--space-2);
       /* Generous budget (90vw, capped at 480px) so any normal-length
          message stays on one straight line — text only ever wraps/
@@ -503,7 +504,7 @@
     }
     .toast svg { color: var(--color-accent); flex: none; }
     .toast span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    @keyframes harvest-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+    @keyframes acopio-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
   `;
 
   let host, shadow, cardEl, toastTimer, toastEl;
@@ -586,11 +587,11 @@
   // as "you've already been here," not reset to the plain first-time
   // "+ Collect" button on every fresh page load — fetched once, right after
   // all content scripts finish loading (setTimeout defers past this file's
-  // own synchronous evaluation, so Harvest.fetchRecentItems — defined in
+  // own synchronous evaluation, so Acopio.fetchRecentItems — defined in
   // content.js, which loads after this one — is guaranteed to exist by the
   // time this runs).
   setTimeout(() => {
-    Harvest.fetchRecentItems(Harvest.hostname(), MAX_STACK_SLOTS, (items, total) => {
+    Acopio.fetchRecentItems(Acopio.hostname(), MAX_STACK_SLOTS, (items, total) => {
       // Guard against a real capture (or a second copy of this timer, in
       // the unlikely case of a double-injection) having already populated
       // this first — never clobber real session activity with history.
@@ -634,7 +635,7 @@
   // permanently invisible even though nothing is capturing anymore.
   // Reproduced live on glean.com: the on-page outline appears on hover
   // (unaffected — it's applied directly to the page element, not to
-  // Harvest's own host), but the tooltip card itself never shows again
+  // Acopio's own host), but the tooltip card itself never shows again
   // after the first hover, because host.style.visibility was left stuck
   // at "hidden". A simple hide/show counter fixes this the same way any
   // shared-resource show/hide race is fixed: only the FIRST hide actually
@@ -661,7 +662,7 @@
   // (that's the separate el.isConnected check below). Confirmed live: a
   // hover-triggered dropdown/submenu stays technically connected and
   // "visible" by every other test, but its real box collapses to 0 the
-  // instant the mouse leaves its trigger to travel toward Harvest's own
+  // instant the mouse leaves its trigger to travel toward Acopio's own
   // floating tooltip — which is exactly what happens between opening the
   // tooltip and clicking Collect. onCollectClick used to always prefer a
   // fresh re-read over the snapshot taken while the tooltip first opened,
@@ -679,7 +680,7 @@
   function ensureHost() {
     if (host) return;
     host = document.createElement("div");
-    host.setAttribute("data-harvest-root", "true");
+    host.setAttribute("data-acopio-root", "true");
     // Keep the host itself out of layout/hit-testing; only the card inside
     // (via pointer-events: auto in the sheet) is ever clickable.
     host.style.cssText = "all: initial; position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;";
@@ -688,10 +689,10 @@
     style.textContent = SHEET;
     shadow.appendChild(style);
     document.documentElement.appendChild(host);
-    Harvest.registerOwnRoot(host);
+    Acopio.registerOwnRoot(host);
   }
 
-  Harvest.overlayHostNode = () => host;
+  Acopio.overlayHostNode = () => host;
 
   function clearOutline() {
     if (outlinedEl) {
@@ -708,7 +709,7 @@
     el.style.outlineOffset = "1px";
   }
 
-  const selectorFor = Harvest.cssSelectorFor;
+  const selectorFor = Acopio.cssSelectorFor;
 
   function positionCard(anchorRect) {
     const margin = 10;
@@ -805,7 +806,7 @@
       <div class="gradient-stop">
         <span class="gradient-stop-swatch" style="background:${hex}"></span>
         <span class="gradient-stop-value">${hex}</span>
-        <button type="button" class="copy-btn" data-copy="${hex}" title="Copy ${hex}" aria-label="Copy ${hex}">${Harvest.ICONS.copy}</button>
+        <button type="button" class="copy-btn" data-copy="${hex}" title="Copy ${hex}" aria-label="Copy ${hex}">${Acopio.ICONS.copy}</button>
       </div>
     `
       )
@@ -829,7 +830,7 @@
     // of those side by side is exactly the case that got scaled down
     // earlier this session for being too bulky.
     chip.className = "gradient-stop gradient-stop-solo";
-    chip.innerHTML = `<span class="gradient-stop-swatch" style="background:${hex}"></span><span class="gradient-stop-value">${hex}</span><button type="button" class="copy-btn" data-copy="${hex}" title="Copy ${hex}" aria-label="Copy ${hex}">${Harvest.ICONS.copy}</button>`;
+    chip.innerHTML = `<span class="gradient-stop-swatch" style="background:${hex}"></span><span class="gradient-stop-value">${hex}</span><button type="button" class="copy-btn" data-copy="${hex}" title="Copy ${hex}" aria-label="Copy ${hex}">${Acopio.ICONS.copy}</button>`;
     return chip;
   }
 
@@ -860,11 +861,11 @@
     // mapping, same file-extension signal content.js's own capture path
     // already uses to decide what got saved.
     if (tag === "img") {
-      const src = Harvest.resolveImgSrc(k) || k.getAttribute("src") || "";
+      const src = Acopio.resolveImgSrc(k) || k.getAttribute("src") || "";
       if (/\.gif(\?|#|$)/i.test(src)) return "GIF";
     }
     if (CHILD_TAG_LABELS[tag]) return CHILD_TAG_LABELS[tag];
-    const kind = Harvest.componentIconFor(k.outerHTML);
+    const kind = Acopio.componentIconFor(k.outerHTML);
     if (kind === "image") return "Image";
     if (kind === "font") return "Text";
     return "Group";
@@ -921,10 +922,10 @@
     const rect = el.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return Promise.resolve(null);
     if (rect.bottom <= 0 || rect.top >= window.innerHeight || rect.right <= 0 || rect.left >= window.innerWidth) return Promise.resolve(null);
-    // Harvest renders more than just this tooltip on the page — the
+    // Acopio renders more than just this tooltip on the page — the
     // floating toolbar pill (toolbar.js) is a second, separately-positioned
     // surface that's just as real and on-screen as the tooltip is. Hiding
-    // every registered Harvest root (Harvest.ownRoots) instead of naming
+    // every registered Acopio root (Acopio.ownRoots) instead of naming
     // individual elements one at a time (confirmed live: the toolbar's own
     // "+" glyph baked into a capture before this covered it too).
     // visibility (not display:none, which could shift layout elsewhere) —
@@ -932,7 +933,14 @@
     // Double rAF, not a single one: one rAF only guarantees "about to
     // paint," not "has painted" — captureVisibleTab can still win that
     // race and capture the pre-hide frame with just one.
-    const roots = Harvest.ownRoots.filter((r) => r && r.style);
+    const roots = Acopio.ownRoots.filter((r) => {
+      if (!r || !r.style) return false;
+      // Passive hover previews crop the hovered element only — the tooltip
+      // sits beside it and the floating toolbar is elsewhere. Hiding Acopio
+      // roots for every preview made the open tooltip/toolbar visibly blink.
+      if (purpose === "preview") return false;
+      return true;
+    });
     // Only the FIRST concurrent hide records the true original state — see
     // rootsHideCount/rootsTrueVisibility above for why a per-call snapshot
     // was wrong. A later overlapping call reading roots that are already
@@ -965,7 +973,7 @@
       // request (most likely to happen exactly when captures are firing
       // back to back, hovering from element to element, which is also
       // exactly when this function is called most often). Without this,
-      // roots stay visibility:hidden FOREVER when that happens — Harvest's
+      // roots stay visibility:hidden FOREVER when that happens — Acopio's
       // own tooltip and toolbar silently vanish (the DOM node is still
       // there, "open," just invisible), matching the reported "tooltip is
       // open but not showing anywhere, needs a refresh to work again."
@@ -998,7 +1006,7 @@
                 // a new permissions grant for an unpacked extension;
                 // removing and re-adding it via "Load unpacked" does).
                 console.error(
-                  "[Harvest] screenshot failed:",
+                  "[Acopio] screenshot failed:",
                   (chrome.runtime.lastError && chrome.runtime.lastError.message) || (response && response.error) || "unknown error"
                 );
                 finish(null);
@@ -1112,7 +1120,7 @@
 
     if (tagInfo.type === "color") {
       const bg = style.backgroundColor;
-      const parsed = Harvest.rgbToHex(bg);
+      const parsed = Acopio.rgbToHex(bg);
       const hex = parsed ? parsed.hex : "n/a";
       // A gradient background carries multiple real colors, not one — a
       // button/hero block with a two- or three-stop gradient was always
@@ -1121,11 +1129,11 @@
       // just a fallback, not any actual stop). Each stop gets its own
       // swatch + hex + copy button instead, same as design-extractor's own
       // "Gradient (N stops)" card.
-      const gradientStops = Harvest.parseGradientStops(style.backgroundImage);
+      const gradientStops = Acopio.parseGradientStops(style.backgroundImage);
       if (gradientStops.length >= 2) {
         frag.innerHTML = `
           <div class="color-swatch-card">
-            <div class="color-swatch-top" style="background:${Harvest.escapeHtml(style.backgroundImage)}"></div>
+            <div class="color-swatch-top" style="background:${Acopio.escapeHtml(style.backgroundImage)}"></div>
             <div class="color-swatch-body">
               <div class="color-swatch-caption">Gradient (${gradientStops.length} stops)</div>
               <div class="gradient-stops">${buildColorChipsHtml(gradientStops)}</div>
@@ -1155,7 +1163,7 @@
       // string as the tooltip's big headline reads as a bug, not a font.
       const rawFamily = style.fontFamily.split(",")[0].replace(/['"]/g, "").trim();
       const SYSTEM_FONT_KEYWORDS = new Set(["-apple-system", "blinkmacsystemfont", "system-ui", "-webkit-standard"]);
-      const family = Harvest.escapeHtml(
+      const family = Acopio.escapeHtml(
         SYSTEM_FONT_KEYWORDS.has(rawFamily.toLowerCase()) ? "System font" : rawFamily
       );
       // Headline is always the font family name — the family-tag pill
@@ -1187,14 +1195,14 @@
           [style.color, ...Array.from(el.children)
             .filter((c) => (c.textContent || "").trim().length > 0)
             .map((c) => window.getComputedStyle(c).color)]
-            .map((c) => Harvest.rgbToHex(c))
+            .map((c) => Acopio.rgbToHex(c))
             .filter(Boolean)
             .map((p) => p.hex)
         )
       );
       const colorTitle = colorHexes.length > 1 ? `Multiple colors detected: ${colorHexes.join(", ")}` : "";
       frag.innerHTML = `
-        <div class="row"><div class="type-icon type-icon-font">${Harvest.ICONS.font}</div><div class="headline">${family}</div></div>
+        <div class="row"><div class="type-icon type-icon-font">${Acopio.ICONS.font}</div><div class="headline">${family}</div></div>
         <div class="metrics">
           <div class="metric"><span class="icon">${METRIC_ICONS.fontSize}</span>${parseFloat(style.fontSize).toFixed(0)}px</div>
           <div class="metric"><span class="icon">${METRIC_ICONS.lineHeight}</span>${parseFloat(style.lineHeight) ? parseFloat(style.lineHeight).toFixed(0) + "px" : "normal"}</div>
@@ -1225,8 +1233,8 @@
       // thing you're capturing), but a gradient "Unlock report" button
       // genuinely has a second real design value worth seeing, not just
       // its white text color.
-      const bgGradientStops = Harvest.parseGradientStops(style.backgroundImage);
-      const bgParsed = Harvest.rgbToHex(style.backgroundColor);
+      const bgGradientStops = Acopio.parseGradientStops(style.backgroundImage);
+      const bgParsed = Acopio.rgbToHex(style.backgroundColor);
       const hasSolidBg = bgParsed && style.backgroundColor !== "rgba(0, 0, 0, 0)";
 
       // Single text color + single solid background is the common case —
@@ -1322,12 +1330,12 @@
       // el itself might be a decorated wrapper (gradient tint, hover
       // scrim) around the real photo rather than the photo itself — the
       // same resolution isImageish used to classify it this way in the
-      // first place (Harvest.findRealMediaChild). Without this, hovering
+      // first place (Acopio.findRealMediaChild). Without this, hovering
       // one of these showed the wrapper's own (often blank, sometimes
       // gradient-tinted) background instead of the actual photo — visible
       // only after clicking into wherever the real bare <img> renders on
       // its own, uncovered.
-      const mediaEl = /^(img|video)$/.test(el.tagName.toLowerCase()) ? el : Harvest.findRealMediaChild(el) || el;
+      const mediaEl = /^(img|video)$/.test(el.tagName.toLowerCase()) ? el : Acopio.findRealMediaChild(el) || el;
       const tag = mediaEl.tagName.toLowerCase();
       const isImgTag = tag === "img";
       const isVideoTag = tag === "video";
@@ -1352,15 +1360,15 @@
       // and which element gets built below both follow that resolved
       // value, not the bare tag check, so the tooltip never claims "(GIF)"
       // for something it's actually about to save as a plain photo.
-      const videoResolved = isVideoTag ? Harvest.resolveVideoOrPoster(mediaEl) : null;
+      const videoResolved = isVideoTag ? Acopio.resolveVideoOrPoster(mediaEl) : null;
       const isVideo = videoResolved ? videoResolved.isVideo : false;
       const svgRect = isSvgImageTag ? mediaEl.getBoundingClientRect() : null;
       const src = isImgTag
-        ? Harvest.resolveImgSrc(mediaEl) || ""
+        ? Acopio.resolveImgSrc(mediaEl) || ""
         : videoResolved
           ? videoResolved.url || ""
           : isSvgImageTag
-            ? Harvest.resolveSvgImageHref(mediaEl) || ""
+            ? Acopio.resolveSvgImageHref(mediaEl) || ""
             : bgUrlMatch ? bgUrlMatch[1] : "";
       const w = isVideoTag ? mediaEl.videoWidth || mediaEl.offsetWidth : isImgTag ? mediaEl.naturalWidth || mediaEl.offsetWidth : isSvgImageTag ? svgRect.width : mediaEl.offsetWidth;
       const h = isVideoTag ? mediaEl.videoHeight || mediaEl.offsetHeight : isImgTag ? mediaEl.naturalHeight || mediaEl.offsetHeight : isSvgImageTag ? svgRect.height : mediaEl.offsetHeight;
@@ -1373,13 +1381,13 @@
       // static-sounding "Image".
       const isGifFile = isImgTag && /\.gif(\?|#|$)/i.test(src);
       frag.innerHTML = `
-        <div class="row"><div class="type-icon type-icon-image">${Harvest.ICONS.image}</div><div class="headline">${isVideo || isGifFile ? "Image (GIF)" : "Image"}</div><div class="headline-meta">${Math.round(w)}×${Math.round(h)}px</div></div>
+        <div class="row"><div class="type-icon type-icon-image">${Acopio.ICONS.image}</div><div class="headline">${isVideo || isGifFile ? "Image (GIF)" : "Image"}</div><div class="headline-meta">${Math.round(w)}×${Math.round(h)}px</div></div>
       `;
       // Kept as a direct reference (not re-queried later) — src's own
       // upgradeImageUrl (shared.js) may point this at a genuinely bigger
       // file than the one currently sitting in the page's DOM (Pinterest's
       // grid thumbnails are a real-world example: the page's own <img> is
-      // a small preview, but the URL Harvest actually resolves — and would
+      // a small preview, but the URL Acopio actually resolves — and would
       // save — is the full-resolution original). The w×h shown above comes
       // from the PAGE's <img>, since that's the only thing synchronously
       // known at render time; once the upgraded preview image actually
@@ -1410,7 +1418,7 @@
         const img = document.createElement("img");
         img.className = "thumb";
         img.src = src;
-        Harvest.withPinterestFallback(img, src);
+        Acopio.withPinterestFallback(img, src);
         const myGeneration = generation;
         img.addEventListener("load", () => {
           if (myGeneration !== generation || !headlineMetaEl.isConnected) return;
@@ -1429,7 +1437,7 @@
       // Other classification got, instead of a separate one-line metrics
       // row underneath with its own icon for a single value.
       frag.innerHTML = `
-        <div class="row"><div class="type-icon type-icon-component">${Harvest.ICONS.component}</div><div class="headline">Component</div><span class="family-tag family-tag-inline dimensions-tag">${Math.round(rect.width)}×${Math.round(rect.height)}px</span></div>
+        <div class="row"><div class="type-icon type-icon-component">${Acopio.ICONS.component}</div><div class="headline">Component</div><span class="family-tag family-tag-inline dimensions-tag">${Math.round(rect.width)}×${Math.round(rect.height)}px</span></div>
       `;
       // A component that's dominated by a real photo (a card, a hero
       // block) used to only ever show the generic two-squares icon and a
@@ -1440,8 +1448,8 @@
       const previewImg = el.querySelector("img, video");
       const previewSrc = previewImg
         ? previewImg.tagName.toLowerCase() === "video"
-          ? Harvest.videoSrcFor(previewImg)
-          : Harvest.resolveImgSrc(previewImg)
+          ? Acopio.videoSrcFor(previewImg)
+          : Acopio.resolveImgSrc(previewImg)
         : null;
       if (previewSrc) {
         // No separate caption here — the "Image" chip in "Contains:" below
@@ -1456,7 +1464,7 @@
         // <img>/<video> is only ever the instant, synchronous placeholder.
         thumb.className = "thumb component-preview-thumb";
         thumb.src = previewSrc;
-        Harvest.withPinterestFallback(thumb, previewSrc); // no-op for video / non-Pinterest src
+        Acopio.withPinterestFallback(thumb, previewSrc); // no-op for video / non-Pinterest src
         if (thumb.tagName === "VIDEO") {
           thumb.autoplay = true;
           thumb.loop = true;
@@ -1509,7 +1517,7 @@
             currentTarget = childEl;
             currentTagInfo = childEl.tagName.toLowerCase() === "iframe"
               ? { type: "component", family: "other" }
-              : Harvest.detectTag(childEl);
+              : Acopio.detectTag(childEl);
             pillsExpanded = false;
             noteValue = ""; // same reason as navigate() — a different element, not a carried-over note
             render();
@@ -1537,7 +1545,7 @@
         const text = btn.dataset.copy;
         navigator.clipboard.writeText(text).then(() => {
           const original = btn.innerHTML;
-          btn.innerHTML = Harvest.ICONS.check;
+          btn.innerHTML = Acopio.ICONS.check;
           btn.classList.add("is-copied");
           setTimeout(() => {
             btn.innerHTML = original;
@@ -1557,7 +1565,7 @@
   // visual polish. Every other type gets a neutral light backdrop.
   function previewFill(tagInfo, style) {
     if (tagInfo.type === "color") {
-      const parsed = Harvest.rgbToHex(style.backgroundColor);
+      const parsed = Acopio.rgbToHex(style.backgroundColor);
       return parsed ? parsed.hex : "#e5e7eb";
     }
     return "#f1f2f4";
@@ -1609,7 +1617,7 @@
     } else if (item.type === "image" && item.data && item.data.url) {
       const img = document.createElement("img");
       img.src = item.data.url;
-      Harvest.withPinterestFallback(img, item.data.url);
+      Acopio.withPinterestFallback(img, item.data.url);
       img.alt = "";
       card.appendChild(img);
     } else if (item.data && item.data.previewImage) {
@@ -1623,8 +1631,8 @@
     } else {
       const icon = document.createElement("span");
       icon.className = "mini-icon";
-      const kind = Harvest.componentIconFor(item.data && item.data.outerHTML);
-      icon.innerHTML = kind === "image" ? Harvest.ICONS.image : kind === "font" ? Harvest.ICONS.font : Harvest.ICONS.component;
+      const kind = Acopio.componentIconFor(item.data && item.data.outerHTML);
+      icon.innerHTML = kind === "image" ? Acopio.ICONS.image : kind === "font" ? Acopio.ICONS.font : Acopio.ICONS.component;
       card.appendChild(icon);
     }
     return card;
@@ -1641,7 +1649,7 @@
     fab.type = "button";
     fab.setAttribute("aria-label", "Collect this element");
     fab.title = "+ Collect";
-    fab.innerHTML = Harvest.ICONS.plus;
+    fab.innerHTML = Acopio.ICONS.plus;
     fab.addEventListener("click", onCollectClick);
     return fab;
   }
@@ -1649,7 +1657,7 @@
   function buildStackPreview() {
     const stack = document.createElement("div");
     stack.className = "capture-stack";
-    stack.title = "Open the Harvest panel";
+    stack.title = "Open the Acopio panel";
     stack.setAttribute("role", "button");
     stack.tabIndex = 0;
     const cardsWrap = document.createElement("div");
@@ -1691,7 +1699,7 @@
     // not only things captured during the current page load.
     stack.setAttribute(
       "aria-label",
-      `${sessionCaptureTotal || sessionCaptures.length} items collected from this site — open the Harvest panel`
+      `${sessionCaptureTotal || sessionCaptures.length} items collected from this site — open the Acopio panel`
     );
     // A nice free tie-together rather than a dead end: clicking the stack
     // itself (not the + button next to it) jumps straight to the side
@@ -1743,7 +1751,7 @@
       const collectBtn = document.createElement("button");
       collectBtn.className = "collect-btn";
       collectBtn.type = "button";
-      collectBtn.innerHTML = `${Harvest.ICONS.plus}<span>Collect</span>`;
+      collectBtn.innerHTML = `${Acopio.ICONS.plus}<span>Collect</span>`;
       collectBtn.addEventListener("click", onCollectClick);
       actions.appendChild(collectBtn);
     }
@@ -1843,7 +1851,7 @@
     // outside a real installed extension — this turns the NEXT repro into
     // a definitive console trace instead of another round of guessing.
     // Safe to leave in permanently: console.debug, not user-visible UI.
-    const trace = (stage, detail) => console.debug("[Harvest copy]", stage, detail || "");
+    const trace = (stage, detail) => console.debug("[Acopio copy]", stage, detail || "");
     try {
       if (tagInfo.type === "color") return await colorSwatchPngBlob(data);
       if (tagInfo.type === "font") return await fontSamplePngBlob(data);
@@ -1911,7 +1919,7 @@
   }
   function flashCopyFeedback(btn) {
     const original = btn.innerHTML;
-    btn.innerHTML = Harvest.ICONS.check;
+    btn.innerHTML = Acopio.ICONS.check;
     btn.classList.add("is-copied");
     setTimeout(() => {
       btn.innerHTML = original;
@@ -1932,7 +1940,7 @@
         clipboardTypes["text/plain"] = new Blob([plainText], { type: "text/plain" });
         if (note) {
           const dataUrl = await blobToDataUrl(imageBlob);
-          const noteHtml = Harvest.escapeHtml(note).replace(/\n/g, "<br>");
+          const noteHtml = Acopio.escapeHtml(note).replace(/\n/g, "<br>");
           const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><img src="${dataUrl}" style="max-width:480px;display:block;margin-bottom:8px;" /><div>${noteHtml}</div></body></html>`;
           clipboardTypes["text/html"] = new Blob([html], { type: "text/html" });
         }
@@ -1951,7 +1959,7 @@
       await navigator.clipboard.write([new ClipboardItem(clipboardTypes)]);
       flashCopyFeedback(btn);
     } catch (err) {
-      console.error("[Harvest] copy failed:", err);
+      console.error("[Acopio] copy failed:", err);
       showInlineError("Couldn't copy — try again.");
     }
   }
@@ -1961,20 +1969,20 @@
       await navigator.clipboard.writeText(el.outerHTML);
       flashCopyFeedback(btn);
     } catch (err) {
-      console.error("[Harvest] SVG copy failed:", err);
+      console.error("[Acopio] SVG copy failed:", err);
       showInlineError("Couldn't copy SVG — try again.");
     }
   }
 
-  function render() {
+  function render(options = {}) {
     ensureHost();
     generation++;
     if (cardEl) cardEl.remove();
     isSaving = false;
     cardEl = document.createElement("div");
-    cardEl.className = "card";
+    cardEl.className = options.skipEntrance ? "card card--no-entrance" : "card";
     cardEl.setAttribute("role", "region");
-    cardEl.setAttribute("aria-label", "Harvest capture panel");
+    cardEl.setAttribute("aria-label", "Acopio capture panel");
 
     const el = currentTarget;
     const style = window.getComputedStyle(el);
@@ -1994,7 +2002,7 @@
     // (type icon + "Image"/"Component"/etc + dimensions) moves up into the
     // header itself below, replacing the plain CSS-selector text that used
     // to sit there ("div.ADXRXN.NYgy1O" said what the element's tag/class
-    // happened to be, not what Harvest actually detected it as — the
+    // happened to be, not what Acopio actually detected it as — the
     // second row already right underneath said the useful thing).
     const bodyFrag = buildTypeBody(el, currentTagInfo, style);
     const typeHeaderRow = bodyFrag.querySelector(".row");
@@ -2021,11 +2029,11 @@
     // (the same snapshot Collect itself uses — see lastKnownCapture above)
     // instead of a separate computation, so the copied description matches
     // what actually gets saved.
-    const copyData = (lastKnownCapture && lastKnownCapture.el === el ? lastKnownCapture.data : null) || Harvest.buildCaptureData(el, currentTagInfo).data;
+    const copyData = (lastKnownCapture && lastKnownCapture.el === el ? lastKnownCapture.data : null) || Acopio.buildCaptureData(el, currentTagInfo).data;
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.className = "copy-btn"; // exact same class as the hex-code copy buttons — same icon AND same borderless/flat button chrome, not just the same glyph
-    copyBtn.innerHTML = Harvest.ICONS.copy;
+    copyBtn.innerHTML = Acopio.ICONS.copy;
     copyBtn.title = "Copy — image for Figma/docs, description for Claude/text";
     copyBtn.setAttribute("aria-label", "Copy this capture");
     copyBtn.addEventListener("click", (e) => {
@@ -2041,7 +2049,7 @@
       const copySvgBtn = document.createElement("button");
       copySvgBtn.type = "button";
       copySvgBtn.className = "copy-btn";
-      copySvgBtn.innerHTML = Harvest.ICONS.codeBrackets;
+      copySvgBtn.innerHTML = Acopio.ICONS.codeBrackets;
       copySvgBtn.title = "Copy as SVG — pastes into Figma as real editable vector layers";
       copySvgBtn.setAttribute("aria-label", "Copy as SVG markup");
       copySvgBtn.addEventListener("click", (e) => {
@@ -2100,7 +2108,7 @@
     // you hit after clicking Collect, opening the panel, and going looking
     // — that round trip is real effort for something this check can answer
     // in place. Covers every capture type: color/font by near-match, image
-    // by exact URL, component by exact selector (see HarvestDB.
+    // by exact URL, component by exact selector (see AcopioDB.
     // findSimilarItem for why component/image use an exact match instead
     // of a similarity heuristic). Pure/synchronous data build (no capture
     // side effects) so hovering never writes anything; the `generation`
@@ -2112,10 +2120,10 @@
       // full sanitize pass over the element's outerHTML (Section 9), real
       // work not worth doing on every settled hover just to check
       // duplication.
-      const dupData = currentTagInfo.type === "component" ? null : Harvest.buildCaptureData(el, currentTagInfo).data;
+      const dupData = currentTagInfo.type === "component" ? null : Acopio.buildCaptureData(el, currentTagInfo).data;
       const myGeneration = generation;
-      Harvest.checkDuplicate(
-        Harvest.hostname(),
+      Acopio.checkDuplicate(
+        Acopio.hostname(),
         currentTagInfo.type,
         dupData,
         (similar) => {
@@ -2138,7 +2146,7 @@
           }
           const badge = document.createElement("div");
           badge.className = "already-collected";
-          badge.innerHTML = `${Harvest.ICONS.check}<span>Already in your collection</span>`;
+          badge.innerHTML = `${Acopio.ICONS.check}<span>Already in your collection</span>`;
           selectorRow.insertAdjacentElement("afterend", badge);
           // This resolves asynchronously, after the actions row already
           // rendered — a fresh, first-ever-this-page-load hover (no session
@@ -2185,7 +2193,7 @@
       cardEl.appendChild(pillsWrap);
     }
 
-    const piiCheck = Harvest.PII_PATTERN.test(el.textContent || "");
+    const piiCheck = Acopio.PII_PATTERN.test(el.textContent || "");
     if (piiCheck) {
       const warn = document.createElement("div");
       warn.className = "warning";
@@ -2288,7 +2296,7 @@
     // surface), not a loud centered dark pill. Same checkmark as the
     // collect-moment button, so "this worked" reads as one consistent
     // signal everywhere in the product.
-    toastEl.innerHTML = `${Harvest.ICONS.check}<span></span>`;
+    toastEl.innerHTML = `${Acopio.ICONS.check}<span></span>`;
     toastEl.querySelector("span").textContent = message;
     shadow.appendChild(toastEl);
     const thisToast = toastEl;
@@ -2301,14 +2309,56 @@
   let isCollectingPreview = false;
 
   async function inlineImageUrlAtCapture(data) {
-    if (!data || !data.url || data.isVideo || data.inlineDataUrl) return;
+    if (!data || data.inlineDataUrl) return;
+    if (data.isVideo) return;
+    if (!data.url) return;
     try {
-      const resp = await fetch(data.url);
-      if (!resp.ok) return;
-      const blob = await resp.blob();
-      data.inlineDataUrl = await blobToDataUrl(blob);
+      const tryUrls = [Acopio.upgradeImageUrl(data.url)];
+      const fb = Acopio.pinterestFallbackUrl(tryUrls[0]);
+      if (fb) tryUrls.push(fb);
+      tryUrls.push(data.url);
+      for (const tryUrl of tryUrls) {
+        try {
+          const resp = await fetch(tryUrl);
+          if (!resp.ok) continue;
+          const blob = await resp.blob();
+          data.inlineDataUrl = await blobToDataUrl(blob);
+          return;
+        } catch (_) {
+          // try next URL candidate
+        }
+      }
     } catch (_) {
       // Export paths can still try the live URL — this is best-effort at collect time.
+    }
+  }
+
+  async function inlineVideoFrameAtCapture(el, data) {
+    if (!data || !data.isVideo || data.inlineDataUrl || !el) return;
+    const mediaEl = /^(img|video)$/.test(el.tagName.toLowerCase()) ? el : Acopio.findRealMediaChild(el) || el;
+    if (mediaEl.tagName.toLowerCase() !== "video") return;
+    try {
+      if (mediaEl.readyState >= 2 && mediaEl.videoWidth > 0) {
+        const canvas = document.createElement("canvas");
+        canvas.width = mediaEl.videoWidth;
+        canvas.height = mediaEl.videoHeight;
+        canvas.getContext("2d").drawImage(mediaEl, 0, 0);
+        data.inlineDataUrl = await dataUrlToPngDataUrl(canvas.toDataURL("image/png"));
+        return;
+      }
+    } catch (_) {
+      // fall through to poster
+    }
+    const poster = mediaEl.getAttribute("poster");
+    if (poster) {
+      try {
+        const resp = await fetch(poster);
+        if (resp.ok) {
+          data.inlineDataUrl = await blobToDataUrl(await resp.blob());
+        }
+      } catch (_) {
+        // export may still try data.url
+      }
     }
   }
 
@@ -2327,7 +2377,11 @@
           data.previewImage = await dataUrlToPngDataUrl(source);
         }
       } else if (tagInfo.type === "image") {
-        await inlineImageUrlAtCapture(data);
+        if (data.isVideo) {
+          await inlineVideoFrameAtCapture(el, data);
+        } else {
+          await inlineImageUrlAtCapture(data);
+        }
       }
     } catch (_) {
       if (tagInfo.type === "component" && lastElementCapture && lastElementCapture.el === el && lastElementCapture.dataUrl) {
@@ -2349,7 +2403,7 @@
     let tagInfo = currentTagInfo;
     let data;
     if (el && el.isConnected) {
-      ({ data } = Harvest.buildCaptureData(el, tagInfo));
+      ({ data } = Acopio.buildCaptureData(el, tagInfo));
       if (
         isDegenerateCapture(tagInfo, data) &&
         lastKnownCapture &&
@@ -2392,7 +2446,7 @@
     }
     const myGeneration = generation;
     const noteToSave = noteValue.trim();
-    Harvest.finalizeCapture(el, tagInfo, data, noteToSave, (result) => {
+    Acopio.finalizeCapture(el, tagInfo, data, noteToSave, (result) => {
       isSaving = false;
       // The tooltip may have been hidden, or moved on to a different
       // element entirely, while this was in flight — don't reach into a
@@ -2409,7 +2463,7 @@
       sessionCaptures.push(result.item);
       if (sessionCaptures.length > MAX_STACK_SLOTS) sessionCaptures.shift();
       // result.count is the real post-save count for this hostname straight
-      // from HarvestDB (background.js already computes it for every save) —
+      // from AcopioDB (background.js already computes it for every save) —
       // authoritative, no separate tracking/incrementing needed.
       if (typeof result.count === "number") sessionCaptureTotal = result.count;
       // Best-effort dimension correction: data.url may already be the
@@ -2425,7 +2479,7 @@
         const verifyImg = new Image();
         verifyImg.onload = () => {
           if (verifyImg.naturalWidth && verifyImg.naturalHeight && (verifyImg.naturalWidth !== data.width || verifyImg.naturalHeight !== data.height)) {
-            Harvest.updateItemDimensions(result.item.id, verifyImg.naturalWidth, verifyImg.naturalHeight);
+            Acopio.updateItemDimensions(result.item.id, verifyImg.naturalWidth, verifyImg.naturalHeight);
           }
         };
         verifyImg.src = data.url;
@@ -2438,7 +2492,7 @@
       // beat rather than a silent instant swap.
       if (btn) {
         btn.classList.add("is-collected");
-        btn.innerHTML = isFab ? Harvest.ICONS.check : `${Harvest.ICONS.check}<span>Collected</span>`;
+        btn.innerHTML = isFab ? Acopio.ICONS.check : `${Acopio.ICONS.check}<span>Collected</span>`;
       }
       const myFinalizeGeneration = myGeneration;
       setTimeout(() => {
@@ -2498,15 +2552,29 @@
   // click time anyway.
   function snapshotCapture(el, tagInfo) {
     try {
-      const { data } = Harvest.buildCaptureData(el, tagInfo);
+      const { data } = Acopio.buildCaptureData(el, tagInfo);
       lastKnownCapture = { el, tagInfo, data };
     } catch (_) {
       lastKnownCapture = null;
     }
   }
 
+  function captureFingerprint(el, tagInfo) {
+    if (!el || !tagInfo) return "";
+    if (tagInfo.type === "image") {
+      const mediaEl = /^(img|video)$/.test(el.tagName.toLowerCase()) ? el : Acopio.findRealMediaChild(el) || el;
+      const tag = mediaEl.tagName.toLowerCase();
+      if (tag === "video") return `video:${mediaEl.currentSrc || mediaEl.src || ""}`;
+      if (tag === "img") return `img:${Acopio.resolveImgSrc(mediaEl) || ""}`;
+      const style = window.getComputedStyle(mediaEl);
+      const bg = style.backgroundImage.match(/url\(["']?([^"')]+)["']?\)/);
+      return bg ? `bg:${bg[1]}` : `media:${tag}`;
+    }
+    return `${tagInfo.type}|${tagInfo.family || ""}`;
+  }
+
   function showFor(el, tagInfo) {
-    if (!el || Harvest.isOwnNode(el)) return;
+    if (!el || Acopio.isOwnNode(el)) return;
     currentTarget = el;
     currentTagInfo = tagInfo;
     navStack = [];
@@ -2517,7 +2585,7 @@
     render();
     // Some sites (Pinterest's own "GIF" pins are the clearest real case)
     // lazily swap in the real <video>/media element several hundred ms
-    // AFTER the hover itself — well after Harvest's own 130ms settle-
+    // AFTER the hover itself — well after Acopio's own 130ms settle-
     // debounce already rendered a one-shot snapshot of whatever was in the
     // DOM at that instant (a static placeholder image, at that point).
     // Nothing about "the mouse moved to a new element" happens when that
@@ -2527,27 +2595,17 @@
     // bounded recheck, only if still hovering this exact element and not
     // mid-interaction, catches this without a full MutationObserver.
     const recheckEl = el;
+    const initialFingerprint = captureFingerprint(recheckEl, tagInfo);
     setTimeout(() => {
       if (currentTarget !== recheckEl) return; // moved on to something else already
       if (noteFieldHasFocus || isSaving) return; // don't yank the tooltip away mid-interaction
       if (recheckEl.tagName.toLowerCase() === "iframe") return;
-      const freshTagInfo = Harvest.detectTag(recheckEl);
-      currentTagInfo = freshTagInfo;
+      const freshTagInfo = Acopio.detectTag(recheckEl);
+      const freshFingerprint = captureFingerprint(recheckEl, freshTagInfo);
       snapshotCapture(recheckEl, freshTagInfo);
-      render();
-      // An in-place "patch the existing card instead of rebuilding it"
-      // version of this recheck was tried (to avoid the visible entrance-
-      // animation replay a full render() causes) and reverted — it
-      // produced real, confirmed-live broken/blank thumbnails for at
-      // least some Pinterest media swaps, which is a worse failure than
-      // the blink it was meant to fix. Root cause of that regression
-      // wasn't fully isolated before reverting (isolated-world content-
-      // script internals aren't inspectable from outside the extension).
-      // If revisiting this: reproduce with real console access from
-      // inside the extension, and validate the swapped-in element
-      // actually loads (an `error` listener on the new thumb, not just
-      // assuming a `src` assignment succeeded) before ever skipping the
-      // full rebuild again.
+      if (freshFingerprint === initialFingerprint) return; // nothing material changed — no rebuild blink
+      currentTagInfo = freshTagInfo;
+      render({ skipEntrance: true });
     }, 600);
   }
 
@@ -2612,7 +2670,7 @@
       // flips to its paused state too since it's driven by the same flag.
       // Idempotent — a harmless no-op write if hover-capture was already
       // off, so this never needs to check current state first.
-      chrome.storage.local.set({ harvestActive: false });
+      chrome.storage.local.set({ acopioActive: false });
     },
     true
   );
@@ -2647,7 +2705,7 @@
     true
   );
 
-  Harvest.overlay = {
+  Acopio.overlay = {
     showFor,
     hide,
     isVisible,

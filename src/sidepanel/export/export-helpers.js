@@ -1,6 +1,6 @@
 // Shared export utilities — filenames, blobs, RTF fragments, raster helpers.
 (function () {
-  if (window.HarvestExportHelpers) return;
+  if (window.AcopioExportHelpers) return;
 
   const H = {};
 
@@ -106,6 +106,81 @@
     return `data:${mime};base64,${btoa(binary)}`;
   };
 
+  H.componentMediaUrlFromOuterHtml = function componentMediaUrlFromOuterHtml(outerHTML, sourceUrl) {
+    if (!outerHTML) return null;
+    try {
+      const doc = new DOMParser().parseFromString(outerHTML, "text/html");
+      const media = doc.querySelector("img, video");
+      if (!media) return null;
+      const lazyAttrs = ["src", "data-src", "data-lazy-src", "data-original", "data-lazy"];
+      const firstAttr = (el) => {
+        for (const attr of lazyAttrs) {
+          const val = el.getAttribute(attr);
+          if (val) return val;
+        }
+        return null;
+      };
+      const raw = media.tagName.toLowerCase() === "video"
+        ? firstAttr(media) || (media.querySelector("source") && firstAttr(media.querySelector("source")))
+        : firstAttr(media);
+      if (!raw) return null;
+      if (/^(data:|https?:)/i.test(raw)) return raw;
+      if (!sourceUrl) return null;
+      return new URL(raw, sourceUrl).href;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  H.imageUrlFetchCandidates = function imageUrlFetchCandidates(url) {
+    if (!url || String(url).startsWith("data:") || String(url).startsWith("blob:")) return [];
+    const candidates = [];
+    const add = (u) => {
+      if (u && !candidates.includes(u)) candidates.push(u);
+    };
+    const upgrade = typeof Acopio !== "undefined" && Acopio.upgradeImageUrl ? Acopio.upgradeImageUrl(url) : url;
+    add(upgrade);
+    if (typeof Acopio !== "undefined" && Acopio.pinterestFallbackUrl) {
+      add(Acopio.pinterestFallbackUrl(upgrade));
+    }
+    add(url);
+    return candidates;
+  };
+
+  H.fetchImageViaBackground = async function fetchImageViaBackground(url) {
+    if (!url || typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.sendMessage) return null;
+    try {
+      const resp = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: "FETCH_IMAGE_BYTES", payload: { url } }, resolve);
+      });
+      if (!resp || !resp.ok || !resp.bytes || !resp.bytes.length) return null;
+      const bytes = new Uint8Array(resp.bytes);
+      const png = await H.ensurePngBytes(bytes, resp.contentType || H.mimeFromBytes(bytes));
+      return png || bytes;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  H.fetchHttpImageBytes = async function fetchHttpImageBytes(url) {
+    const candidates = H.imageUrlFetchCandidates(url);
+    for (const tryUrl of candidates) {
+      try {
+        const resp = await fetch(tryUrl);
+        if (resp.ok) {
+          const raw = await H.blobToBytes(await resp.blob());
+          const png = await H.ensurePngBytes(raw);
+          if (png || raw) return png || raw;
+        }
+      } catch (_) {
+        // try next candidate or background fetch
+      }
+      const bgBytes = await H.fetchImageViaBackground(tryUrl);
+      if (bgBytes && bgBytes.length) return bgBytes;
+    }
+    return null;
+  };
+
   H.resolveExportImageBytes = async function resolveExportImageBytes(item) {
     const data = item.data || {};
 
@@ -126,6 +201,11 @@
       }
     }
 
+    async function fromHttpUrl(url) {
+      if (!url || String(url).startsWith("data:") || String(url).startsWith("blob:")) return null;
+      return H.fetchHttpImageBytes(url);
+    }
+
     if (item.type === "component" && data.previewImage) {
       const fromPreview = await fromDataUrl(data.previewImage);
       if (fromPreview) return fromPreview;
@@ -135,15 +215,16 @@
       if (fromInline) return fromInline;
     }
     if (item.type === "image" && data.url) {
-      try {
-        const resp = await fetch(data.url);
-        if (resp.ok) {
-          const raw = await H.blobToBytes(await resp.blob());
-          const png = await H.ensurePngBytes(raw);
-          return png || raw;
-        }
-      } catch (_) {
-        // fall through
+      const fromUrl = await fromHttpUrl(data.url);
+      if (fromUrl) return fromUrl;
+    }
+    if (item.type === "component" && data.outerHTML) {
+      const mediaUrl = H.componentMediaUrlFromOuterHtml(data.outerHTML, item.sourceUrl);
+      if (mediaUrl) {
+        const fromMedia = mediaUrl.startsWith("data:")
+          ? await fromDataUrl(mediaUrl)
+          : await fromHttpUrl(mediaUrl);
+        if (fromMedia) return fromMedia;
       }
     }
     try {
@@ -296,8 +377,16 @@
       if (png && H.isPngBytes(png)) return new Blob([png], { type: "image/png" });
       return H.ensureValidPngBlob(new Blob([bytes], { type: mime || "application/octet-stream" }));
     }
-    const res = await fetch(url);
-    const srcBlob = await res.blob();
+    let srcBlob = null;
+    try {
+      const bytes = await H.fetchHttpImageBytes(url);
+      if (bytes && bytes.length) {
+        srcBlob = new Blob([bytes], { type: H.mimeFromBytes(bytes) });
+      }
+    } catch (_) {
+      // fall through
+    }
+    if (!srcBlob) return null;
     if (srcBlob.type === "image/png") {
       const validated = await H.ensureValidPngBlob(srcBlob);
       if (validated) return validated;
@@ -430,5 +519,5 @@
     }
   };
 
-  window.HarvestExportHelpers = H;
+  window.AcopioExportHelpers = H;
 })();

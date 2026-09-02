@@ -1,4 +1,4 @@
-# Harvest — Extension Reference
+# Acopio — Extension Reference
 
 What the extension actually does today, as implemented — not the original
 design intent (that's `SPEC.md`/`PLAN.md`, which predate several features
@@ -33,10 +33,10 @@ communicate only via `chrome.runtime.sendMessage`/`chrome.storage`):
 - **Content scripts** — injected into every `http(s)://` page
   (`manifest.json`'s `content_scripts`, `all_frames: false`, so never inside
   iframes), in this exact load order:
-  1. `shared.js` — shared utilities (`Harvest.*` namespace on `window`):
+  1. `shared.js` — shared utilities (`Acopio.*` namespace on `window`):
      icons, type-badge color palette, hostname helper, debounce, UUID,
      PII regex, `escapeHtml`, `ownRoots` registry (see below).
-  2. `sanitize.js` — `Harvest.sanitizeCaptureElement`, `isJavascriptUri`
+  2. `sanitize.js` — `Acopio.sanitizeCaptureElement`, `isJavascriptUri`
      (exported for reuse), strips scripts/handlers/dangerous URIs/password
      values before anything is captured.
   3. `tagger.js` — element-type detection (`color`/`font`/`image`/
@@ -52,12 +52,12 @@ communicate only via `chrome.runtime.sendMessage`/`chrome.storage`):
      (`extractComponentLayers`) used when a `component` type is captured.
 - **Side panel** — `src/sidepanel/sidepanel.html`/`.js`/`.css`. The full
   Library UI: Sites/Collections/Notes tabs, item grids, export, compare.
-- **DB layer** — `src/db/db.js`, an IndexedDB wrapper (`HarvestDB`).
+- **DB layer** — `src/db/db.js`, an IndexedDB wrapper (`AcopioDB`).
   **Correction to an earlier draft of this doc**: only content scripts are
   fully routed through background (they can't reach IndexedDB directly at
   all, and don't load `db.js`). The side panel is different — `db.js` is
   loaded directly in `sidepanel.html` alongside `sidepanel.js`, and the
-  side panel calls `HarvestDB.*` (delete, tag/highlight updates, folder
+  side panel calls `AcopioDB.*` (delete, tag/highlight updates, folder
   delete, etc. — ~28 call sites) directly, in its own document, not via
   `chrome.runtime.sendMessage`. `background.js` imports the same `db.js`
   module separately for the paths that genuinely do need to run in the
@@ -73,7 +73,7 @@ references inside the toolbar/tooltip shadow DOMs).
 
 **Shadow DOM isolation**: every on-page UI surface (hover tooltip, floating
 toolbar, notes tooltip) is its own `attachShadow({mode:'open'})` host,
-registered into `Harvest.ownRoots` so the other capture systems can
+registered into `Acopio.ownRoots` so the other capture systems can
 recognize "this click/hover originated inside our own UI" and not treat it
 as page content. Each shadow root declares its own `<style>` with its own
 copy of the design-token *values* (colors, radii, spacing) — these are
@@ -145,7 +145,7 @@ proceed anyway.
 
 ## 4. Hover-capture
 
-**Activation**: `harvestActive` in `chrome.storage.local`, default `false`.
+**Activation**: `acopioActive` in `chrome.storage.local`, default `false`.
 Toggled from the side panel's cursor-icon button, the floating toolbar's
 matching button, or `chrome.action` badge state. Mutually exclusive with
 notes-capture mode (see §5) — turning one on turns the other off, written
@@ -155,7 +155,7 @@ no listener can observe an impossible "both on" moment in between.
 **Triggering**: mouse hover (with a small `isMovingTowardCard` heuristic so
 moving the mouse *toward* the already-open tooltip card doesn't
 immediately swap it for whatever's underneath), right-click → "Collect this
-element with Harvest" context-menu item, or `Alt+Enter` on a keyboard-
+element with Acopio" context-menu item, or `Alt+Enter` on a keyboard-
 focused element.
 
 **Type detection** (`tagger.js`): computed-style-based heuristics —
@@ -216,18 +216,18 @@ explicitly handled beyond that).
 
 ## 5. Text-selection notes
 
-**Activation**: `harvestNotesActive`, own storage key, same toggle pattern
-and mutual-exclusivity relationship with `harvestActive` described above.
+**Activation**: `acopioNotesActive`, own storage key, same toggle pattern
+and mutual-exclusivity relationship with `acopioActive` described above.
 Default `false`.
 
 **Triggering**: `mouseup` on `document` (skipped if the mouseup target is
-inside Harvest's own shadow DOM), plus a 350ms-debounced `selectionchange`
+inside Acopio's own shadow DOM), plus a 350ms-debounced `selectionchange`
 listener (covers keyboard selection — Shift+Arrow, Ctrl/Cmd+A — which
 never fires `mouseup`). A `rangesEqual` check (via `Range.compareBoundaryPoints`)
 skips re-rendering when the exact same range is already showing, and an
 `isInteracting()` guard (checks the shadow root's own `activeElement`, a
 folder/color menu being open, or the most recent `mousedown` having
-targeted Harvest's own UI) prevents a re-render from clobbering an
+targeted Acopio's own UI) prevents a re-render from clobbering an
 in-progress interaction like typing an annotation or using the folder
 picker.
 
@@ -243,7 +243,7 @@ picker.
   to not hang even on a page with hundreds of total images.
 - `links`: same technique for `<a href>`, capped at **5**, each
   `{href, text}` (text truncated to 80 chars). Any `javascript:` href
-  (`Harvest.isJavascriptUri`) or non-image `data:` URI is dropped entirely
+  (`Acopio.isJavascriptUri`) or non-image `data:` URI is dropped entirely
   before it's ever stored.
 - `headingRanges`: character spans of `text` that came from inside an
   `h1`-`h6` on the source page — found by querying headings directly
@@ -260,7 +260,7 @@ picker.
   render the heading portion of a captured "heading + body" selection in
   bold in the Library, instead of the whole thing flattening into one
   visual weight.
-- PII soft-warning: `Harvest.PII_PATTERN.test(text)` — same shared regex
+- PII soft-warning: `Acopio.PII_PATTERN.test(text)` — same shared regex
   the hover-capture path also uses — non-blocking, shown as a banner
   stacked with the truncation banner if both apply.
 
@@ -274,7 +274,7 @@ clicking the type badge before saving.
 
 **Dismiss**: selection collapsing (native deselect), a local Escape
 listener (two-step if a menu is open: first Escape closes the menu, a
-second closes the tooltip; never touches `harvestActive`/`harvestNotesActive`
+second closes the tooltip; never touches `acopioActive`/`acopioNotesActive`
 — that pause-on-Escape semantic belongs only to the hover tooltip), and an
 outside-click listener using `composedPath()[0]` (shadow-DOM-safe — a
 listener outside a shadow root always sees `e.target` retargeted to the
@@ -321,7 +321,7 @@ spilling past a short tile's bottom edge into the next tile). Text renders
 at 12px, uses the tile's full available width. In-note highlighting:
 select a substring of the displayed text, confirm via a small floating
 "Highlight" button, stored as character offsets into `data.text`
-(`HarvestDB.updateItemHighlights`) — not a duplicated text copy — and
+(`AcopioDB.updateItemHighlights`) — not a duplicated text copy — and
 click an existing highlight to remove it.
 
 **Select mode**: multi-select across a grid (site-scoped, Library-wide, or
@@ -350,7 +350,7 @@ Creation happens from two places: the multi-select "Add to Collection" flow
 (new-or-existing picker) and the notes-capture tooltip's own folder picker
 (same new-or-existing picker, reused). Both call the same
 `ADD_ITEMS_TO_COLLECTION` background handler wrapping
-`HarvestDB.addItemsToCollection`.
+`AcopioDB.addItemsToCollection`.
 
 Deletion: a custom confirm modal (never native `confirm()`) whose copy
 explicitly states the underlying items are untouched — deleting a
@@ -359,7 +359,7 @@ the items themselves, consistent with the itemRefs-only storage model.
 Removing a *single* item from just one Collection (not deleting the item
 outright) is a separate, smaller action that only touches that one itemRef.
 
-**Known gap, not user-reachable**: `HarvestDB.renameCollection(id, name)`
+**Known gap, not user-reachable**: `AcopioDB.renameCollection(id, name)`
 exists at the DB layer (`db.js:326`) but is never called from
 `sidepanel.js` or `background.js` — there is no rename button/flow wired up
 anywhere in the UI. A Collection's name is fixed at creation time.
@@ -450,7 +450,7 @@ gets the same text plus real inline images.
 ## 11. Floating toolbar
 
 A shadow-DOM pill fixed to the page (draggable by its logo/brand handle,
-position persisted via `chrome.storage.local`'s `harvestToolbarPos`,
+position persisted via `chrome.storage.local`'s `acopioToolbarPos`,
 re-clamped to the current viewport specifically at the moment it becomes
 visible — not just once at initial render — since the initial render can
 happen while the pill is still `hidden`, where `offsetWidth` reads 0 and a
@@ -464,7 +464,7 @@ pauses hover-capture AND hides the pill in one click, persisted so it
 doesn't reappear on refresh (with a "show it again" recovery link in the
 side panel footer, so it's never a dead end). The "Collapse to floating
 toolbar" action (side panel → this pill) writes
-`harvestToolbarDismissed:false` then calls `window.close()` — a real,
+`acopioToolbarDismissed:false` then calls `window.close()` — a real,
 fixed bug this session: closing the panel before that async storage write
 had actually committed (no callback awaited) could silently drop the
 write, matching the exact reported symptom of "the floating toolbar only
@@ -475,7 +475,7 @@ callback before closing.
 Extractor project's own floating toolbar — `12px` corner radius on the bar,
 `8px` on each button (the literal pixel values from that project's CSS,
 not an approximated substitute — an earlier pass tried substituting
-Harvest's own 20px design token here and it visibly didn't match, corrected
+Acopio's own 20px design token here and it visibly didn't match, corrected
 per direct comparison), every button's icon normalized to one consistent
 size via a single `button svg` rule (the four icons — cursor/notes/panel/
 close — previously ranged from 10px to 15px despite sharing one 16×16
@@ -484,7 +484,7 @@ close — previously ranged from 10px to 15px despite sharing one 16×16
 
 ## 12. Security / sanitization
 
-`sanitize.js`'s `Harvest.sanitizeCaptureElement` strips `<script>` tags,
+`sanitize.js`'s `Acopio.sanitizeCaptureElement` strips `<script>` tags,
 every inline event-handler attribute, password field values, and any
 `javascript:`/dangerous `data:` URI before a captured component's HTML is
 ever stored or rendered back. `background.js`'s `reSanitizeHtml` re-runs
@@ -498,7 +498,7 @@ whenever either changes.
 
 Oversized-component and PII detection are both non-blocking soft signals
 (confirm-to-proceed for size, a dismissable warning banner for PII), never
-a hard block — the design position throughout is that Harvest should warn
+a hard block — the design position throughout is that Acopio should warn
 a designer about a copyright/PII-shaped risk in what they're collecting,
 not decide for them that they can't collect it.
 
@@ -511,7 +511,7 @@ not decide for them that they can't collect it.
   path doesn't currently have.
 - Same-origin shadow-DOM piercing on researched pages — not explicitly
   handled beyond native `elementFromPoint`'s own default piercing.
-- `HarvestDB.renameCollection` exists with no UI path to reach it (§7).
+- `AcopioDB.renameCollection` exists with no UI path to reach it (§7).
 - A truncated note (§5) shows the warning at capture time and in every
   export/copy path, but the compact Library tile itself has no persistent
   visual indicator that a given note was truncated — open question, not
@@ -563,13 +563,13 @@ not decide for them that they can't collect it.
   collapse handler has that shape; the other four (the three toggle
   writes, plus the one-time "panel is now open" write) are never followed
   by anything that closes/navigates the panel. Also confirmed
-  `CAPTURE_ITEM`'s background handler never reads `harvestActive`/
-  `harvestNotesActive` at all, so toggling capture mode off can't cancel
+  `CAPTURE_ITEM`'s background handler never reads `acopioActive`/
+  `acopioNotesActive` at all, so toggling capture mode off can't cancel
   or corrupt an in-flight save (it only affects whether the content script
   decides to start a *new* one). For the general "side panel closes while
-  a `HarvestDB.*` call from §2's ~28 direct call sites is in flight"
+  a `AcopioDB.*` call from §2's ~28 direct call sites is in flight"
   question: not the same class of bug as the collapse case, since Chrome's
-  own panel-close UI isn't driven synchronously by Harvest's own code the
+  own panel-close UI isn't driven synchronously by Acopio's own code the
   way `window.close()` was — the transaction has virtually always already
   been queued with the browser's IndexedDB engine (which continues
   independently of the document) by the time a human actually closes the

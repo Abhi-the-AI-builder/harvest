@@ -12,17 +12,17 @@ try {
 importScripts("db/supabase-client.js");
 importScripts("db/cloud-oauth.js");
 
-HarvestSupabase.ping()
+AcopioSupabase.ping()
   .then((result) => {
     if (result.ok) {
-      console.info("[Harvest] Supabase reachable", { signedIn: result.signedIn });
+      console.info("[Acopio] Supabase reachable", { signedIn: result.signedIn });
     } else {
-      console.warn("[Harvest] Supabase ping failed", result.error);
+      console.warn("[Acopio] Supabase ping failed", result.error);
     }
   })
-  .catch((err) => console.warn("[Harvest] Supabase ping threw", err));
+  .catch((err) => console.warn("[Acopio] Supabase ping threw", err));
 
-const CONTEXT_MENU_ID = "harvest-collect-element";
+const CONTEXT_MENU_ID = "acopio-collect-element";
 // Declared up here (not down with the rest of the restricted-tab tracking
 // below) specifically so updateBadge() can reference it safely on its very
 // first call at module load — that call happens before the restricted-tab
@@ -48,19 +48,19 @@ function applyActiveBadgeTo(tabId, active) {
   chrome.action.setTitle({
     tabId,
     title: active
-      ? "Harvest — open the collected-items panel"
-      : "Harvest — hover-capture is paused. Click to open the panel (resume from there).",
+      ? "Acopio — open the collected-items panel"
+      : "Acopio — hover-capture is paused. Click to open the panel (resume from there).",
   }).catch(() => {});
 }
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: CONTEXT_MENU_ID,
-    title: "Collect this element with Harvest",
+    title: "Collect this element with Acopio",
     contexts: ["all"],
   });
-  chrome.storage.local.get(["harvestActive"], (res) => {
-    if (res.harvestActive === undefined) chrome.storage.local.set({ harvestActive: false });
+  chrome.storage.local.get(["acopioActive"], (res) => {
+    if (res.acopioActive === undefined) chrome.storage.local.set({ acopioActive: false });
   });
   updateBadge();
 });
@@ -77,29 +77,29 @@ chrome.runtime.onInstalled.addListener(() => {
 // title and the context-menu label below, both updated live; the actual
 // toggle lives in the panel/floating-toolbar buttons.
 function updateBadge() {
-  chrome.storage.local.get(["harvestActive"], (res) => {
-    const active = res.harvestActive === true;
+  chrome.storage.local.get(["acopioActive"], (res) => {
+    const active = res.acopioActive === true;
     // Global default — covers the icon before any tab exists yet (e.g.
     // browser/extension startup) and any brand-new tab that hasn't loaded
     // far enough for setTabRestricted to have stamped its own title yet.
     chrome.action.setBadgeText({ text: "" });
     chrome.action.setTitle({
       title: active
-        ? "Harvest — open the collected-items panel"
-        : "Harvest — hover-capture is paused. Click to open the panel (resume from there).",
+        ? "Acopio — open the collected-items panel"
+        : "Acopio — hover-capture is paused. Click to open the panel (resume from there).",
     });
 
     // Same inconsistency, different surface: the right-click menu item gave
     // zero feedback when paused — clicking it silently did nothing (the
-    // content-script message just gets dropped by the isBusy/harvestActive
+    // content-script message just gets dropped by the isBusy/acopioActive
     // gate). Relabeling it when paused means the *reason* nothing happens
     // is visible right there in the menu, not a silent dead end.
     chrome.contextMenus.update(
       CONTEXT_MENU_ID,
       {
         title: active
-          ? "Collect this element with Harvest"
-          : "Collect this element with Harvest (paused — resume in the panel)",
+          ? "Collect this element with Acopio"
+          : "Collect this element with Acopio (paused — resume in the panel)",
       },
       () => void chrome.runtime.lastError // menu item may not exist yet on first-ever install race; harmless to ignore
     );
@@ -121,7 +121,7 @@ function updateBadge() {
   });
 }
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.harvestActive) updateBadge();
+  if (area === "local" && changes.acopioActive) updateBadge();
 });
 updateBadge();
 
@@ -151,15 +151,15 @@ function setTabRestricted(tabId, restricted) {
     chrome.action.setBadgeBackgroundColor({ tabId, color: "#C33D2E" }).catch(() => {}); // --color-danger
     chrome.action.setTitle({
       tabId,
-      title: "Harvest can't run on this page (restricted or blocked by the site's security policy).",
+      title: "Acopio can't run on this page (restricted or blocked by the site's security policy).",
     }).catch(() => {});
   } else {
     // First stamp for this tab — the extension-wide paused/active badge,
     // via the same helper updateBadge() uses to keep every other tab in
     // sync afterward, so there's exactly one place that knows what the
     // icon should say for a given state.
-    chrome.storage.local.get(["harvestActive"], (res) => {
-      applyActiveBadgeTo(tabId, res.harvestActive === true);
+    chrome.storage.local.get(["acopioActive"], (res) => {
+      applyActiveBadgeTo(tabId, res.acopioActive === true);
     });
   }
 }
@@ -205,7 +205,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // bug below — that reasoning doesn't apply once the panel is never
 // disabled in the first place. See collapseBtn in sidepanel.js.)
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((err) =>
-  console.error("[Harvest] failed to set side panel behavior", err)
+  console.error("[Acopio] failed to set side panel behavior", err)
 );
 
 // Dismissing the floating on-page toolbar used to be a side effect the
@@ -336,7 +336,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return undefined;
 
   if (message.type === "GET_SUPABASE_STATUS") {
-    HarvestSupabase.ping()
+    AcopioSupabase.ping()
       .then((result) => sendResponse(result))
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
@@ -348,53 +348,53 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // cloud-oauth.js (Figma/Notion), same split as everywhere else in this
   // file (background.js routes messages, doesn't contain business logic).
   if (message.type === "SIGN_IN_WITH_GOOGLE") {
-    HarvestSupabase.signInWithGoogle()
+    AcopioSupabase.signInWithGoogle()
       .then((result) => sendResponse(result))
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
   }
   if (message.type === "SIGN_OUT_GOOGLE") {
-    HarvestSupabase.signOut()
+    AcopioSupabase.signOut()
       .then((result) => sendResponse(result))
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
   }
   if (message.type === "CONNECT_FIGMA") {
-    HarvestCloudOAuth.connectFigma()
+    AcopioCloudOAuth.connectFigma()
       .then((result) => sendResponse(result))
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
   }
   if (message.type === "GET_FIGMA_STATUS") {
-    HarvestCloudOAuth.figmaStatus().then((result) => sendResponse(result));
+    AcopioCloudOAuth.figmaStatus().then((result) => sendResponse(result));
     return true;
   }
   if (message.type === "DISCONNECT_FIGMA") {
-    HarvestCloudOAuth.disconnectFigma().then((result) => sendResponse(result));
+    AcopioCloudOAuth.disconnectFigma().then((result) => sendResponse(result));
     return true;
   }
   if (message.type === "CONNECT_NOTION") {
-    HarvestCloudOAuth.connectNotion()
+    AcopioCloudOAuth.connectNotion()
       .then((result) => sendResponse(result))
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
   }
   if (message.type === "GET_NOTION_STATUS") {
-    HarvestCloudOAuth.notionStatus().then((result) => sendResponse(result));
+    AcopioCloudOAuth.notionStatus().then((result) => sendResponse(result));
     return true;
   }
   if (message.type === "DISCONNECT_NOTION") {
-    HarvestCloudOAuth.disconnectNotion().then((result) => sendResponse(result));
+    AcopioCloudOAuth.disconnectNotion().then((result) => sendResponse(result));
     return true;
   }
   if (message.type === "NOTION_SEARCH_PAGES") {
-    HarvestCloudOAuth.notionSearchPages()
+    AcopioCloudOAuth.notionSearchPages()
       .then((result) => sendResponse(result))
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
   }
   if (message.type === "NOTION_CREATE_PAGE") {
-    HarvestCloudOAuth.notionCreatePage(message.payload.parentPageId, message.payload.title, message.payload.blocks)
+    AcopioCloudOAuth.notionCreatePage(message.payload.parentPageId, message.payload.title, message.payload.blocks)
       .then((result) => sendResponse(result))
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
@@ -440,7 +440,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             // keep original blob if conversion fails
           }
         }
-        const result = await HarvestCloudOAuth.notionUploadFileBlob(blob, filename);
+        const result = await AcopioCloudOAuth.notionUploadFileBlob(blob, filename);
         sendResponse(result);
       } catch (err) {
         sendResponse({ ok: false, error: String((err && err.message) || err) });
@@ -485,10 +485,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .open({ windowId: sender.tab.windowId })
       .then(() => sendResponse({ ok: true }))
       .catch((err) => {
-        console.error("[Harvest] failed to open side panel", err);
+        console.error("[Acopio] failed to open side panel", err);
         sendResponse({ ok: false, error: String((err && err.message) || err) });
       });
     return true; // async sendResponse — keep the message channel open
+  }
+
+  if (message.type === "FETCH_IMAGE_BYTES") {
+    const url = message.payload && message.payload.url;
+    if (!url) {
+      sendResponse({ ok: false, error: "No URL provided." });
+      return undefined;
+    }
+    fetch(url)
+      .then(async (resp) => {
+        if (!resp.ok) {
+          sendResponse({ ok: false, error: `HTTP ${resp.status}` });
+          return;
+        }
+        const buf = await resp.arrayBuffer();
+        sendResponse({
+          ok: true,
+          bytes: Array.from(new Uint8Array(buf)),
+          contentType: resp.headers.get("content-type") || "",
+        });
+      })
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
   }
 
   if (message.type === "CAPTURE_VISIBLE_TAB") {
@@ -524,7 +547,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Content scripts can't touch IndexedDB directly (PLAN.md assumption
     // #2) — this is the one other capture-time DB read they need, so it
     // goes through background like everything else.
-    HarvestDB.findSimilarItem(message.payload.hostname, message.payload.type, message.payload.data, message.payload.selector)
+    AcopioDB.findSimilarItem(message.payload.hostname, message.payload.type, message.payload.data, message.payload.selector)
       .then((similar) => sendResponse({ ok: true, similar }))
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
@@ -536,7 +559,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // grows from captures made during the CURRENT page load, so revisiting
     // a site you already have a folder for still showed the plain
     // first-time "+ Collect" button as if nothing had ever been saved here.
-    HarvestDB.getItemsByHostname(message.payload.hostname)
+    AcopioDB.getItemsByHostname(message.payload.hostname)
       .then((items) => {
         // The hover-capture tooltip (this stack) and the text-selection
         // notes flow are two fully separate systems — a note must never
@@ -562,23 +585,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "UPDATE_NOTE") {
-    HarvestDB.updateItemNote(message.payload.id, message.payload.note)
+    AcopioDB.updateItemNote(message.payload.id, message.payload.note)
       .then((item) => {
         if (item) {
           chrome.runtime.sendMessage({ type: "ITEMS_UPDATED", hostname: item.hostname }).catch(() => {});
         }
       })
-      .catch((err) => console.error("[Harvest] failed to save note", err));
+      .catch((err) => console.error("[Acopio] failed to save note", err));
     return undefined; // fire-and-forget, no response expected
   }
 
   if (message.type === "GET_COLLECTIONS") {
     // Populates the "Save to" picker in the text-selection notes tooltip
-    // (src/content/notes.js) — content scripts can't reach HarvestDB
+    // (src/content/notes.js) — content scripts can't reach AcopioDB
     // directly (db/db.js isn't a content script), so this is the same
     // message-relay pattern every other content-script → storage read in
     // this file already uses. id + name is all the picker needs.
-    HarvestDB.getAllCollections()
+    AcopioDB.getAllCollections()
       .then((collections) => {
         sendResponse({ ok: true, collections: collections.map((c) => ({ id: c.id, name: c.name })) });
       })
@@ -591,7 +614,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // (notes.js's folder picker) — thin relay onto the existing
     // itemRefs-only linking method (GROUND_RULES.md: a Collection never
     // copies item data, only references it).
-    HarvestDB.addItemsToCollection(message.payload.collectionId, message.payload.itemRefs)
+    AcopioDB.addItemsToCollection(message.payload.collectionId, message.payload.itemRefs)
       .then(() => sendResponse({ ok: true }))
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
@@ -599,17 +622,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "CREATE_COLLECTION") {
     // The notes tooltip's inline "+ New folder" — sidepanel.js already
-    // calls HarvestDB.createCollection directly (it's an extension page,
+    // calls AcopioDB.createCollection directly (it's an extension page,
     // full privileges); content scripts need this same relay every other
     // storage write here already goes through.
-    HarvestDB.createCollection(message.payload.name)
+    AcopioDB.createCollection(message.payload.name)
       .then((collection) => sendResponse({ ok: true, collection: { id: collection.id, name: collection.name } }))
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
   }
 
   if (message.type === "UPDATE_ITEM_DIMENSIONS") {
-    HarvestDB.updateItemDimensions(message.payload.id, message.payload.width, message.payload.height)
+    AcopioDB.updateItemDimensions(message.payload.id, message.payload.width, message.payload.height)
       .then((item) => {
         if (item) {
           chrome.runtime.sendMessage({ type: "ITEMS_UPDATED", hostname: item.hostname }).catch(() => {});
@@ -634,13 +657,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   async function inlineImageAtSave(item) {
     const data = item.data || {};
-    if (item.type !== "image" || !data.url || data.isVideo || data.inlineDataUrl) return;
-    try {
-      const resp = await fetch(data.url);
-      if (!resp.ok) return;
-      data.inlineDataUrl = await blobToDataUrl(await resp.blob());
-    } catch (_) {
-      // Content script may have already inlined; export still tries data.url.
+    if (item.type !== "image" || data.inlineDataUrl) return;
+    if (data.isVideo || !data.url || String(data.url).startsWith("blob:")) return;
+    function upgradePinUrl(url) {
+      const pinMatch = String(url).match(/^(https?:\/\/i\.pinimg\.com\/)\d+x\d*(\/.*)$/);
+      return pinMatch ? pinMatch[1] + "originals" + pinMatch[2] : url;
+    }
+    function pinFallbackUrl(url) {
+      const match = String(url).match(/^(https?:\/\/i\.pinimg\.com\/)originals(\/.*)$/);
+      return match ? match[1] + "736x" + match[2] : null;
+    }
+    const upgraded = upgradePinUrl(data.url);
+    const tryUrls = [upgraded];
+    const fb = pinFallbackUrl(upgraded);
+    if (fb) tryUrls.push(fb);
+    if (!tryUrls.includes(data.url)) tryUrls.push(data.url);
+    for (const tryUrl of tryUrls) {
+      try {
+        const resp = await fetch(tryUrl);
+        if (!resp.ok) continue;
+        data.inlineDataUrl = await blobToDataUrl(await resp.blob());
+        return;
+      } catch (_) {
+        // try next candidate
+      }
     }
   }
 
@@ -655,15 +695,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         item.data.outerHTML = html;
         if (flagged) {
           console.warn(
-            "[Harvest] background re-sanitizer had to strip content the " +
+            "[Acopio] background re-sanitizer had to strip content the " +
               "content script should already have removed — capture-time " +
               "sanitize.js may have a gap. Item saved with the cleaned HTML."
           );
         }
       }
 
-      await HarvestDB.addItem(item);
-      const count = await HarvestDB.countByHostname(item.hostname);
+      await AcopioDB.addItem(item);
+      const count = await AcopioDB.countByHostname(item.hostname);
       sendResponse({ ok: true, count });
 
       // Best-effort broadcast so an already-open side panel updates live.
@@ -671,7 +711,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // quietly — that's expected, not an error worth surfacing.
       chrome.runtime.sendMessage({ type: "ITEMS_UPDATED", hostname: item.hostname }).catch(() => {});
     } catch (err) {
-      console.error("[Harvest] failed to save item", err);
+      console.error("[Acopio] failed to save item", err);
       sendResponse({ ok: false, error: String(err && err.message || err) });
     }
   })();

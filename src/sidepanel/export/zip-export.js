@@ -1,12 +1,12 @@
 // ZIP export — one handler per item type; RTF for noted visuals.
 (function () {
-  if (window.HarvestZipExport) return;
+  if (window.AcopioZipExport) return;
 
-  const H = window.HarvestExportHelpers;
+  const H = window.AcopioExportHelpers;
 
   async function buildNotedVisualsRtf(entries) {
     let rtf = "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\fnil Helvetica;}}\\f0\\fs22\n";
-    rtf += "\\b HARVEST - Captures with notes\\b0\\par\n";
+    rtf += "\\b ACOPIO - Captures with notes\\b0\\par\n";
     rtf += `${entries.length} item${entries.length === 1 ? "" : "s"}\\par\\par\n`;
     rtf += "Each capture is shown as an image, followed by your note.\\par\\par\n";
     rtf += "Tip: open collection-report.html in your browser for images with notes (recommended).\\par\\par\n";
@@ -34,7 +34,7 @@
       rtf += "\\line\\par\\par\n";
     }
 
-    rtf += `\\par\\fs18 ${H.escapeRtf(new Date().toLocaleString())} - Harvest Design Research Collector\\par\n`;
+    rtf += `\\par\\fs18 ${H.escapeRtf(new Date().toLocaleString())} - Acopio — Gather. Connect. Simplify\\par\n`;
     rtf += "}";
     return rtf;
   }
@@ -82,15 +82,15 @@
 
   function buildCollectionReportHtml(entries, opts = {}) {
     const embedImages = opts.embedImages !== false;
-    const esc = (s) => Harvest.escapeHtml(String(s)).replace(/\n/g, "<br>");
+    const esc = (s) => Acopio.escapeHtml(String(s)).replace(/\n/g, "<br>");
     const parts = [
       "<!DOCTYPE html>",
       "<html lang=\"en\"><head><meta charset=\"utf-8\">",
       "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
-      "<title>Harvest — Collection report</title>",
+      "<title>Acopio — Collection report</title>",
       "<style>", REPORT_STYLES, "</style></head><body>",
       "<div class=\"wrap\">",
-      "<h1>Harvest — Collection report</h1>",
+      "<h1>Acopio — Collection report</h1>",
       `<p class="intro">${entries.length} capture${entries.length === 1 ? "" : "s"} with notes — image, then your note. Print this page or save as PDF from your browser.</p>`,
     ];
 
@@ -117,14 +117,14 @@
       parts.push("</section>");
     });
 
-    parts.push(`<p class="footer">${esc(new Date().toLocaleString())} — Harvest Design Research Collector</p>`);
+    parts.push(`<p class="footer">${esc(new Date().toLocaleString())} — Acopio — Gather. Connect. Simplify</p>`);
     parts.push("</div></body></html>");
     return parts.join("\n");
   }
 
   function buildCollectionReportMarkdown(entries) {
     const lines = [
-      "# Harvest — Collection report",
+      "# Acopio — Collection report",
       "",
       `${entries.length} capture${entries.length === 1 ? "" : "s"} with notes.`,
       "",
@@ -145,13 +145,13 @@
       lines.push("");
     });
     lines.push(`---`);
-    lines.push(`${new Date().toLocaleString()} — Harvest Design Research Collector`);
+    lines.push(`${new Date().toLocaleString()} — Acopio — Gather. Connect. Simplify`);
     return lines.join("\n");
   }
 
   function buildExportReadme() {
     return [
-      "HARVEST ZIP EXPORT — How to view captures with notes",
+      "ACOPIO ZIP EXPORT — How to view captures with notes",
       "=====================================================",
       "",
       "RECOMMENDED: collection-report.html",
@@ -241,21 +241,11 @@
       imageFilename = `image-${desc}-${dims}-${id6}.png`;
       folder.file(imageFilename, imageBytes);
     } else if (item.data.url) {
-      try {
-        const resp = await fetch(item.data.url);
-        if (resp.ok) {
-          const blob = await resp.blob();
-          imageBytes = await H.blobToBytes(blob);
-          const ext = (item.data.format || "jpg").split("?")[0].replace(/[^a-z0-9]/gi, "") || "jpg";
-          imageFilename = `image-${desc}-${dims}-${id6}.${ext}`;
-          folder.file(imageFilename, blob);
-        }
-      } catch (_) {
-        // fall through to link-only fallback
+      imageBytes = await H.fetchHttpImageBytes(item.data.url);
+      if (imageBytes) {
+        imageFilename = `image-${desc}-${dims}-${id6}.png`;
+        folder.file(imageFilename, imageBytes);
       }
-    } else {
-      const normalized = await H.ensurePngBytes(imageBytes);
-      if (normalized) imageBytes = normalized;
     }
 
     if (!imageBytes) {
@@ -302,7 +292,7 @@
     if (bytes && bytes.length) return bytes;
 
     if (data.previewImage) {
-      console.warn("[Harvest export] resolveExportImageBytes returned null; retrying previewImage decode", {
+      console.warn("[Acopio export] resolveExportImageBytes returned null; retrying previewImage decode", {
         id: item.id,
         selector: item.selector,
       });
@@ -319,8 +309,19 @@
         if (!bytes) bytes = raw;
       }
     }
+    if (!bytes && data.outerHTML) {
+      const mediaUrl = H.componentMediaUrlFromOuterHtml(data.outerHTML, item.sourceUrl);
+      if (mediaUrl) {
+        try {
+          const blob = await H.urlToPngBlob(mediaUrl);
+          if (blob) bytes = await H.blobToBytes(blob);
+        } catch (_) {
+          // fall through
+        }
+      }
+    }
     if (!bytes) {
-      console.warn("[Harvest export] No image bytes for component — all decode paths failed", {
+      console.warn("[Acopio export] No image bytes for component — all decode paths failed", {
         id: item.id,
         selector: item.selector,
         hasPreviewImage: !!data.previewImage,
@@ -415,10 +416,6 @@
             }))
           );
           folder.file("collection-report.html", buildCollectionReportHtml(normalized));
-          folder.file("collection-report.md", buildCollectionReportMarkdown(normalized));
-          folder.file("EXPORT-README.txt", buildExportReadme());
-          folder.file("notes-with-images.doc", buildNotedVisualsDoc(normalized));
-          folder.file("notes-with-images.rtf", await buildNotedVisualsRtf(normalized));
         }
       }
       const blob = await zip.generateAsync({ type: "blob" });
@@ -449,7 +446,7 @@
     }
   }
 
-  window.HarvestZipExport = {
+  window.AcopioZipExport = {
     performZipExport,
     buildNotedVisualsRtf,
     buildNotedVisualsHtml,

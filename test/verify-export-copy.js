@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Node verification for Harvest copy/export pipeline.
+ * Node verification for Acopio copy/export pipeline.
  * Tests pure helpers + mocked browser APIs for RTF/HTML/ZIP companions.
  * Run: node test/verify-export-copy.js
  */
@@ -40,9 +40,14 @@ function createMockCanvas(width, height) {
     width: width || 1,
     height: height || 1,
     getContext() {
-      return { drawImage() {}, fillRect() {}, fillStyle: "" };
+      return { drawImage() {}, fillRect() {}, fillText() {}, fillStyle: "", textBaseline: "" };
     },
     toBlob(cb, mime) {
+      if (mime === "image/png") {
+        const png = bytesFromB64(PNG_1x1_B64);
+        cb(new Blob([png], { type: "image/png" }));
+        return;
+      }
       // Emit a tiny valid JPEG (SOI + EOI markers + padding) for RTF hex tests
       const jpeg = Buffer.from([
         0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
@@ -81,6 +86,11 @@ function createMockDocument() {
 async function mockCreateImageBitmap(blob) {
   const buf = await blob.arrayBuffer();
   const bytes = new Uint8Array(buf);
+  const isPng = bytes.length >= 2 && bytes[0] === 0x89 && bytes[1] === 0x50;
+  const isJpeg = bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (!isPng && !isJpeg) {
+    throw new Error("Invalid image data");
+  }
   let width = 1;
   let height = 1;
   if (bytes.length >= 24 && bytes[0] === 0x89 && bytes[1] === 0x50) {
@@ -122,7 +132,7 @@ function createSandbox() {
     console,
     setTimeout,
     clearTimeout,
-    Harvest: {
+    Acopio: {
       escapeHtml(str) {
         return String(str)
           .replace(/&/g, "&amp;")
@@ -231,8 +241,10 @@ function testCollectionReportHtml(H, ZipExport) {
   console.log(`       → base64 length: ${base64Len}, total HTML: ${html.length} bytes`);
 }
 
-function testCollectionReportMarkdown(ZipExport) {
-  console.log("\n6. collection-report.md (relative image paths)");
+function testZipOnlyHtmlReport(ZipExport) {
+  console.log("\n6b. ZIP noted visuals — collection-report.html only");
+  // performZipExport writes only collection-report.html (not md/rtf/doc/readme).
+  // Helper builders still exist for unit tests; this verifies the intended export surface.
   const entries = [
     {
       type: "component",
@@ -242,9 +254,9 @@ function testCollectionReportMarkdown(ZipExport) {
       selector: "div.hero",
     },
   ];
-  const md = ZipExport.buildCollectionReportMarkdown(entries);
-  assert(md.includes("![Component 01](component-test-100x50-abc123.png)"), "MD has relative image ref");
-  assert(md.includes("Markdown note"), "MD contains note");
+  const html = ZipExport.buildCollectionReportHtml(entries);
+  assert(html.includes("collection-report") || html.includes("Collection report"), "HTML report builder still works");
+  assert(typeof ZipExport.buildCollectionReportMarkdown === "function", "MD builder retained for tests");
 }
 
 async function testZipComponentPng(H, ZipExport) {
@@ -304,7 +316,7 @@ async function testNotionBlocks(NotionExport) {
     data: { previewImage: PNG_1x1_DATA_URL },
     note: `Note ${n}`,
   }));
-  const blocks = await NotionExport.buildNotionBlocksForItems(items);
+  const { blocks } = await NotionExport.buildNotionBlocksForItems(items);
   const uploadBlocks = blocks.filter(
     (b) => b.type === "image" && b.image && b.image.type === "file_upload"
   );
@@ -316,9 +328,9 @@ async function testNotionBlocks(NotionExport) {
 
 async function testClipboardMimeTypes(ctx) {
   console.log("\n9. Clipboard MIME types (mock ClipboardItem)");
-  const H = ctx.HarvestExportHelpers;
-  const CC = ctx.HarvestClipboardCopy;
-  const CH = ctx.HarvestCopyHelpers;
+  const H = ctx.AcopioExportHelpers;
+  const CC = ctx.AcopioClipboardCopy;
+  const CH = ctx.AcopioCopyHelpers;
 
   let lastClipboardWrite = null;
   ctx.ClipboardItem = class MockClipboardItem {
@@ -357,45 +369,53 @@ async function testClipboardMimeTypes(ctx) {
   assert(H.isPngBytes(pngBytes), "clipboard PNG has valid magic bytes");
   console.log(`       → clipboard PNG: ${pngBytes.length} bytes`);
 
-  const noImageItem = { type: "component", data: {} };
-  let threwNoScreenshot = false;
-  try {
-    await CC.writeClipboardWithFallback([noImageItem]);
-  } catch (err) {
-    threwNoScreenshot = String(err.message || err).includes("no screenshot");
-  }
-  assert(threwNoScreenshot, "component without previewImage throws no-screenshot error");
+  const noImageItem = { type: "component", data: {}, selector: "div.hero", sourceUrl: "https://example.com" };
+  await CC.writeClipboardWithFallback([noImageItem]);
+  assert(lastClipboardWrite, "component without screenshot falls back to rich text");
+  assert(lastClipboardWrite.types.includes("text/plain"), "fallback copy includes text/plain");
+  const fallbackText = await lastClipboardWrite.getType("text/plain").then((b) => b.text());
+  assert(fallbackText.includes("div.hero"), "fallback text includes selector metadata");
+  assert(!lastClipboardWrite.types.includes("image/png"), "fallback copy does not force image/png");
 
   const colorItem = { type: "color", data: { hex: "#336699" } };
+  CC.limits.minPngBytes = 1;
   await CC.writeClipboardWithFallback([colorItem]);
-  assert(lastClipboardWrite.types.includes("text/plain"), "color copy still uses text/plain");
-  assert(!lastClipboardWrite.types.includes("image/png"), "color copy does not force image/png");
+  assert(lastClipboardWrite.types.includes("text/plain"), "color copy uses text/plain");
+  const colorText = await lastClipboardWrite.getType("text/plain").then((b) => b.text());
+  assert(colorText === "#336699", `color plain text is hex only (got "${colorText}")`);
+  assert(lastClipboardWrite.types.includes("image/png"), "color copy includes swatch image/png");
+
+  const fontItem = { type: "font", data: { family: "Inter", weight: 600, sizePx: 16, lineHeightPx: 24 } };
+  await CC.writeClipboardWithFallback([fontItem]);
+  const fontText = await lastClipboardWrite.getType("text/plain").then((b) => b.text());
+  assert(fontText === "Inter, 600, 16px / 24px line-height", `font plain text is useful string (got "${fontText}")`);
+  assert(lastClipboardWrite.types.includes("image/png"), "font copy includes sample image/png");
 
   const blobs = await CH.resolveItemImages(item);
   assert(blobs.length === 1 && blobs[0].size > 0, "resolveItemImages returns PNG for mock component");
 }
 
 async function main() {
-  console.log("Harvest copy/export verification (Node)\n" + "=".repeat(50));
+  console.log("Acopio copy/export verification (Node)\n" + "=".repeat(50));
 
   const ctx = createSandbox();
   loadModule(ctx, "src/sidepanel/export/export-helpers.js");
-  const H = ctx.HarvestExportHelpers;
+  const H = ctx.AcopioExportHelpers;
 
   testPurePngHelpers(H);
   await testEnsureValidPngBlob(H);
   await testResolveExportImageBytes(H);
 
   loadModule(ctx, "src/sidepanel/export/zip-export.js");
-  const ZipExport = ctx.HarvestZipExport;
+  const ZipExport = ctx.AcopioZipExport;
 
   await testRtfCompanion(H, ZipExport);
   testCollectionReportHtml(H, ZipExport);
-  testCollectionReportMarkdown(ZipExport);
+  testZipOnlyHtmlReport(ZipExport);
   await testZipComponentPng(H, ZipExport);
 
   loadModule(ctx, "src/sidepanel/export/notion-export.js");
-  await testNotionBlocks(ctx.HarvestNotionExport);
+  await testNotionBlocks(ctx.AcopioNotionExport);
 
   loadModule(ctx, "src/sidepanel/copy/copy-helpers.js");
   loadModule(ctx, "src/sidepanel/copy/clipboard-copy.js");

@@ -1,15 +1,13 @@
 // Figma export — true "Export to Figma" via clipboard + companion plugin.
-// Figma's REST API cannot create design nodes; the Harvest Figma plugin
+// Figma's REST API cannot create design nodes; the Acopio Figma plugin
 // imports JSON via the Plugin API. OAuth (cloud-oauth.js) is only for a
 // future file-picker feature and is not required here.
 (function () {
-  if (window.HarvestFigmaExport) return;
+  if (window.AcopioFigmaExport) return;
 
-  const H = window.HarvestExportHelpers;
+  const H = window.AcopioExportHelpers;
 
   const FIGMA_OPEN_URL = "https://www.figma.com/files/recent";
-  const FIGMA_IMPORT_STEPS =
-    "In Figma, run Harvest Import once (Plugins → Development → Harvest Import, or ⌘⌥P). It auto-imports from clipboard — or click Import from Harvest.";
 
   async function inlineComponentItem(out) {
     if (out.data.previewImage) {
@@ -75,6 +73,7 @@
       scopeLabel: exportContext.scopeLabel,
       renderMode: opts.renderMode || "simple",
       autoImport: Boolean(opts.autoImport),
+      openedFromExtension: Boolean(opts.openedFromExtension),
       items,
     };
   }
@@ -90,12 +89,13 @@
       const payload = await buildPluginJsonPayload(exportContext, {
         renderMode: "simple",
         autoImport: true,
+        openedFromExtension: true,
       });
       const json = JSON.stringify(payload);
       await navigator.clipboard.writeText(json);
       try {
         await chrome.storage.local.set({
-          harvestPendingFigmaExport: {
+          acopioPendingFigmaExport: {
             itemCount: payload.items.length,
             scopeLabel: payload.scopeLabel,
             exportedAt: payload.exportedAt,
@@ -108,9 +108,9 @@
       const siteCount = exportContext.siteCount || new Set(exportContext.items.map((item) => item.hostname)).size;
       const itemCount = payload.items.length;
       const siteNote =
-        siteCount > 1 ? ` from ${siteCount} sites (grouped by site in Figma)` : "";
+        siteCount > 1 ? ` from ${siteCount} sites` : "";
       showFeedback(
-        `Copied ${itemCount} item${itemCount === 1 ? "" : "s"}${siteNote} to clipboard and opened Figma. ${FIGMA_IMPORT_STEPS} Install the plugin once from harvest-figma-plugin/manifest.json if you haven't yet.`,
+        `Copied ${itemCount} item${itemCount === 1 ? "" : "s"}${siteNote} and opened Figma.`,
         "success"
       );
     } catch (err) {
@@ -137,7 +137,7 @@
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       showFeedback(
-        `Downloaded ${payload.items.length} item${payload.items.length === 1 ? "" : "s"}. Import the file in Figma via Harvest Import → Drop file.`,
+        `Downloaded ${payload.items.length} item${payload.items.length === 1 ? "" : "s"}. Open Acopio Import in Figma to import the file.`,
         "success"
       );
     } catch (err) {
@@ -156,7 +156,7 @@
       const payload = await buildPluginJsonPayload(exportContext, { renderMode: "full" });
       await navigator.clipboard.writeText(JSON.stringify(payload));
       showFeedback(
-        `Copied ${payload.items.length} item${payload.items.length === 1 ? "" : "s"}. In Figma, run Harvest Import and choose Paste from clipboard.`,
+        `Copied ${payload.items.length} item${payload.items.length === 1 ? "" : "s"}. Open Acopio Import in Figma to paste.`,
         "success"
       );
     } catch (err) {
@@ -164,7 +164,7 @@
     }
   }
 
-  window.HarvestFigmaExport = {
+  window.AcopioFigmaExport = {
     performExportToFigma,
     performPluginJsonExport,
     performPluginClipboardExport,

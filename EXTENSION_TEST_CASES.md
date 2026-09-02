@@ -1,4 +1,4 @@
-# Harvest — Full-Extension Test Cases (pre-deploy)
+# Acopio — Full-Extension Test Cases (pre-deploy)
 
 Companion to [`NOTES_COLLECTIONS_TEST_CASES.md`](NOTES_COLLECTIONS_TEST_CASES.md)
 (Notes capture + Collections, covered in full detail there — not repeated
@@ -88,7 +88,7 @@ regression.
 | 5.10 | Figma clipboard bridge — no colors in scope | Try it on a scope with zero color items | "No colors in this scope to copy," not a broken empty paste |
 | 5.11 | Figma-plugin JSON export (file download) | — | Downloads a `.json` with every item, images/icons inlined as base64 for `image`/`component` types |
 | 5.12 | Figma-plugin JSON export — includes notes | Export a scope containing notes via this path | Notes present in the payload (this path is NOT type-filtered, unlike the old ZIP bug) — their raw image URLs won't be inlined (plugin has `networkAccess:none`), confirm that's an acceptable, known limitation rather than a silent break |
-| 5.13 | Figma-plugin clipboard export | Same payload, via clipboard instead of file | Clipboard write succeeds; pasting outside the Harvest Figma plugin shows raw JSON (expected) |
+| 5.13 | Figma-plugin clipboard export | Same payload, via clipboard instead of file | Clipboard write succeeds; pasting outside the Acopio Figma plugin shows raw JSON (expected) |
 | 5.14 | Handoff-sheet PNG | Export a color/font handoff sheet | Correct pixel values sampled from the generated canvas (not a blank/placeholder canvas) |
 | 5.15 | Handoff sheet with a real captured image | — | **By design**, does NOT draw real image pixels (a cross-origin image without CORS headers taints the whole canvas) — placeholder block with dimensions instead. Confirm this trade-off is still true and the whole sheet doesn't fail because of it. |
 | 5.16 | Export with zero items in scope | Try any export action on an empty scope | "Nothing to export," never a broken/empty file |
@@ -99,14 +99,14 @@ regression.
 | # | Case | Steps | Expected |
 |---|------|-------|----------|
 | 6.1 | Appears/hides correctly | Toggle "Collapse to floating toolbar" from the side panel | See `NOTES_COLLECTIONS_TEST_CASES.md` §12.2 — the race-condition fix, re-verify live |
-| 6.2 | Drag to reposition | Drag by the logo/brand handle | Moves smoothly, position persists across a page refresh (`harvestToolbarPos`) |
+| 6.2 | Drag to reposition | Drag by the logo/brand handle | Moves smoothly, position persists across a page refresh (`acopioToolbarPos`) |
 | 6.3 | Position stays clamped after a browser window resize | Drag the pill near an edge, then shrink the browser window | Should not end up partially off-screen — see §12.3 fix, re-verify specifically after a resize (not just after being hidden/shown) |
-| [x] 6.4 | Visual match to the Design System Extractor project's own floating bar | Compare side by side | Corner radius (12px bar / 8px buttons — the literal values, not an approximated token), consistent icon sizing across all buttons, rounded+cover-fit logo. Verified via live screenshot comparison this session after two correction rounds (first pass substituted Harvest's own 20px token instead of the literal 12px — corrected). |
+| [x] 6.4 | Visual match to the Design System Extractor project's own floating bar | Compare side by side | Corner radius (12px bar / 8px buttons — the literal values, not an approximated token), consistent icon sizing across all buttons, rounded+cover-fit logo. Verified via live screenshot comparison this session after two correction rounds (first pass substituted Acopio's own 20px token instead of the literal 12px — corrected). |
 | 6.5 | Close (×) button | Click × | Hides the pill AND pauses hover-capture in one click ("close means close," not two separate steps); persists via storage so it doesn't reappear on refresh |
 | 6.6 | Recovery from a closed toolbar | After closing it, look for a way back | "Show the on-page toolbar again" link in the side panel footer — not a dead end |
 | 6.7 | Cursor/notes toggle buttons mirror the side panel exactly | Toggle either from the pill | State stays in sync with the side panel in both directions (already covered in Notes §1.3, applies to hover-capture's own toggle too) |
-| 6.8 | Toolbar excluded from its own hover-capture | Hover the pill itself while hover-capture is active | Should never trigger the capture tooltip on the toolbar's own UI (`Harvest.ownRoots` registration) |
-| 6.9 | Toolbar survives an extension reload while the tab was already open | Reload the extension via chrome://extensions with a tab already open, then interact with the toolbar on that tab | Buttons should fail gracefully with a "Harvest was reloaded — refresh this page" flash (warning icon), not silently do nothing — confirm this still holds after this session's edits touched the same file |
+| 6.8 | Toolbar excluded from its own hover-capture | Hover the pill itself while hover-capture is active | Should never trigger the capture tooltip on the toolbar's own UI (`Acopio.ownRoots` registration) |
+| 6.9 | Toolbar survives an extension reload while the tab was already open | Reload the extension via chrome://extensions with a tab already open, then interact with the toolbar on that tab | Buttons should fail gracefully with a "Acopio was reloaded — refresh this page" flash (warning icon), not silently do nothing — confirm this still holds after this session's edits touched the same file |
 
 ## 7. Side panel chrome & navigation
 
@@ -142,7 +142,7 @@ Test page already exists: [`test/xss-adversarial.html`](test/xss-adversarial.htm
 
 | # | Case | Expected |
 |---|------|----------|
-| 9.1 | Inspect IndexedDB directly (`chrome-extension://<id>` → Application → IndexedDB → `harvest-db`) | Every captured item's shape matches the documented schema — do this for at least one of each type, including a note (schema is newer, not covered by the original phase-1 verification) |
+| 9.1 | Inspect IndexedDB directly (`chrome-extension://<id>` → Application → IndexedDB → `acopio-db`) | Every captured item's shape matches the documented schema — do this for at least one of each type, including a note (schema is newer, not covered by the original phase-1 verification) |
 | 9.2 | Reload the extension | Previously captured items still present, nothing lost |
 | 9.3 | `findSimilarItem` dedup for every type, not just notes | Color (hex-distance <20), font (family+weight+size), and note (exact text match within hostname) all correctly flag a near-duplicate before save |
 

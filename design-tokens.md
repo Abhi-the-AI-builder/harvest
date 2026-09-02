@@ -1,4 +1,4 @@
-# Harvest — design tokens
+# Acopio — design tokens
 
 Written before the design-polish pass (2026-08-25), per the project's design
 standards doc. These are the only values allowed anywhere in the UI —
@@ -10,7 +10,7 @@ numerically identical).
 
 ## Why these decisions, not the defaults
 
-Harvest is a hover-to-collect research tool for a professional designer. It
+Acopio is a hover-to-collect research tool for a professional designer. It
 spends most of its life as a small floating surface *on top of someone
 else's website* (the tooltip, the toolbar pill) plus a narrow, dense side
 panel (the library). That constrains the palette more than a typical app:
@@ -122,7 +122,7 @@ The user supplied an updated `CLAUDE.md` plus 10 numbered reference images
 (`reference-images/01…10`) with an explicit instruction: treat Section 4's
 12 patterns "as literally as Section 2's number scales — specific patterns
 to build, not moodboard inspiration to vaguely gesture at." Two images
-(`01`, `02`) are direct 1:1 references for Harvest's own tooltip and folder
+(`01`, `02`) are direct 1:1 references for Acopio's own tooltip and folder
 grid, not general inspiration — extracted and matched as closely as
 possible rather than paraphrased.
 
@@ -161,7 +161,7 @@ a loud toast (Pattern 8), tinted eyebrow pills — already how `.card
 .type-label` worked before this pass, just confirmed against reference `05`
 (Pattern 10), and a small gradient confirmation moment for saving a font
 pairing (Pattern 12). Pattern 6 (segmented tick progress) has no matching
-use case in Harvest yet — no multi-step/session-progress surface exists to
+use case in Acopio yet — no multi-step/session-progress surface exists to
 apply it to — so it's intentionally not forced in anywhere, per the
 document's own "where it applies" framing rather than "everywhere,
 regardless."

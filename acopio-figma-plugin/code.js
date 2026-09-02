@@ -1,7 +1,7 @@
-// Harvest Import — Figma plugin main thread.
+// Acopio Import — Figma plugin main thread.
 // Receives parsed payloads from ui.html and creates frames on the current page.
 
-figma.showUI(__html__, { width: 320, height: 300 });
+figma.showUI(__html__, { width: 320, height: 420 });
 
 const STACK_GAP = 24;
 const FRAME_PADDING = 16;
@@ -201,7 +201,7 @@ async function buildComponentContent(item, renderMode) {
   }
   return [
     makePlaceholderRect(CONTENT_WIDTH, 160, "Component"),
-    await makeCaption("Use simple render mode export from Harvest"),
+    await makeCaption("Use simple render mode export from Acopio"),
   ];
 }
 

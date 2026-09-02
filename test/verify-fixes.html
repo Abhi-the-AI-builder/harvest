@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Harvest — verify recent fixes</title>
+    <title>Acopio — verify recent fixes</title>
     <link rel="stylesheet" href="../src/sidepanel/sidepanel.css" />
     <style>
       body { padding: 24px; max-width: 960px; margin: 0 auto; font-family: system-ui, sans-serif; }
@@ -17,7 +17,7 @@
     </style>
   </head>
   <body>
-    <h1>Harvest fix verification</h1>
+    <h1>Acopio fix verification</h1>
     <p>Automated checks for export/copy modules + visual fixtures for CSS fixes.</p>
 
     <div class="section" id="zip-section">
@@ -105,13 +105,13 @@
         const zip = new JSZip();
         const folder = zip.folder("example-com");
         const notedVisuals = [];
-        await HarvestZipExport.ZIP_WRITERS.component(folder, mockItem, notedVisuals);
+        await AcopioZipExport.ZIP_WRITERS.component(folder, mockItem, notedVisuals);
         const files = Object.keys(folder.files).filter((k) => !k.endsWith("/"));
         const hasPng = files.some((f) => f.endsWith(".png"));
         const hasHtml = files.some((f) => f.endsWith(".html"));
         log("zip-results", hasPng && !hasHtml, `component exports as .png (${files.join(", ")})`);
         if (notedVisuals.length) {
-          const rtf = await HarvestZipExport.buildNotedVisualsRtf(notedVisuals);
+          const rtf = await AcopioZipExport.buildNotedVisualsRtf(notedVisuals);
           const hasImage = rtf.includes("\\jpegblip") || rtf.includes("\\pngblip");
           const hasNote = rtf.includes("Test component note");
           log("zip-results", hasImage && hasNote, "notes-with-images.rtf has embedded image + note text");
@@ -124,7 +124,7 @@
           data: { previewImage: PNG_1x1, family: "Inter" },
           note: "My annotation",
         };
-        const text = HarvestClipboardCopy.describeItemForCopy(item, 0);
+        const text = AcopioClipboardCopy.describeItemForCopy(item, 0);
         const lines = text.split("\n\n");
         const noteIdx = lines.indexOf("My annotation");
         const hasLabelFirst = lines[0] === "Component 1";
@@ -135,7 +135,7 @@
           type: "component",
           data: { previewImage: PNG_1x1 },
         };
-        const textOnly = HarvestClipboardCopy.describeItemForCopy(itemNoNote, 0);
+        const textOnly = AcopioClipboardCopy.describeItemForCopy(itemNoNote, 0);
         log("copy-results", textOnly === "Component 1", "no-note copy: label only");
       }
 
@@ -151,7 +151,7 @@
         chrome.runtime = {
           sendMessage: async () => ({ ok: true, fileUploadId: "upload-test-id" }),
         };
-        const blocks = await HarvestNotionExport.buildNotionBlocksForItems([item]);
+        const { blocks } = await AcopioNotionExport.buildNotionBlocksForItems([item]);
         const imageBlock = blocks.find((b) => b.type === "image" && b.image && b.image.type === "file_upload");
         log("notion-results", !!imageBlock, "component produces Notion image block with file_upload");
         log("notion-results", imageBlock && imageBlock.image.file_upload.id === "upload-test-id", "image block has upload id");

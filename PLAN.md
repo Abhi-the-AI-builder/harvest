@@ -1,8 +1,8 @@
-# Harvest — Plan
+# Acopio — Plan
 
 Selective hover-to-collect design-research Chrome extension. Source spec:
-`design-harvest-extension-prompt.md` (13 sections). Ground rules that apply to
-every change from here on: `../` sibling `harvest-ground-rules.md`, copied
+`design-acopio-extension-prompt.md` (13 sections). Ground rules that apply to
+every change from here on: `../` sibling `acopio-ground-rules.md`, copied
 into this repo as `GROUND_RULES.md` for reference.
 
 ## Understanding, confirmed
@@ -25,7 +25,7 @@ into this repo as `GROUND_RULES.md` for reference.
    script, React/Vite extension pages) is sound for a mature product, but
    for an extension I need to load unpacked and iterate on quickly, a build
    pipeline is friction with no payoff yet. Phase 1 ships as plain ES2020
-   JS, loaded as ordered `content_scripts` files sharing one `window.Harvest`
+   JS, loaded as ordered `content_scripts` files sharing one `window.Acopio`
    namespace (same pattern already used in the sibling `design-extractor`
    project in this workspace). I'll revisit TypeScript if/when the codebase
    size makes the lack of types actually costly — flagging this rather than
@@ -40,7 +40,7 @@ into this repo as `GROUND_RULES.md` for reference.
    product exists to fix. So: the content script never touches IndexedDB
    directly. It sends captured items to the background service worker via
    `chrome.runtime.sendMessage`, and the service worker owns the single
-   IndexedDB database (`harvest-db`, origin = the extension itself),
+   IndexedDB database (`acopio-db`, origin = the extension itself),
    performs the second sanitization pass there, and writes them. Extension
    pages (popup, later Library) read the same database directly, since they
    share the extension's origin. This also naturally gives atomic
@@ -73,7 +73,7 @@ into this repo as `GROUND_RULES.md` for reference.
 ## File structure
 
 ```
-harvest/
+acopio/
   PLAN.md
   GROUND_RULES.md
   QA_CHECKLIST.md
@@ -83,7 +83,7 @@ harvest/
   src/
     background.js          # service worker: context menu, owns IndexedDB, message router
     content/
-      shared.js             # window.Harvest namespace, hostname/uuid/debounce helpers
+      shared.js             # window.Acopio namespace, hostname/uuid/debounce helpers
       sanitize.js            # capture-time + render-time sanitization (Section 9)
       tagger.js               # auto type/family detection (Section 6)
       overlay.js               # Shadow DOM tooltip: render, position/flip, tree-walk, note field, toast

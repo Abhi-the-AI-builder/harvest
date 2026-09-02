@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT/manifest.json" | head -1)"
 BUILD="$ROOT/dist/build"
-ZIP="$ROOT/dist/harvest-v${VERSION}-store.zip"
+ZIP="$ROOT/dist/acopio-v${VERSION}-store.zip"
 
 if [[ -z "$VERSION" ]]; then
   echo "Could not read version from manifest.json" >&2

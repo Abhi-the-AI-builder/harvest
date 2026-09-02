@@ -1,7 +1,7 @@
 // Section 6 — deterministic auto-tagging. No AI/heuristic ML, just DOM +
 // computed-style rules, evaluated in the documented priority order.
 (function () {
-  const Harvest = window.Harvest;
+  const Acopio = window.Acopio;
 
   function hasMeaningfulText(el) {
     const text = (el.textContent || "").trim();
@@ -43,8 +43,8 @@
     // A gradient specifically (a flat solid color has no such ambiguity)
     // wrapping a real photo is almost always a decorative tint or loading
     // placeholder over that photo, not genuine flat-color content of its
-    // own — see Harvest.findRealMediaChild.
-    if (isGradient && Harvest.findRealMediaChild(el)) return false;
+    // own — see Acopio.findRealMediaChild.
+    if (isGradient && Acopio.findRealMediaChild(el)) return false;
     return true;
   }
 
@@ -116,7 +116,7 @@
     // No background photo of its own, but wraps exactly one real photo —
     // a decorated/tinted wrapper around the actual content, not something
     // that should lose to a more generic classification.
-    if (Harvest.findRealMediaChild(el)) return true;
+    if (Acopio.findRealMediaChild(el)) return true;
     return false;
   }
 
@@ -125,7 +125,7 @@
    * one of color|font|image|component. `family` is one of
    * heading|body|button|color|image|other.
    */
-  Harvest.detectTag = function detectTag(el) {
+  Acopio.detectTag = function detectTag(el) {
     const style = window.getComputedStyle(el);
     const tag = el.tagName.toLowerCase();
 
@@ -176,5 +176,5 @@
     return { type: "component", family: "other" };
   };
 
-  Harvest.FAMILY_OPTIONS = ["heading", "body", "button", "color", "image", "other"];
+  Acopio.FAMILY_OPTIONS = ["heading", "body", "button", "color", "image", "other"];
 })();

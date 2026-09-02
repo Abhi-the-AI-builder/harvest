@@ -24,7 +24,7 @@
 // the Figma app itself, via the Plugin API. This OAuth connection verifies
 // the user's Figma account and is what a future "pick a target file"
 // picker would use, but pushing captured items in as real layers still
-// goes through the existing companion plugin (harvest-figma-plugin) and
+// goes through the existing companion plugin (acopio-figma-plugin) and
 // its JSON import — same as before this feature existed. Don't build a
 // "direct push to Figma" promise on top of this without re-checking that
 // constraint; it hasn't changed.
@@ -35,7 +35,7 @@
   // Server-side proxy for the one step that needs a confidential secret —
   // see the file header. Deploy target for supabase/functions/notion-oauth-exchange.
   const NOTION_EXCHANGE_FUNCTION_URL = () => {
-    const base = global.HARVEST_SUPABASE_URL;
+    const base = global.ACOPIO_SUPABASE_URL;
     return base ? `${base}/functions/v1/notion-oauth-exchange` : null;
   };
 
@@ -91,11 +91,11 @@
         );
       }
       if (!clientId) {
-        parts.push("Set HARVEST_FIGMA_CLIENT_ID in src/config.js (from your Figma app's Client ID).");
+        parts.push("Set ACOPIO_FIGMA_CLIENT_ID in src/config.js (from your Figma app's Client ID).");
       }
       parts.push("Reload the extension after saving, then try again.");
       parts.push(
-        "Tip: Export to Figma and Copy for Figma plugin work without OAuth — use the Harvest Figma plugin to import the JSON."
+        "Tip: Export to Figma and Copy for Figma plugin work without OAuth — use the Acopio Figma plugin to import the JSON."
       );
       return parts.join(" ");
     }
@@ -122,13 +122,13 @@
 
   // --- Figma (PKCE, no secret) -----------------------------------------
   async function connectFigma() {
-    const clientId = global.HARVEST_FIGMA_CLIENT_ID;
+    const clientId = global.ACOPIO_FIGMA_CLIENT_ID;
     const redirectUri = getExtensionRedirectUrl();
     if (!clientId) {
       return {
         ok: false,
         error:
-          "Figma OAuth isn't configured — add HARVEST_FIGMA_CLIENT_ID to src/config.js (see LAUNCH-PATH-B.md). Export to Figma works without OAuth via the Harvest Figma plugin.",
+          "Figma OAuth isn't configured — add ACOPIO_FIGMA_CLIENT_ID to src/config.js (see LAUNCH-PATH-B.md). Export to Figma works without OAuth via the Acopio Figma plugin.",
       };
     }
     if (!redirectUri) {
@@ -168,24 +168,24 @@
           error: formatFigmaAuthError(json.message || json.error_description || "Figma token exchange failed.", redirectUri, clientId),
         };
       }
-      await storeToken("harvestFigmaToken", { accessToken: json.access_token, refreshToken: json.refresh_token, expiresAt: Date.now() + (json.expires_in || 0) * 1000 });
+      await storeToken("acopioFigmaToken", { accessToken: json.access_token, refreshToken: json.refresh_token, expiresAt: Date.now() + (json.expires_in || 0) * 1000 });
       return { ok: true };
     } catch (err) {
       return { ok: false, error: formatFigmaAuthError((err && err.message) || err, redirectUri, clientId) };
     }
   }
   async function figmaStatus() {
-    const token = await readToken("harvestFigmaToken");
+    const token = await readToken("acopioFigmaToken");
     return { connected: !!token };
   }
   function disconnectFigma() {
-    return clearToken("harvestFigmaToken").then(() => ({ ok: true }));
+    return clearToken("acopioFigmaToken").then(() => ({ ok: true }));
   }
 
   // --- Notion (confidential client, exchange proxied via Edge Function) -
   async function connectNotion() {
-    const clientId = global.HARVEST_NOTION_CLIENT_ID;
-    if (!clientId) return { ok: false, error: "Notion isn't configured yet — add HARVEST_NOTION_CLIENT_ID to src/config.js." };
+    const clientId = global.ACOPIO_NOTION_CLIENT_ID;
+    if (!clientId) return { ok: false, error: "Notion isn't configured yet — add ACOPIO_NOTION_CLIENT_ID to src/config.js." };
     const functionUrl = NOTION_EXCHANGE_FUNCTION_URL();
     if (!functionUrl) return { ok: false, error: "Supabase isn't configured — Notion's token exchange needs it (see src/config.local.js)." };
     const redirectUri = chrome.identity.getRedirectURL();
@@ -201,29 +201,29 @@
       // only ever carries the one-time authorization code, never a secret.
       const resp = await fetch(functionUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": global.HARVEST_SUPABASE_ANON_KEY || "" },
+        headers: { "Content-Type": "application/json", "apikey": global.ACOPIO_SUPABASE_ANON_KEY || "" },
         body: JSON.stringify({ code, redirect_uri: redirectUri }),
       });
       const json = await resp.json();
       if (!resp.ok || !json.access_token) return { ok: false, error: json.error || "Notion token exchange failed." };
-      await storeToken("harvestNotionToken", { accessToken: json.access_token, workspaceName: json.workspace_name || "", workspaceIcon: json.workspace_icon || "" });
+      await storeToken("acopioNotionToken", { accessToken: json.access_token, workspaceName: json.workspace_name || "", workspaceIcon: json.workspace_icon || "" });
       return { ok: true, workspaceName: json.workspace_name || "" };
     } catch (err) {
       return { ok: false, error: String((err && err.message) || err) };
     }
   }
   async function notionStatus() {
-    const token = await readToken("harvestNotionToken");
+    const token = await readToken("acopioNotionToken");
     return { connected: !!token, workspaceName: token ? token.workspaceName : "" };
   }
   function disconnectNotion() {
-    return clearToken("harvestNotionToken").then(() => ({ ok: true }));
+    return clearToken("acopioNotionToken").then(() => ({ ok: true }));
   }
 
   // Real, working push — Notion's REST API (unlike Figma's) genuinely
   // supports creating pages/blocks, so this isn't a stand-in for anything.
   async function notionSearchPages() {
-    const token = await readToken("harvestNotionToken");
+    const token = await readToken("acopioNotionToken");
     if (!token) return { ok: false, error: "Not connected to Notion." };
     const resp = await fetch("https://api.notion.com/v1/search", {
       method: "POST",
@@ -253,7 +253,7 @@
   const NOTION_API_VERSION = "2025-09-03";
 
   async function notionWaitForFileUpload(fileUploadId, maxAttempts = 30) {
-    const token = await readToken("harvestNotionToken");
+    const token = await readToken("acopioNotionToken");
     if (!token) return { ok: false, error: "Not connected to Notion." };
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const resp = await fetch(`https://api.notion.com/v1/file_uploads/${fileUploadId}`, {
@@ -272,7 +272,7 @@
   }
 
   async function notionUploadFileBlob(blob, filename) {
-    const token = await readToken("harvestNotionToken");
+    const token = await readToken("acopioNotionToken");
     if (!token) return { ok: false, error: "Not connected to Notion." };
     const safeName = String(filename || "capture.png").slice(0, 200);
     const createResp = await fetch("https://api.notion.com/v1/file_uploads", {
@@ -309,7 +309,7 @@
   }
 
   async function notionCreatePage(parentPageId, title, blocks) {
-    const token = await readToken("harvestNotionToken");
+    const token = await readToken("acopioNotionToken");
     if (!token) return { ok: false, error: "Not connected to Notion." };
     // Notion caps children at 100 blocks per create call — chunk the rest
     // into follow-up appends rather than silently dropping overflow.
@@ -350,12 +350,12 @@
   // to this unpacked extension's ID, so there's no way to know it ahead of
   // time without asking Chrome for it.
   try {
-    console.info("[Harvest] OAuth redirect URI for Figma/Notion app setup:", chrome.identity.getRedirectURL());
+    console.info("[Acopio] OAuth redirect URI for Figma/Notion app setup:", chrome.identity.getRedirectURL());
   } catch (_) {
     // identity permission not yet granted (fresh install before first reload) — non-fatal
   }
 
-  global.HarvestCloudOAuth = {
+  global.AcopioCloudOAuth = {
     connectFigma,
     figmaStatus,
     disconnectFigma,

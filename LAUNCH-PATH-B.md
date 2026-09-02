@@ -1,6 +1,6 @@
 # Launch guide — Path B (Google sign-in + Notion export)
 
-Step-by-step checklist to ship Harvest on the Chrome Web Store with cloud export enabled.
+Step-by-step checklist to ship Acopio on the Chrome Web Store with cloud export enabled.
 
 **You are here:** extension code is built; Supabase project exists; Google/Notion/Figma OAuth and the Edge Function still need finishing before the store upload.
 
@@ -30,7 +30,7 @@ GitHub does **not** auto-deploy to Chrome. You upload the zip yourself (or autom
 
 1. Open Chrome → `chrome://extensions`
 2. Turn on **Developer mode**
-3. **Load unpacked** → select the `harvest/` folder
+3. **Load unpacked** → select the `acopio/` folder
 4. Open any website → hover an element → **+ Collect**
 5. Open the side panel → confirm items appear
 
@@ -41,8 +41,8 @@ After code changes: **Reload** the extension, then **refresh each open tab**.
 This URL must be registered in Supabase, Notion, and Figma.
 
 1. With the extension loaded, open the service worker console:
-   - `chrome://extensions` → Harvest → **Service worker** (click the link)
-2. Look for: `[Harvest] OAuth redirect URI for Figma/Notion app setup: https://XXXX.chromiumapp.org/`
+   - `chrome://extensions` → Acopio → **Service worker** (click the link)
+2. Look for: `[Acopio] OAuth redirect URI for Figma/Notion app setup: https://XXXX.chromiumapp.org/`
 3. Copy that full URL — you'll paste it in several dashboards
 
 > **Important:** The extension ID (and redirect URI) from **Load unpacked** is different from the **Chrome Web Store** ID. You'll register the store URI again after your first upload (Phase 4).
@@ -55,7 +55,7 @@ Project: `https://cpzqpmjyshxxpmxsqfni.supabase.co`
 
 ### 2.1 Enable Google sign-in
 
-Google sign-in gates **Notion** cloud export. **Figma export does not require Google sign-in or Figma OAuth** — it downloads/copies JSON for the companion Harvest Figma plugin.
+Google sign-in gates **Notion** cloud export. **Figma export does not require Google sign-in or Figma OAuth** — it downloads/copies JSON for the companion Acopio Figma plugin.
 
 **Two different redirect URLs — don't mix them up:**
 
@@ -73,7 +73,7 @@ The `chromiumapp.org` URL never goes in Google Cloud Console. Google only talks 
 3. Create a Google Cloud OAuth client (if you don't have one yet):
    - [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → **Credentials** → **Create OAuth client ID**
    - Application type: **Web application**
-   - Name: `Harvest` (or anything)
+   - Name: `Acopio` (or anything)
    - **Authorized redirect URIs** — add exactly one:
      ```
      https://cpzqpmjyshxxpmxsqfni.supabase.co/auth/v1/callback
@@ -85,7 +85,7 @@ The `chromiumapp.org` URL never goes in Google Cloud Console. Google only talks 
    https://amlkaimomfaeckfnkcielkpagajdgpah.chromiumapp.org/
    ```
    Include the trailing slash. Must match exactly — copy from the service worker console log:
-   `[Harvest] Google sign-in redirect URI (add to Supabase → Authentication → Redirect URLs): …`
+   `[Acopio] Google sign-in redirect URI (add to Supabase → Authentication → Redirect URLs): …`
 6. **Authentication** → **URL Configuration** → **Site URL** can stay as `http://localhost:3000` (not used by the extension, but don't leave it blank)
 
 #### Google OAuth consent screen (trust/branding)
@@ -94,7 +94,7 @@ While you're in Google Cloud Console:
 
 1. **APIs & Services** → **OAuth consent screen**
 2. User type: **External** (unless you have a Google Workspace org)
-3. App name: **Harvest**
+3. App name: **Acopio**
 4. User support email: your email
 5. App logo: upload `icons/icon128.png` from this project (optional but recommended)
 6. If publishing status is **Testing**: scroll to **Test users** → **Add users** → add the Gmail address you'll sign in with
@@ -107,7 +107,7 @@ Until the app is published, only test users can sign in. Missing yourself here c
 Install the Supabase CLI if needed (`npm install` in this repo already includes it).
 
 ```bash
-cd harvest
+cd acopio
 npx supabase login
 npx supabase link --project-ref cpzqpmjyshxxpmxsqfni
 npx supabase functions deploy notion-oauth-exchange
@@ -124,7 +124,7 @@ npx supabase secrets set NOTION_CLIENT_SECRET="your-notion-integration-secret"
 
 1. Reload the extension at `chrome://extensions`
 2. Open the service worker console → confirm you see:
-   `[Harvest] Google sign-in redirect URI (add to Supabase → Authentication → Redirect URLs): https://….chromiumapp.org/`
+   `[Acopio] Google sign-in redirect URI (add to Supabase → Authentication → Redirect URLs): https://….chromiumapp.org/`
 3. Side panel → Export menu → **Export to Notion** (any scope with items)
 4. You should be prompted to **Sign in with Google**
 5. Complete sign-in → you should reach the Notion connection step
@@ -158,7 +158,7 @@ One root cause for Notion — fix Google sign-in first.
    - Add the Gmail you're signing in with
 
 5. **Extension not reloaded after config changes**
-   - `chrome://extensions` → Harvest → **Reload**
+   - `chrome://extensions` → Acopio → **Reload**
 
 After fixing, try Export again. The error toast now includes the exact URLs to check.
 
@@ -170,7 +170,7 @@ After fixing, try Export again. The error toast now includes the exact URLs to c
 
 1. [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New integration**
 2. Type: **Public**
-3. Name: `Harvest`
+3. Name: `Acopio`
 4. **Redirect URI:** paste your redirect URI from Phase 1.2
 5. Copy **OAuth client ID** and **OAuth client secret**
 
@@ -179,14 +179,14 @@ After fixing, try Export again. The error toast now includes the exact URLs to c
 Edit `src/config.js` (and `src/config.local.js` for local dev):
 
 ```js
-self.HARVEST_NOTION_CLIENT_ID = "paste-client-id-here";
+self.ACOPIO_NOTION_CLIENT_ID = "paste-client-id-here";
 ```
 
 Set the secret only in Supabase (Phase 2.2) — not in any JS file.
 
 ### 3.3 Share a Notion page with the integration
 
-In Notion: open a page → **⋯** → **Connections** → add **Harvest**.
+In Notion: open a page → **⋯** → **Connections** → add **Acopio**.
 
 Without this, the page picker will be empty.
 
@@ -202,18 +202,18 @@ Without this, the page picker will be empty.
 
 ## Phase 3.5 — Figma plugin export (no OAuth required)
 
-**Export to Figma** and **Copy for Figma plugin** work entirely offline — no Google sign-in, no Figma OAuth, no Supabase. They build a v2 JSON payload (with component `previewImage` PNGs inlined as data URLs) that the companion **Harvest Figma plugin** imports via the Plugin API.
+**Export to Figma** and **Copy for Figma plugin** work entirely offline — no Google sign-in, no Figma OAuth, no Supabase. They build a v2 JSON payload (with component `previewImage` PNGs inlined as data URLs) that the companion **Acopio Figma plugin** imports via the Plugin API.
 
 Figma's public REST API cannot create design nodes — the plugin is the only path to real Figma layers.
 
-### 3.5.1 Install the Harvest Figma plugin (one-time)
+### 3.5.1 Install the Acopio Figma plugin (one-time)
 
-The companion plugin lives in this repo at `harvest-figma-plugin/`.
+The companion plugin lives in this repo at `acopio-figma-plugin/`.
 
 1. Open Figma Desktop (recommended) or figma.com
 2. **Plugins** → **Development** → **Import plugin from manifest…**
-3. Select `harvest/harvest-figma-plugin/manifest.json`
-4. The plugin appears under **Development** as **Harvest Import**
+3. Select `acopio/acopio-figma-plugin/manifest.json`
+4. The plugin appears under **Development** as **Acopio Import**
 
 You only need to do this once per machine. After that, every export is two clicks in Figma (run plugin → it auto-imports).
 
@@ -222,11 +222,11 @@ You only need to do this once per machine. After that, every export is two click
 1. Load the extension unpacked (Phase 1.1)
 2. Collect a few items (include at least one component to verify `previewImage` PNG inlining)
 3. Side panel → Export menu (chevron next to "Export as ZIP") → **Export to Figma**
-4. Harvest copies the v2 JSON payload to your clipboard and opens Figma — no sign-in prompts
-5. In Figma: **Plugins** → **Development** → **Harvest Import** (or press **⌘⌥P** if it was your last plugin)
+4. Acopio copies the v2 JSON payload to your clipboard and opens Figma — no sign-in prompts
+5. In Figma: **Plugins** → **Development** → **Acopio Import** (or press **⌘⌥P** if it was your last plugin)
 6. The plugin reads the clipboard automatically (`autoImport: true`) and places frames on the current page — components as preview images, colors as swatches, fonts as text, images inlined, notes below each item
 
-If auto-import doesn't run (clipboard permission denied), click **Import from Harvest** in the plugin panel — same clipboard payload.
+If auto-import doesn't run (clipboard permission denied), click **Import from Acopio** in the plugin panel — same clipboard payload.
 
 **Alternatives:**
 
@@ -250,11 +250,11 @@ Not required for **Export to Figma** or **Copy for Figma plugin**. Only needed i
 
 1. [figma.com/developers/apps](https://www.figma.com/developers/apps) → **Create a new app**
 2. Under **OAuth** → **Redirect URIs**, add your extension redirect URI from Phase 1.2 (and the store URI from Phase 4.3 after publishing)
-   - Copy the exact URL from the service worker console: `[Harvest] OAuth redirect URI for Figma/Notion app setup: https://….chromiumapp.org/`
+   - Copy the exact URL from the service worker console: `[Acopio] OAuth redirect URI for Figma/Notion app setup: https://….chromiumapp.org/`
    - Include the trailing slash if Chrome shows one
 3. Copy the app's **Client ID** → set in `src/config.js`:
    ```js
-   self.HARVEST_FIGMA_CLIENT_ID = "paste-client-id-here";
+   self.ACOPIO_FIGMA_CLIENT_ID = "paste-client-id-here";
    ```
 4. Reload the extension
 
@@ -275,12 +275,12 @@ If OAuth fails with "Authorization page could not be loaded", the redirect URI i
 1. Build the store zip:
 
 ```bash
-cd harvest
+cd acopio
 chmod +x scripts/build-store-zip.sh
 npm run build:store
 ```
 
-Output: `dist/harvest-v0.1.0-store.zip`
+Output: `dist/acopio-v0.1.0-store.zip`
 
 2. Dashboard → **New item** → upload the zip
 3. Note the **extension ID** shown on the item page
@@ -305,7 +305,7 @@ Reload is not needed for store users — this is for OAuth to work on the publis
 
 | Field | What to use |
 |-------|-------------|
-| Name | Harvest — Design Research Collector |
+| Name | Acopio — Gather. Connect. Simplify |
 | Short description | From `manifest.json` |
 | Detailed description | What it does, local-first, optional Notion export |
 | Category | Productivity |
@@ -316,11 +316,38 @@ Reload is not needed for store users — this is for OAuth to work on the publis
 **Privacy policy URL example after enabling GitHub Pages:**
 `https://abhi-the-ai-builder.github.io/harvest/privacy-policy.html`
 
-### 4.5 Permission justification (Google will ask)
+### 4.5 Privacy practices tab (copy-paste for Chrome Web Store)
 
-For `<all_urls>`:
+Open your item → **Privacy practices** tab. Paste each block into the matching field, then check **“I certify that my data usage complies…”** at the bottom.
 
-> Harvest injects a hover tooltip on pages the user is researching so they can selectively collect colors, fonts, images, and UI components into a local design library. It only runs on pages the user visits while the extension is active.
+**Single purpose description**
+
+> Acopio is a design research tool that lets users hover over elements on websites to collect colors, fonts, images, and UI components into a personal library stored locally in their browser, with optional export to Notion, Figma, or ZIP.
+
+| Permission | Justification |
+|------------|---------------|
+| **activeTab** | Used to read CSS and DOM properties from the page element the user is hovering over or selecting, only on the currently active tab when capture mode is enabled. |
+| **clipboardWrite** | Used when the user explicitly copies a collected item or export payload (image, text, or Figma JSON) to the clipboard. |
+| **contextMenus** | Adds a right-click menu option so users can open the capture tooltip on a specific page element. |
+| **favicon** | Displays the website favicon next to collected items in the library so users can identify which site each item came from. |
+| **host permission use** | Required to inject the hover-capture UI on pages the user is researching, read element styles from those pages, and connect to Notion/Figma APIs only when the user initiates export or account connection. |
+| **identity** | Used only for optional OAuth sign-in flows (Google sign-in for cloud export, Notion connection, Figma connection) when the user chooses to use those features. |
+| **remote code use** | All extension code is packaged in the extension bundle. No remotely hosted code is fetched or executed at runtime. Network requests are limited to user-initiated API calls (authentication and export) and do not load executable scripts. |
+| **sidePanel** | Displays the user's collected design library, collections, and export controls in Chrome's side panel. |
+| **storage** | Saves the user's collected items, notes, collections, and preferences locally on their device. |
+| **tabs** | Opens Figma when the user exports, refreshes capture state when tabs update, and coordinates messaging between the side panel and content scripts. |
+| **unlimitedStorage** | Allows storing screenshots and image previews of collected components locally without hitting default storage limits. |
+
+### 4.5b Publisher contact email (Settings page)
+
+1. Chrome Web Store devconsole → **Settings** (left sidebar, account level — not the item page)
+2. Enter **Publisher contact email** → `abhii.singhh0505@gmail.com` (or your support address)
+3. Click **Verify** and complete the email link Google sends
+4. Return to the item → **Save draft** → **Submit for review** should unlock
+
+**Store extension ID (yours):** `ehibbhiodoegocldemhpgcdljlbfifih`  
+**Store OAuth redirect URI (register in Supabase after publish):**  
+`https://ehibbhiodoegocldemhpgcdljlbfifih.chromiumapp.org/`
 
 ### 4.6 Submit for review
 

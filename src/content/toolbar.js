@@ -3,17 +3,17 @@
 // Separate from the transient hover tooltip — this stays on screen the
 // whole time, active or paused, so you can flip hover-capture on/off (or
 // jump to the full side panel) without leaving the page. Mirrors the same
-// `harvestActive` storage state the side panel's switch controls; either
+// `acopioActive` storage state the side panel's switch controls; either
 // one changes it, both stay in sync via chrome.storage.onChanged.
 (function () {
-  const Harvest = window.Harvest;
-  const ACCENT = "#1D3461"; // matches overlay.js — one accent across every Harvest surface
-  const POS_STORAGE_KEY = "harvestToolbarPos";
+  const Acopio = window.Acopio;
+  const ACCENT = "#1D3461"; // matches overlay.js — one accent across every Acopio surface
+  const POS_STORAGE_KEY = "acopioToolbarPos";
 
-  // Icons come from Harvest.ICONS (shared.js) — the exact same definitions
+  // Icons come from Acopio.ICONS (shared.js) — the exact same definitions
   // the side panel uses, so the two surfaces are actually one design
   // system, not two that happen to look similar.
-  const { cursor: ICON_CURSOR, panel: ICON_PANEL, close: ICON_CLOSE } = Harvest.ICONS;
+  const { cursor: ICON_CURSOR, panel: ICON_PANEL, close: ICON_CLOSE } = Acopio.ICONS;
   const INTER_URL = chrome.runtime.getURL("fonts/Inter-var.woff2"); // same bundled local file overlay.js uses
 
   const SHEET = `
@@ -44,7 +44,7 @@
        bar noticeably less round than a full pill, individual buttons
        rounder-cornered-square rather than circular) and reads more like a
        considered toolbar than a chip. The exact 12px/8px values from that
-       project's own .bar/button CSS, not an approximation from Harvest's
+       project's own .bar/button CSS, not an approximation from Acopio's
        token scale — an earlier pass substituted --radius-lg (20px) here,
        which is visibly rounder than the 12px original and didn't actually
        match. */
@@ -108,7 +108,7 @@
   // it was reported that closing the pill and refreshing brought it right
   // back, which is a real "you skipped fixing this end to end" gap: a
   // close button whose effect doesn't survive a refresh isn't really a
-  // close button. Global, same as harvestActive, not per-site — reachable
+  // close button. Global, same as acopioActive, not per-site — reachable
   // again via the "Show floating toolbar" link in the side panel footer
   // (see sidepanel.js), since removing it with no way back would be a trap.
   let dismissed = false;
@@ -122,7 +122,7 @@
     style.textContent = SHEET;
     shadow.appendChild(style);
     document.documentElement.appendChild(host);
-    Harvest.registerOwnRoot(host);
+    Acopio.registerOwnRoot(host);
   }
 
   function applyStoredPosition() {
@@ -193,8 +193,8 @@
     let timer = null;
     return function flash() {
       clearTimeout(timer);
-      btn.innerHTML = Harvest.ICONS.warning;
-      btn.title = "Harvest was reloaded — refresh this page to reconnect";
+      btn.innerHTML = Acopio.ICONS.warning;
+      btn.title = "Acopio was reloaded — refresh this page to reconnect";
       timer = setTimeout(() => {
         btn.innerHTML = idleHTML;
         btn.title = idleTitle;
@@ -209,14 +209,14 @@
     pillEl.className = "pill";
     pillEl.hidden = dismissed;
     pillEl.setAttribute("role", "toolbar");
-    pillEl.setAttribute("aria-label", "Harvest");
+    pillEl.setAttribute("aria-label", "Acopio");
 
     const brand = document.createElement("div");
     brand.className = "brand";
     brand.title = "Drag to move";
     const brandImg = document.createElement("img");
     brandImg.src = chrome.runtime.getURL("icons/icon48.png");
-    brandImg.alt = "Harvest";
+    brandImg.alt = "Acopio";
     brandImg.draggable = false; // avoid the browser's native image-drag fighting our own pointer-based drag
     brand.appendChild(brandImg);
     pillEl.appendChild(brand);
@@ -234,11 +234,11 @@
       const next = !active;
       try {
         // Switching one capture mode on turns the other off — see the
-        // matching comment on sidepanel.js's setHarvestActive. Both this
+        // matching comment on sidepanel.js's setAcopioActive. Both this
         // file and sidepanel.js write storage directly (no shared function
         // between the two contexts), so this exclusivity rule is
         // duplicated in both places on purpose, kept identical.
-        chrome.storage.local.set(next ? { harvestActive: true, harvestNotesActive: false } : { harvestActive: false });
+        chrome.storage.local.set(next ? { acopioActive: true, acopioNotesActive: false } : { acopioActive: false });
       } catch (_) {
         flashToggleStale();
       }
@@ -247,7 +247,7 @@
 
     // Second, independent toggle — text-selection capture (notes.js). Same
     // button shape/pattern as the hover-capture toggle above, own storage
-    // key, own icon (Harvest.ICONS.note — already exists, used elsewhere
+    // key, own icon (Acopio.ICONS.note — already exists, used elsewhere
     // for the note-badge/edit affordances, reused here rather than
     // inventing a new glyph).
     notesToggleBtn = document.createElement("button");
@@ -259,12 +259,12 @@
       : "Notes capture is off — click to turn on";
     notesToggleBtn.setAttribute("aria-pressed", String(notesActive));
     notesToggleBtn.setAttribute("aria-label", "Toggle text-selection notes capture");
-    notesToggleBtn.innerHTML = Harvest.ICONS.note;
-    const flashNotesToggleStale = makeStaleErrorFlasher(notesToggleBtn, Harvest.ICONS.note, notesToggleBtn.title);
+    notesToggleBtn.innerHTML = Acopio.ICONS.note;
+    const flashNotesToggleStale = makeStaleErrorFlasher(notesToggleBtn, Acopio.ICONS.note, notesToggleBtn.title);
     notesToggleBtn.addEventListener("click", () => {
       const next = !notesActive;
       try {
-        chrome.storage.local.set(next ? { harvestNotesActive: true, harvestActive: false } : { harvestNotesActive: false });
+        chrome.storage.local.set(next ? { acopioNotesActive: true, acopioActive: false } : { acopioNotesActive: false });
       } catch (_) {
         flashNotesToggleStale();
       }
@@ -273,8 +273,8 @@
 
     const panelBtn = document.createElement("button");
     panelBtn.type = "button";
-    panelBtn.title = "Open Harvest panel";
-    panelBtn.setAttribute("aria-label", "Open Harvest side panel");
+    panelBtn.title = "Open Acopio panel";
+    panelBtn.setAttribute("aria-label", "Open Acopio side panel");
     panelBtn.innerHTML = ICON_PANEL;
     // sidePanel.open() can fail even when called correctly (background.js)
     // — an icon-only button has no room for error text, so a brief swap to
@@ -285,11 +285,11 @@
     let panelBtnErrorTimer = null;
     function flashPanelBtnError() {
       clearTimeout(panelBtnErrorTimer);
-      panelBtn.innerHTML = Harvest.ICONS.warning;
+      panelBtn.innerHTML = Acopio.ICONS.warning;
       panelBtn.title = "Couldn't open the panel — try again";
       panelBtnErrorTimer = setTimeout(() => {
         panelBtn.innerHTML = ICON_PANEL;
-        panelBtn.title = "Open Harvest panel";
+        panelBtn.title = "Open Acopio panel";
       }, 1800);
     }
     panelBtn.addEventListener("click", () => {
@@ -322,7 +322,7 @@
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.title = "Turn off hover-capture and hide this toolbar";
-    closeBtn.setAttribute("aria-label", "Turn off hover-capture and hide Harvest toolbar");
+    closeBtn.setAttribute("aria-label", "Turn off hover-capture and hide Acopio toolbar");
     closeBtn.innerHTML = ICON_CLOSE;
     const flashCloseStale = makeStaleErrorFlasher(closeBtn, ICON_CLOSE, closeBtn.title);
     closeBtn.addEventListener("click", () => {
@@ -338,7 +338,7 @@
       // throws — previously that meant the click did visibly nothing at
       // all, which is exactly "clicking the X doesn't close it."
       try {
-        chrome.storage.local.set({ harvestActive: false, harvestToolbarDismissed: true });
+        chrome.storage.local.set({ acopioActive: false, acopioToolbarDismissed: true });
       } catch (_) {
         flashCloseStale();
       }
@@ -370,19 +370,19 @@
     }
   }
 
-  chrome.storage.local.get(["harvestActive", "harvestToolbarDismissed", "harvestNotesActive"], (res) => {
-    active = res.harvestActive === true;
-    dismissed = Boolean(res.harvestToolbarDismissed);
-    notesActive = res.harvestNotesActive === true;
+  chrome.storage.local.get(["acopioActive", "acopioToolbarDismissed", "acopioNotesActive"], (res) => {
+    active = res.acopioActive === true;
+    dismissed = Boolean(res.acopioToolbarDismissed);
+    notesActive = res.acopioNotesActive === true;
     render();
   });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (changes.harvestActive) {
-      setActive(changes.harvestActive.newValue === true);
+    if (changes.acopioActive) {
+      setActive(changes.acopioActive.newValue === true);
     }
-    if (changes.harvestToolbarDismissed) {
-      dismissed = Boolean(changes.harvestToolbarDismissed.newValue);
+    if (changes.acopioToolbarDismissed) {
+      dismissed = Boolean(changes.acopioToolbarDismissed.newValue);
       if (pillEl) {
         pillEl.hidden = dismissed;
         // applyStoredPosition's own clamp only has something real to clamp
@@ -399,8 +399,8 @@
         if (!dismissed) applyStoredPosition();
       }
     }
-    if (changes.harvestNotesActive) {
-      setNotesActive(changes.harvestNotesActive.newValue === true);
+    if (changes.acopioNotesActive) {
+      setNotesActive(changes.acopioNotesActive.newValue === true);
     }
   });
 })();

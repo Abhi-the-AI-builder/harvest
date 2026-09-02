@@ -5,12 +5,12 @@
 // "note" item, optionally filed straight into a chosen Collection.
 //
 // Deliberately isolated from overlay.js: own shadow-DOM host, own local
-// state, own listeners, own storage key (harvestNotesActive, independent
-// of harvestActive). Nothing in overlay.js's render/generation/concurrency
+// state, own listeners, own storage key (acopioNotesActive, independent
+// of acopioActive). Nothing in overlay.js's render/generation/concurrency
 // logic is touched or depended on — this file could be deleted entirely
 // and the hover tooltip would be completely unaffected.
 (function () {
-  const Harvest = window.Harvest;
+  const Acopio = window.Acopio;
   const ACCENT = "#1D3461";
   const INTER_URL = chrome.runtime.getURL("fonts/Inter-var.woff2");
 
@@ -60,9 +60,9 @@
       display: flex; align-items: center; gap: var(--space-2);
       background: var(--color-bg); border: 1px solid var(--color-border);
       border-radius: var(--radius-full); box-shadow: var(--shadow-overlay);
-      padding: 5px; animation: harvest-notes-in var(--ease-base);
+      padding: 5px; animation: acopio-notes-in var(--ease-base);
     }
-    @keyframes harvest-notes-in { from { opacity: 0; transform: translateY(2px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes acopio-notes-in { from { opacity: 0; transform: translateY(2px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
     .type-badge {
       width: 36px; height: 36px; border-radius: var(--radius-full); flex: none;
       background: var(--type-note-bg); color: var(--type-note-fg);
@@ -252,10 +252,10 @@
     if (host) return;
     host = document.createElement("div");
     host.style.cssText = "all: initial; position: fixed; inset: 0; pointer-events: none; z-index: 2147483646;";
-    // Distinct from overlay.js's [data-harvest-root] host — two separate
+    // Distinct from overlay.js's [data-acopio-root] host — two separate
     // UIs, two separate markers, so either can be identified independently
     // (debugging, or a future check that needs to tell them apart).
-    host.setAttribute("data-harvest-notes-root", "true");
+    host.setAttribute("data-acopio-notes-root", "true");
     shadow = host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = SHEET;
@@ -263,9 +263,9 @@
     document.documentElement.appendChild(host);
     // Same shared registry overlay.js's and toolbar.js's hosts already use
     // — content.js's hover-target detection excludes every registered
-    // root, and Harvest.isOwnNode (used below, selection guard) checks
+    // root, and Acopio.isOwnNode (used below, selection guard) checks
     // against this same list.
-    Harvest.registerOwnRoot(host);
+    Acopio.registerOwnRoot(host);
   }
 
   function isVisible() {
@@ -348,7 +348,7 @@
     targetEl.style.top = `${top}px`;
   }
 
-  // Harvest.isJavascriptUri only catches `javascript:` — not enough here,
+  // Acopio.isJavascriptUri only catches `javascript:` — not enough here,
   // because the side panel wraps every captured image/link in a real,
   // clickable <a href target="_blank">, and a data:text/html URI executes
   // any script inside it when actually navigated to by a real click, the
@@ -359,8 +359,8 @@
   function isUnsafeHref(value) {
     if (!value) return true;
     const v = String(value).trim();
-    if (Harvest.isJavascriptUri(v)) return true;
-    // Same underlying bypass Harvest.isJavascriptUri now guards against
+    if (Acopio.isJavascriptUri(v)) return true;
+    // Same underlying bypass Acopio.isJavascriptUri now guards against
     // (browsers strip embedded tab/newline/CR anywhere in a URL before
     // parsing its scheme) — this file's own separate data: check needs the
     // identical stripping, since "da\tta:text/html,<script>..." would
@@ -534,13 +534,13 @@
   // Same proactive duplicate flag the hover tooltip already shows (Pattern:
   // "quiet, informational, not a warning — you can still collect it again
   // on purpose") — reuses the exact same CHECK_DUPLICATE message and
-  // HarvestDB.findSimilarItem's "note" branch (exact-text match within
+  // AcopioDB.findSimilarItem's "note" branch (exact-text match within
   // this hostname) already wired up for this type.
   function checkDuplicate(text) {
     return new Promise((resolve) => {
       try {
         chrome.runtime.sendMessage(
-          { type: "CHECK_DUPLICATE", payload: { hostname: Harvest.hostname(), type: "note", data: { text }, selector: null } },
+          { type: "CHECK_DUPLICATE", payload: { hostname: Acopio.hostname(), type: "note", data: { text }, selector: null } },
           (response) => {
             if (chrome.runtime.lastError || !response || !response.ok) {
               resolve(null);
@@ -560,7 +560,7 @@
   // doesn't mean re-picking the folder every single time — it stays put
   // until you deliberately change it. Separate storage key from every
   // toggle flag; this is data, not a mode switch.
-  const LAST_FOLDER_KEY = "harvestLastFolderByHost";
+  const LAST_FOLDER_KEY = "acopioLastFolderByHost";
   function getLastFolder(hostname) {
     return new Promise((resolve) => {
       try {
@@ -591,7 +591,7 @@
   // shouldn't reset just because you moved to a different tab. Shared
   // storage key means a pick on one tab is reflected the next time the
   // tooltip renders on any tab, including this same one later.
-  const LAST_COLOR_KEY = "harvestLastNoteColor";
+  const LAST_COLOR_KEY = "acopioLastNoteColor";
   function getLastColor() {
     return new Promise((resolve) => {
       try {
@@ -651,7 +651,7 @@
       btn.appendChild(labelSpan);
       const check = document.createElement("span");
       check.className = "folder-menu-item-check";
-      check.innerHTML = Harvest.ICONS.check;
+      check.innerHTML = Acopio.ICONS.check;
       btn.appendChild(check);
       btn.addEventListener("click", onClick);
       return btn;
@@ -692,7 +692,7 @@
     const confirmBtn = document.createElement("button");
     confirmBtn.type = "button";
     confirmBtn.className = "folder-menu-new-confirm";
-    confirmBtn.innerHTML = Harvest.ICONS.plus;
+    confirmBtn.innerHTML = Acopio.ICONS.plus;
     confirmBtn.title = "Add folder";
     confirmBtn.setAttribute("aria-label", "Create folder");
     const confirm = () => {
@@ -709,7 +709,7 @@
         if (settled) return;
         settled = true;
         confirmBtn.disabled = false;
-        showInlineError("Harvest didn't hear back — try again in a moment.");
+        showInlineError("Acopio didn't hear back — try again in a moment.");
       }, 8000);
       try {
         chrome.runtime.sendMessage({ type: "CREATE_COLLECTION", payload: { name } }, (response) => {
@@ -731,7 +731,7 @@
         settled = true;
         clearTimeout(timeoutId);
         confirmBtn.disabled = false;
-        showInlineError("Harvest was reloaded — refresh this page to keep collecting.");
+        showInlineError("Acopio was reloaded — refresh this page to keep collecting.");
       }
     };
     confirmBtn.addEventListener("click", confirm);
@@ -786,7 +786,7 @@
     typeBadge.className = "type-badge";
     typeBadge.setAttribute("aria-haspopup", "true");
     typeBadge.setAttribute("aria-expanded", "false");
-    typeBadge.innerHTML = Harvest.ICONS.note;
+    typeBadge.innerHTML = Acopio.ICONS.note;
     cardEl.appendChild(typeBadge);
 
     // The duplicate flag and the color name both want to describe this
@@ -809,7 +809,7 @@
       refreshTypeBadgeTitle();
       const dot = document.createElement("div");
       dot.className = "dup-dot";
-      dot.innerHTML = Harvest.ICONS.check;
+      dot.innerHTML = Acopio.ICONS.check;
       typeBadge.appendChild(dot);
     });
 
@@ -820,7 +820,7 @@
     folderBtn.setAttribute("aria-expanded", "false");
     const folderIcon = document.createElement("span");
     folderIcon.className = "folder-btn-icon";
-    folderIcon.innerHTML = Harvest.ICONS.folder;
+    folderIcon.innerHTML = Acopio.ICONS.folder;
     folderBtn.appendChild(folderIcon);
     const folderLabel = document.createElement("span");
     folderLabel.className = "folder-btn-label";
@@ -834,7 +834,7 @@
     const addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "add-btn";
-    addBtn.innerHTML = Harvest.ICONS.plus;
+    addBtn.innerHTML = Acopio.ICONS.plus;
     addBtn.setAttribute("aria-label", "Collect this note");
     addBtn.title = "Collect";
     addBtn.addEventListener("click", () => onCollectClick(extraction, selectedCollectionId, selectedColorKey, addBtn));
@@ -856,7 +856,7 @@
     // avoids a flash of defaults immediately swapping to remembered values
     // a beat later.
     let collectionsCache = [];
-    Promise.all([getCollections(), getLastFolder(Harvest.hostname()), getLastColor()]).then(
+    Promise.all([getCollections(), getLastFolder(Acopio.hostname()), getLastColor()]).then(
       ([collections, lastFolderId, lastColorKey]) => {
         if (!isVisible()) return; // dismissed before this resolved
         collectionsCache = collections;
@@ -881,7 +881,7 @@
         openFolderMenu(folderBtn, collectionsCache, (collectionId, collectionName) => {
           selectedCollectionId = collectionId;
           folderLabel.textContent = collectionName;
-          setLastFolder(Harvest.hostname(), collectionId);
+          setLastFolder(Acopio.hostname(), collectionId);
           if (collectionId && !collectionsCache.some((c) => c.id === collectionId)) {
             collectionsCache = collectionsCache.concat([{ id: collectionId, name: collectionName }]);
           }
@@ -911,7 +911,7 @@
     if (extraction.truncated) {
       banners.push(`Only the first ${MAX_TEXT_LEN.toLocaleString()} characters were kept — this selection was longer.`);
     }
-    if (Harvest.PII_PATTERN.test(extraction.text)) {
+    if (Acopio.PII_PATTERN.test(extraction.text)) {
       banners.push("This might contain personal info.");
     }
     if (banners.length) {
@@ -949,10 +949,10 @@
     const btnIdleHTML = btn.innerHTML;
 
     const item = {
-      id: Harvest.uuid(),
+      id: Acopio.uuid(),
       type: "note",
       family: "note",
-      hostname: Harvest.hostname(),
+      hostname: Acopio.hostname(),
       capturedAt: new Date().toISOString(),
       sourceUrl: window.location.href,
       sourcePageTitle: document.title,
@@ -993,7 +993,7 @@
         showInlineError(result.error || "Couldn't save this note.");
         return;
       }
-      btn.innerHTML = Harvest.ICONS.check;
+      btn.innerHTML = Acopio.ICONS.check;
       const linkToCollection = collectionId
         ? new Promise((resolve) => {
             try {
@@ -1020,7 +1020,7 @@
     // sendResponse at all under real load, no error, callback just never
     // fires; without this the button would stay disabled forever.
     const timeoutId = setTimeout(() => {
-      finish({ ok: false, error: "Harvest didn't hear back — try again in a moment." });
+      finish({ ok: false, error: "Acopio didn't hear back — try again in a moment." });
     }, 8000);
     try {
       chrome.runtime.sendMessage({ type: "CAPTURE_ITEM", payload: item }, (response) => {
@@ -1035,7 +1035,7 @@
         finish({ ok: true });
       });
     } catch (_) {
-      finish({ ok: false, error: "Harvest was reloaded — refresh this page to keep collecting." });
+      finish({ ok: false, error: "Acopio was reloaded — refresh this page to keep collecting." });
     }
   }
 
@@ -1046,7 +1046,7 @@
     if (!text) return false;
     // Selecting text inside our own tooltip (e.g. the read-only preview)
     // must never trigger a new capture attempt on top of itself.
-    if (Harvest.isOwnNode(selection.anchorNode) || Harvest.isOwnNode(selection.focusNode)) return false;
+    if (Acopio.isOwnNode(selection.anchorNode) || Acopio.isOwnNode(selection.focusNode)) return false;
     return true;
   }
 
@@ -1116,7 +1116,7 @@
   // selectionchange listener below could fire and show the tooltip WHILE
   // the drag was still in progress. If the still-moving cursor's path then
   // crossed over the now-visible tooltip, the browser's native selection
-  // extended into Harvest's own shadow DOM — which selectionQualifies()
+  // extended into Acopio's own shadow DOM — which selectionQualifies()
   // correctly treats as invalid (its own guard against selecting our own
   // UI as page content) — hiding the tooltip, which then reappeared once
   // the cursor cleared it and the selection returned to real page content.
@@ -1126,7 +1126,7 @@
   // actually ends, for this same reason — tracked here so the debounced
   // handler can defer to mouseup instead of firing mid-drag.
   let mouseIsDown = false;
-  document.addEventListener("mousedown", (e) => { lastPointerDownWasOwnUI = Harvest.isOwnNode(e.target); mouseIsDown = true; }, true);
+  document.addEventListener("mousedown", (e) => { lastPointerDownWasOwnUI = Acopio.isOwnNode(e.target); mouseIsDown = true; }, true);
 
   function isInteracting() {
     return tooltipHasFocus() || Boolean(menuEl) || lastPointerDownWasOwnUI;
@@ -1160,7 +1160,7 @@
 
   document.addEventListener("mouseup", (e) => {
     mouseIsDown = false;
-    if (Harvest.isOwnNode(e.target)) return; // a mouseup inside our own tooltip (e.g. clicking Collect) isn't a new selection event
+    if (Acopio.isOwnNode(e.target)) return; // a mouseup inside our own tooltip (e.g. clicking Collect) isn't a new selection event
     handleSelectionSettled();
   });
   // Keyboard-driven selection (Shift+Arrow, Ctrl/Cmd+A) doesn't fire
@@ -1179,7 +1179,7 @@
   // renders through this debounced handler exactly as before.
   document.addEventListener(
     "selectionchange",
-    Harvest.debounce(() => {
+    Acopio.debounce(() => {
       if (mouseIsDown) return;
       handleSelectionSettled();
     }, 350),
@@ -1187,7 +1187,7 @@
   );
 
   // Own local Escape listener — hides this tooltip only, never touches
-  // harvestActive or harvestNotesActive. That pause-on-Escape behavior is
+  // acopioActive or acopioNotesActive. That pause-on-Escape behavior is
   // specific to the hover tooltip (overlay.js) and shouldn't be conflated
   // with "dismiss the notes tooltip" here — two different concerns that
   // happen to share a key.
@@ -1225,13 +1225,13 @@
     true
   );
 
-  chrome.storage.local.get(["harvestNotesActive"], (res) => {
-    notesActive = res.harvestNotesActive === true;
+  chrome.storage.local.get(["acopioNotesActive"], (res) => {
+    notesActive = res.acopioNotesActive === true;
   });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (changes.harvestNotesActive) {
-      notesActive = changes.harvestNotesActive.newValue === true;
+    if (changes.acopioNotesActive) {
+      notesActive = changes.acopioNotesActive.newValue === true;
       if (!notesActive) hide(); // turned off mid-selection — don't leave the tooltip stranded open
     }
   });

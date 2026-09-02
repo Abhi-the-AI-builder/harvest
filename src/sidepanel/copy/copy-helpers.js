@@ -1,8 +1,8 @@
 // Copy helpers — image resolution per item type for clipboard export.
 (function () {
-  if (window.HarvestCopyHelpers) return;
+  if (window.AcopioCopyHelpers) return;
 
-  const H = window.HarvestExportHelpers;
+  const H = window.AcopioExportHelpers;
 
   const NO_SCREENSHOT_MSG = "This component has no screenshot — hover and Collect again.";
 
@@ -18,29 +18,7 @@
   }
 
   function componentMediaUrlFromOuterHtml(outerHTML, sourceUrl) {
-    if (!outerHTML) return null;
-    try {
-      const doc = new DOMParser().parseFromString(outerHTML, "text/html");
-      const media = doc.querySelector("img, video");
-      if (!media) return null;
-      const lazyAttrs = ["src", "data-src", "data-lazy-src", "data-original", "data-lazy"];
-      const firstAttr = (el) => {
-        for (const attr of lazyAttrs) {
-          const val = el.getAttribute(attr);
-          if (val) return val;
-        }
-        return null;
-      };
-      const raw = media.tagName.toLowerCase() === "video"
-        ? firstAttr(media) || (media.querySelector("source") && firstAttr(media.querySelector("source")))
-        : firstAttr(media);
-      if (!raw) return null;
-      if (/^(data:|https?:)/i.test(raw)) return raw;
-      if (!sourceUrl) return null;
-      return new URL(raw, sourceUrl).href;
-    } catch (_) {
-      return null;
-    }
+    return H.componentMediaUrlFromOuterHtml(outerHTML, sourceUrl);
   }
 
   async function pushValidPngBlob(blobs, candidate) {
@@ -125,7 +103,7 @@
     return blobs;
   }
 
-  window.HarvestCopyHelpers = {
+  window.AcopioCopyHelpers = {
     itemHasImage,
     resolveItemImages,
     resolveNoteImages,

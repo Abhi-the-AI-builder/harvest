@@ -2,12 +2,12 @@
 // and the capture pipeline that turns a live element into a Section 5
 // item and hands it to the background service worker to store.
 (function () {
-  const Harvest = window.Harvest;
+  const Acopio = window.Acopio;
   let lastContextTarget = null;
   let hintShown = false;
 
   // Section 8: lets background.js distinguish "this page genuinely has no
-  // Harvest activity yet" from "the content script never even managed to
+  // Acopio activity yet" from "the content script never even managed to
   // inject here" (CSP block, restricted scheme) — the toolbar icon's
   // disabled state depends on this heartbeat actually arriving.
   try {
@@ -17,8 +17,8 @@
     // to do here, the same class of edge case documented elsewhere.
   }
 
-  chrome.storage.local.get(["harvestSeenHint"], (res) => {
-    hintShown = Boolean(res.harvestSeenHint);
+  chrome.storage.local.get(["acopioSeenHint"], (res) => {
+    hintShown = Boolean(res.acopioSeenHint);
   });
 
   // Global pause/resume, toggled from the side panel. Defaults to active
@@ -26,21 +26,21 @@
   // Live-updates via storage.onChanged, so toggling it takes effect on
   // already-open tabs immediately — no page refresh needed, unlike a code
   // change to the extension itself.
-  let harvestActive = false; // off until explicitly turned on (chrome.storage read below is the real source of truth)
-  chrome.storage.local.get(["harvestActive"], (res) => {
-    harvestActive = res.harvestActive === true;
+  let acopioActive = false; // off until explicitly turned on (chrome.storage read below is the real source of truth)
+  chrome.storage.local.get(["acopioActive"], (res) => {
+    acopioActive = res.acopioActive === true;
   });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && changes.harvestActive) {
-      harvestActive = changes.harvestActive.newValue === true;
-      if (!harvestActive) Harvest.overlay.hide(); // paused mid-session — don't leave a tooltip stranded open
+    if (area === "local" && changes.acopioActive) {
+      acopioActive = changes.acopioActive.newValue === true;
+      if (!acopioActive) Acopio.overlay.hide(); // paused mid-session — don't leave a tooltip stranded open
     }
   });
 
   function candidateElementAt(x, y) {
     const el = document.elementFromPoint(x, y);
     if (!el || el === document.documentElement || el === document.body) return null;
-    if (Harvest.isOwnNode(el)) return null;
+    if (Acopio.isOwnNode(el)) return null;
     return el;
   }
 
@@ -55,22 +55,22 @@
   let hoverTarget = null;
   let lastMoveX = 0;
   let lastMoveY = 0;
-  const settleOpen = Harvest.debounce((el) => {
+  const settleOpen = Acopio.debounce((el) => {
     if (hoverTarget !== el) return; // mouse moved on again before settling
     openTooltipFor(el);
   }, 130);
 
-  const onMouseMove = Harvest.throttle((e) => {
+  const onMouseMove = Acopio.throttle((e) => {
     const dx = e.clientX - lastMoveX;
     const dy = e.clientY - lastMoveY;
     lastMoveX = e.clientX;
     lastMoveY = e.clientY;
-    if (!harvestActive) return;
-    if (Harvest.overlay.isBusy()) return; // don't yank the tooltip away mid-note or mid-size-confirm
+    if (!acopioActive) return;
+    if (Acopio.overlay.isBusy()) return; // don't yank the tooltip away mid-note or mid-size-confirm
     // Cursor is on its way to the open card's own buttons (crossing other
     // page elements to get there) — don't retarget mid-transit just because
     // something else is briefly under the pointer along the way.
-    if (Harvest.overlay.isVisible() && Harvest.overlay.isMovingTowardCard(e.clientX, e.clientY, dx, dy)) {
+    if (Acopio.overlay.isVisible() && Acopio.overlay.isMovingTowardCard(e.clientX, e.clientY, dx, dy)) {
       // A move BEFORE this one (while still crossing intermediate elements,
       // before the "heading toward the card" pattern was even detectable)
       // may already have set hoverTarget to one of those elements and
@@ -98,7 +98,7 @@
   document.addEventListener(
     "contextmenu",
     (e) => {
-      if (Harvest.isOwnNode(e.target)) return;
+      if (Acopio.isOwnNode(e.target)) return;
       lastContextTarget = e.target;
     },
     true
@@ -112,9 +112,9 @@
   // tooltip, which is exactly the "interrupts normal browsing" failure
   // Section 2.7 forbids. Alt+Enter can't collide with any native behavior.
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" || !e.altKey || Harvest.overlay.isVisible()) return;
+    if (e.key !== "Enter" || !e.altKey || Acopio.overlay.isVisible()) return;
     const active = document.activeElement;
-    if (!active || active === document.body || Harvest.isOwnNode(active)) return;
+    if (!active || active === document.body || Acopio.isOwnNode(active)) return;
     e.preventDefault();
     openTooltipFor(active);
   });
@@ -134,17 +134,17 @@
     // render()-during-note-editing race hover used to have. Guarding here
     // once, instead of at every call site, means a future new trigger path
     // can't reintroduce the same bug by forgetting the check.
-    if (!harvestActive) return;
-    if (Harvest.overlay.isBusy()) return;
+    if (!acopioActive) return;
+    if (Acopio.overlay.isBusy()) return;
     if (el.tagName.toLowerCase() === "iframe") {
-      Harvest.overlay.showFor(el, { type: "component", family: "other" });
+      Acopio.overlay.showFor(el, { type: "component", family: "other" });
       return;
     }
-    const tagInfo = Harvest.detectTag(el);
-    Harvest.overlay.showFor(el, tagInfo);
+    const tagInfo = Acopio.detectTag(el);
+    Acopio.overlay.showFor(el, tagInfo);
     if (!hintShown) {
       hintShown = true;
-      chrome.storage.local.set({ harvestSeenHint: true });
+      chrome.storage.local.set({ acopioSeenHint: true });
     }
   }
 
@@ -554,7 +554,7 @@
       if (el.nodeType !== Node.ELEMENT_NODE) return null;
       const tag = el.tagName.toLowerCase();
       if (LAYER_SKIP_TAGS.has(tag)) return null;
-      if (Harvest.isOwnNode(el)) return null; // defensive — shouldn't ever be a descendant of a page element, but never trust a single check alone
+      if (Acopio.isOwnNode(el)) return null; // defensive — shouldn't ever be a descendant of a page element, but never trust a single check alone
       const style = window.getComputedStyle(el);
       const elRect = el.getBoundingClientRect();
       const rect = {
@@ -590,7 +590,7 @@
       }
 
       if (tag === "img" || tag === "video") {
-        const url = tag === "img" ? Harvest.resolveImgSrc(el) : Harvest.resolveVideoOrPoster(el).url;
+        const url = tag === "img" ? Acopio.resolveImgSrc(el) : Acopio.resolveVideoOrPoster(el).url;
         if (!url) return null;
         return { kind: "image", x: rect.x, y: rect.y, width: rect.width, height: rect.height, url, opacity, sizing: MEDIA_SIZING };
       }
@@ -604,7 +604,7 @@
       // fallback rect to degrade to, same as before.
       if (tag === "svg") {
         if (rect.width < 4 || rect.height < 4) return null;
-        const resolvedColorInfo = Harvest.rgbToHex(style.color);
+        const resolvedColorInfo = Acopio.rgbToHex(style.color);
         return {
           kind: "icon-placeholder",
           x: rect.x,
@@ -623,7 +623,7 @@
       // every container is a real frame now, so its background just IS
       // the frame's fill, the same way a CSS background paints directly
       // on the box, not a synthetic child sitting behind it).
-      const bg = Harvest.rgbToHex(style.backgroundColor);
+      const bg = Acopio.rgbToHex(style.backgroundColor);
       const bgImageRaw = style.backgroundImage;
       const isGradient = Boolean(bgImageRaw && bgImageRaw.includes("gradient"));
       const hasSolidBg = Boolean(bg && bg.a > 0.02);
@@ -632,8 +632,8 @@
       // Figma plugin actually builds from; a transparent fade stop losing
       // its alpha here is what previously turned a legibility scrim into a
       // flat black rectangle (see parseGradientStopsWithAlpha in shared.js).
-      const gradientStops = isGradient ? Harvest.parseGradientStopsWithAlpha(bgImageRaw) : undefined;
-      const gradientDirection = isGradient ? Harvest.parseGradientDirection(bgImageRaw) : undefined;
+      const gradientStops = isGradient ? Acopio.parseGradientStopsWithAlpha(bgImageRaw) : undefined;
+      const gradientDirection = isGradient ? Acopio.parseGradientDirection(bgImageRaw) : undefined;
       const fillOpacity = hasSolidBg ? bg.a : 1;
       const radius = resolveRadius(style, rect);
 
@@ -666,7 +666,7 @@
       let hasOwnText = false;
       for (const { text, rect: textRect } of directTextNodeLayers(el, elRect, style)) {
         hasOwnText = true;
-        const colorInfo = Harvest.rgbToHex(style.color);
+        const colorInfo = Acopio.rgbToHex(style.color);
         children.push({
           kind: "text",
           x: textRect.x,
@@ -693,7 +693,7 @@
       const childProbe = [];
       for (const child of Array.from(el.children)) {
         if (LAYER_SKIP_TAGS.has(child.tagName.toLowerCase())) continue;
-        if (Harvest.isOwnNode(child)) continue;
+        if (Acopio.isOwnNode(child)) continue;
         const cStyle = window.getComputedStyle(child);
         const cRect = relRectOf(child, elRect);
         if (!layerIsVisible(cStyle, cRect)) continue;
@@ -781,7 +781,7 @@
         textClone.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
         const flatText = (textClone.textContent || "").replace(/[ \t]+/g, " ").replace(/ *\n+ */g, "\n").trim();
         if (flatText) {
-          const colorInfo = Harvest.rgbToHex(style.color);
+          const colorInfo = Acopio.rgbToHex(style.color);
           return {
             kind: "text",
             x: rect.x,
@@ -969,7 +969,7 @@
 
   function buildTypeData(el, tagInfo, style) {
     if (tagInfo.type === "color") {
-      const parsed = Harvest.rgbToHex(style.backgroundColor) || { hex: null, r: 0, g: 0, b: 0, a: 1 };
+      const parsed = Acopio.rgbToHex(style.backgroundColor) || { hex: null, r: 0, g: 0, b: 0, a: 1 };
       const bgImage = style.backgroundImage;
       const isGradient = Boolean(bgImage && bgImage.includes("gradient"));
       return {
@@ -994,11 +994,11 @@
       // family can be corrected after the fact (see the family pills) and
       // shouldn't require re-hovering to pick this up.
       const rect = el.getBoundingClientRect();
-      const bgParsed = Harvest.rgbToHex(style.backgroundColor);
+      const bgParsed = Acopio.rgbToHex(style.backgroundColor);
       const hasSolidBg = Boolean(bgParsed && bgParsed.a > 0.02);
-      const bgGradientStops = Harvest.parseGradientStops(style.backgroundImage);
+      const bgGradientStops = Acopio.parseGradientStops(style.backgroundImage);
       const borderWidthPx = parseFloat(style.borderTopWidth) || 0;
-      const borderParsed = Harvest.rgbToHex(style.borderTopColor);
+      const borderParsed = Acopio.rgbToHex(style.borderTopColor);
       const hasVisibleBorder = Boolean(
         borderWidthPx > 0 && style.borderTopStyle !== "none" && borderParsed && borderParsed.a > 0.02
       );
@@ -1026,17 +1026,17 @@
       // el itself might be a decorated wrapper (gradient tint, hover scrim)
       // around the real photo rather than the photo itself — the same
       // resolution isImageish already used to classify it this way in the
-      // first place (Harvest.findRealMediaChild). Everything below reads
+      // first place (Acopio.findRealMediaChild). Everything below reads
       // from the actual media element so src/dimensions/format come from
       // the real photo, not the wrapper's own empty background.
-      const mediaEl = /^(img|video)$/.test(el.tagName.toLowerCase()) ? el : Harvest.findRealMediaChild(el) || el;
+      const mediaEl = /^(img|video)$/.test(el.tagName.toLowerCase()) ? el : Acopio.findRealMediaChild(el) || el;
       const tagName = mediaEl.tagName.toLowerCase();
       const isImgTag = tagName === "img";
       const isVideoTag = tagName === "video";
       const isSvgImageTag = tagName === "image"; // SVG's own leaf <image> — see overlay.js's identical branch
 
       if (isSvgImageTag) {
-        const href = Harvest.resolveSvgImageHref(mediaEl);
+        const href = Acopio.resolveSvgImageHref(mediaEl);
         const rect = mediaEl.getBoundingClientRect();
         return {
           url: href,
@@ -1058,7 +1058,7 @@
         // resolveVideoOrPoster falls back to the video's own poster frame
         // (a real, stable image) when that happens, and reports isVideo
         // accordingly so it's saved and rendered as what it actually is.
-        const { url, isVideo } = Harvest.resolveVideoOrPoster(mediaEl);
+        const { url, isVideo } = Acopio.resolveVideoOrPoster(mediaEl);
         return {
           url,
           width: mediaEl.videoWidth || mediaEl.offsetWidth,
@@ -1069,7 +1069,7 @@
           blobIfFetched: undefined, // best-effort fetch deferred to export — see PLAN.md
         };
       }
-      const imgSrc = isImgTag ? Harvest.resolveImgSrc(mediaEl) : null;
+      const imgSrc = isImgTag ? Acopio.resolveImgSrc(mediaEl) : null;
       return {
         url: isImgTag ? imgSrc : (style.backgroundImage.match(/url\(["']?([^"')]+)["']?\)/) || [])[1] || null,
         width: isImgTag ? mediaEl.naturalWidth : mediaEl.offsetWidth,
@@ -1081,7 +1081,7 @@
       };
     }
     // component
-    const sanitized = Harvest.sanitizeCaptureElement(el);
+    const sanitized = Acopio.sanitizeCaptureElement(el);
     const rect = el.getBoundingClientRect();
     // Tree extraction reads the LIVE element's computed styles/rects —
     // must run before sanitizeCaptureElement's clone is the only copy left,
@@ -1108,7 +1108,7 @@
   //
   // Step 1 (pure, synchronous): compute the type-specific data and flag
   // whether it needs confirmation. No network/storage side effects.
-  Harvest.buildCaptureData = function buildCaptureData(el, tagInfo) {
+  Acopio.buildCaptureData = function buildCaptureData(el, tagInfo) {
     const style = window.getComputedStyle(el);
     const data = buildTypeData(el, tagInfo, style);
     let oversizeInfo = null;
@@ -1122,7 +1122,7 @@
   // Step 2: actually build the item and send it to the background worker.
   // Called either immediately (no confirmation needed) or after the user
   // clicks "capture anyway" in overlay.js's inline confirm.
-  Harvest.finalizeCapture = function finalizeCapture(el, tagInfo, data, note, callback) {
+  Acopio.finalizeCapture = function finalizeCapture(el, tagInfo, data, note, callback) {
     // No isConnected gate here — onCollectClick is the one place that
     // decides whether `data` came from a still-live element or a cached
     // pre-disconnect snapshot (overlay.js's lastKnownCapture), and either
@@ -1131,14 +1131,14 @@
     // tag/id/class (no ancestor walk), so it works fine even on a node
     // that's since been removed from the page.
     const item = {
-      id: Harvest.uuid(),
+      id: Acopio.uuid(),
       type: tagInfo.type,
       family: tagInfo.family,
-      hostname: Harvest.hostname(),
+      hostname: Acopio.hostname(),
       capturedAt: new Date().toISOString(),
       sourceUrl: window.location.href,
       sourcePageTitle: document.title,
-      selector: Harvest.cssSelectorFor(el),
+      selector: Acopio.cssSelectorFor(el),
       note: note || "",
       familyOverridden: Boolean(tagInfo.familyOverridden),
       contextThumbnail: null, // deferred — see PLAN.md (activeTab isn't granted on a plain in-page click)
@@ -1176,7 +1176,7 @@
       callback(result);
     };
     const timeoutId = setTimeout(() => {
-      finish({ ok: false, error: "Harvest didn't hear back — try again in a moment." });
+      finish({ ok: false, error: "Acopio didn't hear back — try again in a moment." });
     }, 8000);
     try {
       chrome.runtime.sendMessage({ type: "CAPTURE_ITEM", payload: item }, (response) => {
@@ -1193,7 +1193,7 @@
     } catch (err) {
       finish({
         ok: false,
-        error: "Harvest was reloaded — refresh this page to keep collecting.",
+        error: "Acopio was reloaded — refresh this page to keep collecting.",
       });
     }
   };
@@ -1201,7 +1201,7 @@
   // Section 8: "two near-identical colors or fonts captured from the same
   // site" — checked before the actual save, so the tooltip can offer a
   // "you already have something close — save anyway or skip?" prompt.
-  Harvest.checkDuplicate = function checkDuplicate(hostname, type, data, callback, selector) {
+  Acopio.checkDuplicate = function checkDuplicate(hostname, type, data, callback, selector) {
     try {
       chrome.runtime.sendMessage({ type: "CHECK_DUPLICATE", payload: { hostname, type, data, selector } }, (response) => {
         if (chrome.runtime.lastError || !response || !response.ok) {
@@ -1218,7 +1218,7 @@
   // Third callback arg (`total`) is the REAL count of items collected for
   // this hostname, not just how many fit in `items` (capped at `limit`) —
   // existing callers that only take (items) are unaffected.
-  Harvest.fetchRecentItems = function fetchRecentItems(hostname, limit, callback) {
+  Acopio.fetchRecentItems = function fetchRecentItems(hostname, limit, callback) {
     try {
       chrome.runtime.sendMessage({ type: "GET_RECENT_ITEMS", payload: { hostname, limit } }, (response) => {
         if (chrome.runtime.lastError || !response || !response.ok) {
@@ -1232,7 +1232,7 @@
     }
   };
 
-  Harvest.saveNote = function saveNote(itemId, note) {
+  Acopio.saveNote = function saveNote(itemId, note) {
     try {
       chrome.runtime.sendMessage({ type: "UPDATE_NOTE", payload: { id: itemId, note } });
     } catch (_) {
@@ -1243,7 +1243,7 @@
     }
   };
 
-  Harvest.updateItemDimensions = function updateItemDimensions(itemId, width, height) {
+  Acopio.updateItemDimensions = function updateItemDimensions(itemId, width, height) {
     try {
       chrome.runtime.sendMessage({ type: "UPDATE_ITEM_DIMENSIONS", payload: { id: itemId, width, height } });
     } catch (_) {

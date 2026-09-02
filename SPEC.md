@@ -1,4 +1,4 @@
-# Build: "Harvest" — A Selective Design-Research Chrome Extension
+# Build: "Acopio" — A Selective Design-Research Chrome Extension
 
 > Working name only — rename freely. Attach the two reference screenshots (tooltip UI and folder grid UI) alongside this prompt when you paste it in. Written descriptions of both are included below as a fallback.
 
@@ -26,7 +26,7 @@ There is **no separate "capture mode" toggle or on-page badge.** Instead:
 5. A small non-blocking toast confirms the save and names which folder it went to ("Saved to stripe.com").
 6. User can keep hovering and collecting multiple things in the same session without any mode switching — it's just how the extension always behaves when active on a tab.
 7. Normal browsing (clicking links, typing in forms, scrolling) must **never** be interrupted by this — the outline/tooltip is purely a hover affordance and must not intercept real clicks on interactive elements unless the user explicitly clicks the "+ Collect" button inside the tooltip itself. Design this carefully: use `pointer-events` scoping so only the tooltip itself is clickable, not the underlying page element.
-8. Also add a **right-click context menu item** ("Collect this element with Harvest") as a secondary, keyboard/mouse-accessible way to trigger the same tooltip — useful near viewport edges or for accessibility.
+8. Also add a **right-click context menu item** ("Collect this element with Acopio") as a secondary, keyboard/mouse-accessible way to trigger the same tooltip — useful near viewport edges or for accessibility.
 9. Support **DOM-tree walking while the tooltip is open**: pressing `↑`/`↓` (or a small "select parent / select child" control in the tooltip) lets the user widen or narrow the selection without re-hovering pixel-perfectly — this matters because the exact leaf node under the cursor often isn't the "component" the user actually wants (e.g. hovering text inside a card should let them step up to select the whole card).
 
 **Critical technical requirement:** the injected tooltip/outline UI must render inside a **Shadow DOM root** with fully scoped styles (its own CSS reset), so it never inherits or leaks styles from the host page, and never gets visually broken by the host page's own CSS. Keep it visually consistent (light theme, clean sans-serif, generous padding, soft shadow) on every website regardless of that site's own design.

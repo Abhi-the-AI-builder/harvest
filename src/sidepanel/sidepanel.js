@@ -1,16 +1,9 @@
 (function () {
-  // Figma's public REST API has no endpoint that creates design nodes —
-  // that only exists via the Plugin API, which is exactly what the
-  // companion harvest-figma-plugin/ in this repo uses:
-  // "Export to Figma" downloads the v2 JSON payload that plugin's code.js
-  // already parses (layoutTree-aware, per-type node building —
-  // buildComponentCardFromTree etc.). This is the real, working path to
-  // actual Figma layers — turned on.
-  const ENABLE_FIGMA_EXPORT = true;
-  // "Download JSON for plugin" — full layoutTree export as a file, for
-  // debugging or manual import. Hidden when false; performPluginJsonExport()
-  // stays wired either way.
-  const ENABLE_FIGMA_PLUGIN_COPY = true;
+  // Figma export uses the companion acopio-figma-plugin (Plugin API — REST
+  // cannot create nodes). Gated by ACOPIO_ENABLE_FIGMA_EXPORT in config.js
+  // (false for store builds; config.local.js sets true for local testing).
+  const ENABLE_FIGMA_EXPORT = self.ACOPIO_ENABLE_FIGMA_EXPORT === true;
+  const ENABLE_FIGMA_PLUGIN_COPY = self.ACOPIO_ENABLE_FIGMA_EXPORT === true;
   const gridEl = document.getElementById("grid");
   const emptyEl = document.getElementById("empty");
   const siteLineEl = document.getElementById("site-line");
@@ -60,10 +53,10 @@
   const compareSampleHeadingEl = document.getElementById("compare-sample-heading");
   const compareSampleBodyEl = document.getElementById("compare-sample-body");
   const compareSaveBtn = document.getElementById("compare-save-btn");
-  activeToggle.innerHTML = Harvest.ICONS.cursor;
-  notesToggle.innerHTML = Harvest.ICONS.note;
-  compareToggle.innerHTML = Harvest.ICONS.compare;
-  collapseBtn.innerHTML = Harvest.ICONS.panel;
+  activeToggle.innerHTML = Acopio.ICONS.cursor;
+  notesToggle.innerHTML = Acopio.ICONS.note;
+  compareToggle.innerHTML = Acopio.ICONS.compare;
+  collapseBtn.innerHTML = Acopio.ICONS.panel;
 
   // With Figma export off, only its own 3 menu items hide — the chevron
   // and dropdown themselves stay (Export to Notion is a real, independent
@@ -120,11 +113,11 @@
   // everywhere they appear in the product, not a different abbreviation
   // scheme per surface.
   const TYPE_CHIP = {
-    color: Harvest.ICONS.ring,
-    font: Harvest.ICONS.font,
-    image: Harvest.ICONS.image,
-    component: Harvest.ICONS.component,
-    note: Harvest.ICONS.note,
+    color: Acopio.ICONS.ring,
+    font: Acopio.ICONS.font,
+    image: Acopio.ICONS.image,
+    component: Acopio.ICONS.component,
+    note: Acopio.ICONS.note,
   };
 
   // Same 4-color palette as the capture-time picker (src/content/notes.js'
@@ -282,7 +275,7 @@
       sourceLink.rel = "noopener noreferrer";
       sourceLink.title = `Open ${sourceLabel}`;
       const linkIcon = document.createElement("span");
-      linkIcon.innerHTML = Harvest.ICONS.externalLink;
+      linkIcon.innerHTML = Acopio.ICONS.externalLink;
       sourceLink.appendChild(linkIcon);
       const linkLabel = document.createElement("span");
       linkLabel.textContent = sourceLabel;
@@ -385,7 +378,7 @@
     }, 10000);
   }
 
-  const sanitizeFilename = HarvestExportHelpers.sanitizeFilename;
+  const sanitizeFilename = AcopioExportHelpers.sanitizeFilename;
   let exportContext = null;
 
   function showExportFeedback(msg, type = "info") {
@@ -441,7 +434,7 @@
   // The tooltip's own note field (overlay.js) only ever runs once, at
   // capture time — this is the one place a note can be added or changed
   // afterward. Sends the same UPDATE_NOTE message background.js already
-  // handles (HarvestDB.updateItemNote + an ITEMS_UPDATED broadcast this
+  // handles (AcopioDB.updateItemNote + an ITEMS_UPDATED broadcast this
   // panel already listens for below), so no separate refresh call is
   // needed here — the existing listener repaints the grid once it lands.
   function showNoteEditor(item) {
@@ -471,7 +464,7 @@
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
       removeBtn.className = "note-editor-remove";
-      removeBtn.innerHTML = Harvest.ICONS.trash;
+      removeBtn.innerHTML = Acopio.ICONS.trash;
       removeBtn.title = "Remove note";
       removeBtn.setAttribute("aria-label", "Remove note");
       removeBtn.addEventListener("click", () => {
@@ -541,7 +534,7 @@
     } else if (item.type === "image" && item.data.url) {
       const img = document.createElement("img");
       img.src = item.data.url;
-      Harvest.withPinterestFallback(img, item.data.url);
+      Acopio.withPinterestFallback(img, item.data.url);
       img.alt = item.data.altText || "";
       img.loading = "lazy";
       wrap.appendChild(img);
@@ -556,8 +549,8 @@
       wrap.style.background = c.bg;
       const icon = document.createElement("div");
       icon.style.cssText = "display:flex; color:" + c.fg + ";";
-      icon.innerHTML = Harvest.ICONS.note;
-      // Harvest.ICONS.note ships intrinsically 10x10 (sized for an 18px
+      icon.innerHTML = Acopio.ICONS.note;
+      // Acopio.ICONS.note ships intrinsically 10x10 (sized for an 18px
       // inline badge elsewhere) — too small on its own for this bigger
       // thumbnail slot, so scaled up here to match the other type glyphs'
       // presence in the same spot (.component-icon svg is 22px).
@@ -583,7 +576,7 @@
       if (previewSrc) {
         const img = document.createElement("img");
         img.src = previewSrc;
-        Harvest.withPinterestFallback(img, previewSrc);
+        Acopio.withPinterestFallback(img, previewSrc);
         img.alt = "";
         img.loading = "lazy";
         wrap.appendChild(img);
@@ -596,8 +589,8 @@
         wrap.style.background = "var(--color-accent-wash)";
         const icon = document.createElement("div");
         icon.className = "component-icon";
-        const kind = Harvest.componentIconFor(item.data && item.data.outerHTML);
-        icon.innerHTML = kind === "image" ? Harvest.ICONS.image : kind === "font" ? Harvest.ICONS.font : Harvest.ICONS.component;
+        const kind = Acopio.componentIconFor(item.data && item.data.outerHTML);
+        icon.innerHTML = kind === "image" ? Acopio.ICONS.image : kind === "font" ? Acopio.ICONS.font : Acopio.ICONS.component;
         wrap.appendChild(icon);
       }
     }
@@ -623,7 +616,7 @@
       // the raw string against the item's own sourceUrl (the page it was
       // actually captured from) is what gets a relative "/img/foo.jpg" back
       // to the real https://the-site.com/img/foo.jpg it always meant.
-      // Same lazy-load gap Harvest.resolveImgSrc covers for a live element
+      // Same lazy-load gap Acopio.resolveImgSrc covers for a live element
       // — checked as raw attributes here too, not that helper directly,
       // since this node was never attached to the real page (its own
       // .src/.currentSrc IDL properties would resolve against the wrong
@@ -650,7 +643,7 @@
 
   // --- Delete (item) -------------------------------------------------
   async function deleteItemFlow(item) {
-    const result = await HarvestDB.deleteItem(item.id);
+    const result = await AcopioDB.deleteItem(item.id);
     if (!result) return;
     const affected = result.affectedCollections;
     const msg =
@@ -658,7 +651,7 @@
         ? `Deleted — also removed from ${affected.length} collection${affected.length === 1 ? "" : "s"}`
         : "Deleted";
     showToast(msg, async () => {
-      await HarvestDB.restoreItem(result.item, affected.map((c) => c.id));
+      await AcopioDB.restoreItem(result.item, affected.map((c) => c.id));
       refreshCurrentView();
     });
     refreshCurrentView();
@@ -668,7 +661,7 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "card-delete-btn";
-    btn.innerHTML = Harvest.ICONS.close;
+    btn.innerHTML = Acopio.ICONS.close;
     btn.setAttribute("aria-label", "Delete");
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -681,7 +674,7 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "card-download-btn";
-    btn.innerHTML = Harvest.ICONS.download;
+    btn.innerHTML = Acopio.ICONS.download;
     btn.setAttribute("aria-label", label || "Download this image");
     btn.title = "Download";
     btn.addEventListener("click", (e) => {
@@ -695,7 +688,7 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "card-copy-btn";
-    btn.innerHTML = Harvest.ICONS.copy;
+    btn.innerHTML = Acopio.ICONS.copy;
     btn.setAttribute("aria-label", "Copy this item");
     btn.title = "Copy";
     btn.addEventListener("click", (e) => {
@@ -720,7 +713,7 @@
   }
 
   async function copyOneItem(item, btn) {
-    await HarvestClipboardCopy.copySingleItem(item, btn, copyDeps);
+    await AcopioClipboardCopy.copySingleItem(item, btn, copyDeps);
   }
 
   // Factored out the same way buildDeleteBtn/buildDownloadBtn already are —
@@ -731,7 +724,7 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "tile-edit-btn";
-    btn.innerHTML = Harvest.ICONS.edit;
+    btn.innerHTML = Acopio.ICONS.edit;
     btn.setAttribute("aria-label", "Add a note");
     btn.title = "Add a note";
     btn.addEventListener("click", (e) => {
@@ -898,7 +891,7 @@
       remove.type = "button";
       remove.className = "select-chip-remove";
       remove.setAttribute("aria-label", `Remove ${chipLabelFor(item)} from selection`);
-      remove.innerHTML = Harvest.ICONS.close;
+      remove.innerHTML = Acopio.ICONS.close;
       remove.addEventListener("click", () => {
         selectedItems.delete(item.id);
         const tileOrCard = document.querySelector(`.select-check[data-item-id="${item.id}"]`)?.closest(".tile, .card");
@@ -965,7 +958,7 @@
     // "5 days ago · Active" sitting above "Personal Email Assistant", not
     // a bare value with nothing over it. Reuses real data we actually
     // have (when this was captured) rather than inventing a field like
-    // "Active" that has no Harvest equivalent.
+    // "Active" that has no Acopio equivalent.
     const caption = document.createElement("div");
     caption.className = "tile-rich-caption";
     caption.textContent = relativeTime(item.capturedAt);
@@ -1045,7 +1038,7 @@
       const noteBadge = document.createElement("button");
       noteBadge.type = "button";
       noteBadge.className = "tile-note-badge";
-      noteBadge.innerHTML = Harvest.ICONS.note;
+      noteBadge.innerHTML = Acopio.ICONS.note;
       noteBadge.title = item.note;
       noteBadge.setAttribute("aria-label", "Edit note");
       noteBadge.addEventListener("click", (e) => { e.stopPropagation(); showNoteEditor(item); });
@@ -1053,7 +1046,7 @@
     } else if (item.note) {
       const noteBadge = document.createElement("div");
       noteBadge.className = "tile-note-badge";
-      noteBadge.innerHTML = Harvest.ICONS.note;
+      noteBadge.innerHTML = Acopio.ICONS.note;
       noteBadge.title = item.note;
       tile.appendChild(noteBadge);
     }
@@ -1231,7 +1224,7 @@
         tagBtn.appendChild(label);
         const check = document.createElement("span");
         check.className = "note-tag-menu-check";
-        if (isActive) check.innerHTML = Harvest.ICONS.check;
+        if (isActive) check.innerHTML = Acopio.ICONS.check;
         tagBtn.appendChild(check);
         tagBtn.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -1262,7 +1255,7 @@
   // Same singleton-floating-control shape as the tag picker above: select
   // text inside a note's excerpt, a small "Highlight" button appears near
   // the selection, clicking it marks that exact substring. Highlights are
-  // stored as character offsets into item.data.text (HarvestDB.
+  // stored as character offsets into item.data.text (AcopioDB.
   // updateItemHighlights), not a duplicated copy of the text, and
   // re-rendered by splitting the text into plain/<mark> segments at
   // render time — see renderNoteText below.
@@ -1282,7 +1275,7 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "note-highlight-btn";
-    btn.innerHTML = `${Harvest.ICONS.note}<span>Highlight</span>`;
+    btn.innerHTML = `${Acopio.ICONS.note}<span>Highlight</span>`;
     btn.addEventListener("mousedown", (e) => e.preventDefault()); // don't let this click itself collapse the selection before onConfirm reads it
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1467,7 +1460,7 @@
         // already constrains). The icon markup is a static constant either
         // way, never concatenated with page-derived text.
         const linkIcon = document.createElement("span");
-        linkIcon.innerHTML = Harvest.ICONS.externalLink;
+        linkIcon.innerHTML = Acopio.ICONS.externalLink;
         sourceLink.appendChild(linkIcon);
         const linkLabel = document.createElement("span");
         linkLabel.textContent = sourceLabel;
@@ -1526,7 +1519,7 @@
         const current = Array.isArray(data.highlights) ? data.highlights : [];
         const next = mergeHighlightRanges(current, { start, end });
         data.highlights = next;
-        HarvestDB.updateItemHighlights(item.id, next);
+        AcopioDB.updateItemHighlights(item.id, next);
         renderNoteText(value, noteText, next, data.headingRanges);
         sel.removeAllRanges();
       });
@@ -1556,7 +1549,7 @@
       if (idx === -1 || idx >= sortedCurrent.length) return;
       const next = sortedCurrent.filter((_, i) => i !== idx);
       data.highlights = next;
-      HarvestDB.updateItemHighlights(item.id, next);
+      AcopioDB.updateItemHighlights(item.id, next);
       renderNoteText(value, noteText, next, data.headingRanges);
     });
     body.appendChild(value);
@@ -1646,7 +1639,7 @@
         linkChip.title = l.href;
         linkChip.addEventListener("click", (e) => e.stopPropagation());
         const chipIcon = document.createElement("span");
-        chipIcon.innerHTML = Harvest.ICONS.externalLink;
+        chipIcon.innerHTML = Acopio.ICONS.externalLink;
         linkChip.appendChild(chipIcon);
         const chipLabel = document.createElement("span");
         chipLabel.textContent = l.text || l.href;
@@ -1674,7 +1667,7 @@
           const current = Array.isArray(data.tags) ? data.tags : [];
           const next = current.includes(key) ? current.filter((k) => k !== key) : current.concat([key]);
           data.tags = next;
-          HarvestDB.updateItemTags(item.id, next);
+          AcopioDB.updateItemTags(item.id, next);
           renderTags();
         }
       );
@@ -1744,7 +1737,7 @@
       const downloadBtn = document.createElement("button");
       downloadBtn.type = "button";
       downloadBtn.className = "note-tile-action-btn";
-      downloadBtn.innerHTML = Harvest.ICONS.download;
+      downloadBtn.innerHTML = Acopio.ICONS.download;
       downloadBtn.title = "Download as .txt";
       downloadBtn.setAttribute("aria-label", "Download this note as a text file");
       downloadBtn.addEventListener("click", (e) => { e.stopPropagation(); downloadOneNote(item); });
@@ -1752,7 +1745,7 @@
       const copyBtn = document.createElement("button");
       copyBtn.type = "button";
       copyBtn.className = "note-tile-action-btn";
-      copyBtn.innerHTML = Harvest.ICONS.copy;
+      copyBtn.innerHTML = Acopio.ICONS.copy;
       copyBtn.title = "Copy text";
       copyBtn.setAttribute("aria-label", "Copy this note's text");
       copyBtn.addEventListener("click", (e) => { e.stopPropagation(); copyOneNote(item, copyBtn); });
@@ -1780,7 +1773,7 @@
   // literal ">"/"**" characters. Two competitors researched for this
   // (Readwise, Glasp) treat exactly this — export you can actually reuse
   // elsewhere — as their core paid value; this is the free version of
-  // that for Harvest.
+  // that for Acopio.
   function noteTextBlockFor(item) {
     const data = item.data || {};
     const when = new Date(item.capturedAt).toLocaleString();
@@ -1830,7 +1823,7 @@
   }
 
   async function copyOneNote(item, btn) {
-    await HarvestClipboardCopy.copySingleItem(item, btn, copyDeps);
+    await AcopioClipboardCopy.copySingleItem(item, btn, copyDeps);
   }
 
   // Text-native equivalent of "Download all" for images (downloadAllImages
@@ -1884,7 +1877,7 @@
 
     const tint = document.createElement("div");
     tint.className = "folder-tint";
-    const tone = Harvest.folderTint(tintSeed);
+    const tone = Acopio.folderTint(tintSeed);
     tint.style.background = tone.bg;
     cover.appendChild(tint);
 
@@ -1922,7 +1915,7 @@
       const placeholder = document.createElement("div");
       placeholder.className = "folder-cover-empty";
       placeholder.style.color = tone.ink;
-      placeholder.innerHTML = Harvest.ICONS.folder;
+      placeholder.innerHTML = Acopio.ICONS.folder;
       fan.appendChild(placeholder);
     }
     cover.appendChild(fan);
@@ -1975,7 +1968,7 @@
   // already notes-only by the time it gets here) — clicking opens a
   // notes-only filtered view of that site instead, and there's no delete
   // button, since "delete this notes folder" would otherwise delete that
-  // site's colors/fonts/images too via the same HarvestDB.deleteFolder
+  // site's colors/fonts/images too via the same AcopioDB.deleteFolder
   // call the sites version uses — a destructive surprise this mode
   // deliberately doesn't offer. Individual notes still delete fine from
   // inside the timeline itself.
@@ -1997,7 +1990,7 @@
     // badge, and the card, looking finished either way.
     favImg.addEventListener("error", () => {
       favicon.classList.add("folder-favicon-fallback");
-      favicon.innerHTML = Harvest.ICONS.globe;
+      favicon.innerHTML = Acopio.ICONS.globe;
     });
     favicon.appendChild(favImg);
 
@@ -2032,7 +2025,7 @@
             onConfirm: async () => {
               // folder.items is already filtered to non-notes (see
               // showLibrarySites above) — deleting item-by-item through
-              // that same list instead of calling HarvestDB.deleteFolder
+              // that same list instead of calling AcopioDB.deleteFolder
               // (which deletes EVERY item for this hostname, notes
               // included) means this action can never silently take out
               // notes the confirmation dialog never mentioned and the
@@ -2041,11 +2034,11 @@
               // unchanged on the results.
               const results = [];
               for (const item of folder.items) {
-                const r = await HarvestDB.deleteItem(item.id);
+                const r = await AcopioDB.deleteItem(item.id);
                 if (r) results.push(r);
               }
               showToast(`Deleted ${folder.hostname} (${results.length} item${results.length === 1 ? "" : "s"})`, async () => {
-                await HarvestDB.restoreFolder(results);
+                await AcopioDB.restoreFolder(results);
                 refreshCurrentView();
               });
               refreshCurrentView();
@@ -2182,7 +2175,7 @@
     const scopeKey =
       siteCount === 1
         ? sanitizeFilename(hosts[0])
-        : sanitizeFilename(`harvest-export-${siteCount}-sites-${itemCount}-items`);
+        : sanitizeFilename(`acopio-export-${siteCount}-sites-${itemCount}-items`);
     return { items, allItems: items, scopeKey, scopeLabel, siteCount, hosts };
   }
   // Shared open/close wiring for the two export split-button menus (folder
@@ -2274,7 +2267,7 @@
 
     const pinBadge = document.createElement("div");
     pinBadge.className = "folder-favicon folder-pin-badge";
-    pinBadge.innerHTML = Harvest.ICONS.pin;
+    pinBadge.innerHTML = Acopio.ICONS.pin;
 
     const metaHtml = `${relativeTime(collection.lastUpdatedAt)} &middot; <strong>${resolvedItems.length}</strong> item${resolvedItems.length === 1 ? "" : "s"}`;
     const cover = buildFanCover(resolvedItems, collection.name, collection.name, pinBadge, Math.max(0, resolvedItems.length - 3), metaHtml);
@@ -2288,7 +2281,7 @@
           body: "This won't delete the items themselves, only this grouping. The items stay exactly where they are in their original site folders.",
           confirmLabel: "Delete collection",
           onConfirm: async () => {
-            await HarvestDB.deleteCollection(collection.id);
+            await AcopioDB.deleteCollection(collection.id);
             showToast(`Deleted collection "${collection.name}"`, null);
             refreshCurrentView();
           },
@@ -2330,7 +2323,7 @@
     closeBtn.type = "button";
     closeBtn.className = "sp-modal-close";
     closeBtn.setAttribute("aria-label", "Close");
-    closeBtn.innerHTML = Harvest.ICONS.close;
+    closeBtn.innerHTML = Acopio.ICONS.close;
     closeBtn.addEventListener("click", onClose);
     header.appendChild(title);
     header.appendChild(closeBtn);
@@ -2338,7 +2331,7 @@
   }
 
   async function showCollectionPicker(items) {
-    const collections = await HarvestDB.getAllCollections();
+    const collections = await AcopioDB.getAllCollections();
     modalRoot.innerHTML = "";
     const overlay = document.createElement("div");
     overlay.className = "sp-modal-overlay";
@@ -2365,7 +2358,7 @@
       row.className = "collection-picker-row";
       const icon = document.createElement("div");
       icon.className = "collection-picker-icon";
-      icon.innerHTML = Harvest.ICONS.folder;
+      icon.innerHTML = Acopio.ICONS.folder;
       row.appendChild(icon);
       const text = document.createElement("div");
       text.className = "collection-picker-text";
@@ -2380,11 +2373,11 @@
       row.appendChild(text);
       const add = document.createElement("div");
       add.className = "collection-picker-add";
-      add.innerHTML = Harvest.ICONS.plus;
+      add.innerHTML = Acopio.ICONS.plus;
       row.appendChild(add);
       row.addEventListener("click", async () => {
         const refs = items.map((it) => ({ folderHostname: it.hostname, itemId: it.id }));
-        await HarvestDB.addItemsToCollection(col.id, refs);
+        await AcopioDB.addItemsToCollection(col.id, refs);
         modalRoot.innerHTML = "";
         exitSelectMode();
         showToast(`Added to "${col.name}"`, null);
@@ -2409,9 +2402,9 @@
       // id internally) — a hard block would break the legitimate
       // "iterate on a moodboard" use case, so this deliberately doesn't
       // check for an existing name.
-      const col = await HarvestDB.createCollection(name);
+      const col = await AcopioDB.createCollection(name);
       const refs = items.map((it) => ({ folderHostname: it.hostname, itemId: it.id }));
-      await HarvestDB.addItemsToCollection(col.id, refs);
+      await AcopioDB.addItemsToCollection(col.id, refs);
       modalRoot.innerHTML = "";
       exitSelectMode();
       showToast(`Created "${name}" with ${items.length} item${items.length === 1 ? "" : "s"}`, null);
@@ -2498,7 +2491,7 @@
   function itemSelectionExportContext() {
     const items = Array.from(selectedItems.values());
     const scopeLabel = items.length === 1 ? "1 selected item" : `${items.length} selected items`;
-    return { items, allItems: items, scopeKey: "harvest-selection", scopeLabel };
+    return { items, allItems: items, scopeKey: "acopio-selection", scopeLabel };
   }
   function exitSelectModeAfterExport() {
     selectMode = false;
@@ -2538,7 +2531,7 @@
     const items = Array.from(selectedItems.values());
     if (items.length === 0) return;
     const doRemove = async () => {
-      for (const item of items) await HarvestDB.deleteItem(item.id);
+      for (const item of items) await AcopioDB.deleteItem(item.id);
       exitSelectMode();
       showToast(`Deleted ${items.length} item${items.length === 1 ? "" : "s"}`, null);
     };
@@ -2572,7 +2565,7 @@
       // the Notes tab's own per-site grouping instead. Excluded here so a
       // host with ONLY notes doesn't get a Sites card at all, and a host
       // with both kinds only counts/shows its non-note captures here.
-      const items = (await HarvestDB.getAllItems()).filter((item) => item.type !== "note");
+      const items = (await AcopioDB.getAllItems()).filter((item) => item.type !== "note");
       const byHost = new Map();
       for (const item of items) {
         if (!byHost.has(item.hostname)) byHost.set(item.hostname, []);
@@ -2642,14 +2635,14 @@
     exitFolderSelectMode();
 
     try {
-      const collections = await HarvestDB.getAllCollections();
+      const collections = await AcopioDB.getAllCollections();
       if (collections.length === 0) {
         collectionsEmptyEl.hidden = false;
         collectionsGridEl.hidden = true;
         return;
       }
       const withItems = await Promise.all(
-        collections.map(async (col) => ({ col, items: await HarvestDB.resolveCollectionItems(col) }))
+        collections.map(async (col) => ({ col, items: await AcopioDB.resolveCollectionItems(col) }))
       );
       // A Collection built entirely from the notes flow (its own "New
       // folder" — every item it holds is type==="note") belongs under the
@@ -2711,7 +2704,7 @@
     exitFolderSelectMode();
 
     try {
-      const [items, collections] = await Promise.all([HarvestDB.getAllItems(), HarvestDB.getAllCollections()]);
+      const [items, collections] = await Promise.all([AcopioDB.getAllItems(), AcopioDB.getAllCollections()]);
       const notesByHost = new Map();
       for (const item of items) {
         if (item.type !== "note") continue;
@@ -2733,7 +2726,7 @@
       // permanently unreachable in the UI, which is worse than showing it
       // in "the wrong" tab.
       const withItems = await Promise.all(
-        collections.map(async (col) => ({ col, items: await HarvestDB.resolveCollectionItems(col) }))
+        collections.map(async (col) => ({ col, items: await AcopioDB.resolveCollectionItems(col) }))
       );
       const noteCollections = withItems.filter(({ items: colItems }) => colItems.some((it) => it.type === "note"));
       noteCollections.sort((a, b) => new Date(b.col.lastUpdatedAt) - new Date(a.col.lastUpdatedAt));
@@ -2839,7 +2832,7 @@
     hideOtherViewsFor("compare");
     siteLineTextEl.textContent = "Compare fonts";
 
-    const allItems = await HarvestDB.getAllItems();
+    const allItems = await AcopioDB.getAllItems();
     const headingFonts = allItems.filter((i) => i.type === "font" && i.family === "heading");
     const bodyFonts = allItems.filter((i) => i.type === "font" && i.family === "body");
 
@@ -2903,8 +2896,8 @@
     // reuses the existing items store/index rather than a parallel schema,
     // and it just naturally shows up as a "Pairings" folder in the Sites
     // grid, no special-casing needed anywhere else in the UI.
-    await HarvestDB.addItem({
-      id: Harvest.uuid(),
+    await AcopioDB.addItem({
+      id: Acopio.uuid(),
       type: "pairing",
       family: "other",
       hostname: "Pairings",
@@ -2995,7 +2988,7 @@
       if (pages.length === 0) {
         const empty = document.createElement("div");
         empty.className = "sp-modal-body";
-        empty.textContent = 'No pages are shared with Harvest yet — open Notion, share a page with the "Harvest" integration, then try again.';
+        empty.textContent = 'No pages are shared with Acopio yet — open Notion, share a page with the "Acopio" integration, then try again.';
         list.appendChild(empty);
       }
       pages.forEach((p) => {
@@ -3003,7 +2996,7 @@
         row.className = "collection-picker-row";
         const icon = document.createElement("div");
         icon.className = "collection-picker-icon";
-        icon.innerHTML = Harvest.ICONS.folder;
+        icon.innerHTML = Acopio.ICONS.folder;
         row.appendChild(icon);
         const text = document.createElement("div");
         text.className = "collection-picker-text";
@@ -3023,7 +3016,7 @@
   }
 
   function performZipExport() {
-    return HarvestZipExport.performZipExport(exportContext, {
+    return AcopioZipExport.performZipExport(exportContext, {
       showFeedback: showExportFeedback,
       noteFilenameFor,
       noteTextBlockFor,
@@ -3031,32 +3024,32 @@
   }
 
   function performNotionExport() {
-    return HarvestNotionExport.performNotionExport(exportContext, {
+    return AcopioNotionExport.performNotionExport(exportContext, {
       showFeedback: showExportFeedback,
       showNotionPagePicker,
     });
   }
 
   function performExportToFigma() {
-    return HarvestFigmaExport.performExportToFigma(exportContext, {
+    return AcopioFigmaExport.performExportToFigma(exportContext, {
       showFeedback: showExportFeedback,
     });
   }
 
   function performPluginJsonExport() {
-    return HarvestFigmaExport.performPluginJsonExport(exportContext, {
+    return AcopioFigmaExport.performPluginJsonExport(exportContext, {
       showFeedback: showExportFeedback,
     });
   }
 
   function performPluginClipboardExport() {
-    return HarvestFigmaExport.performPluginClipboardExport(exportContext, {
+    return AcopioFigmaExport.performPluginClipboardExport(exportContext, {
       showFeedback: showExportFeedback,
     });
   }
 
   function copyAllInSection(items, btn) {
-    HarvestClipboardCopy.copyAllInSection(items, btn, copyDeps);
+    AcopioClipboardCopy.copyAllInSection(items, btn, copyDeps);
   }
 
   const TYPE_SECTION_LABEL = { color: "Colors", font: "Fonts", image: "Images", component: "Components", note: "Notes" };
@@ -3106,7 +3099,7 @@
       const copyAllBtn = document.createElement("button");
       copyAllBtn.type = "button";
       copyAllBtn.className = "grid-section-copy-btn";
-      copyAllBtn.innerHTML = Harvest.ICONS.copy;
+      copyAllBtn.innerHTML = Acopio.ICONS.copy;
       copyAllBtn.title = `Copy all ${TYPE_SECTION_LABEL[type].toLowerCase()} — paste into Figma, Claude, or docs`;
       copyAllBtn.setAttribute("aria-label", `Copy all ${TYPE_SECTION_LABEL[type].toLowerCase()} in this section`);
       copyAllBtn.addEventListener("click", () => copyAllInSection(sorted, copyAllBtn));
@@ -3190,7 +3183,7 @@
       // once you're one click deeper. Notes for this host are still
       // exactly where they've always been — under the Notes tab's own
       // per-site folder for this same hostname.
-      const items = (await HarvestDB.getItemsByHostname(currentHostname)).filter((item) => item.type !== "note");
+      const items = (await AcopioDB.getItemsByHostname(currentHostname)).filter((item) => item.type !== "note");
       siteLineTextEl.innerHTML = "";
       const hostSpan = document.createElement("span");
       hostSpan.className = "hostname";
@@ -3226,7 +3219,7 @@
     // render() already handles that) instead of being overridden here.
     backBtn.textContent = "← Notes";
     try {
-      const items = await HarvestDB.getItemsByHostname(currentHostname);
+      const items = await AcopioDB.getItemsByHostname(currentHostname);
       const notes = items.filter((item) => item.type === "note");
       siteLineTextEl.innerHTML = "";
       // Just the hostname — "← Notes" already says what section this is,
@@ -3247,13 +3240,13 @@
     if (!currentCollectionId) return;
     showSiteViewChrome();
     try {
-      const col = await HarvestDB.getCollection(currentCollectionId);
+      const col = await AcopioDB.getCollection(currentCollectionId);
       if (!col) {
         // Deleted from elsewhere (e.g. undone/re-deleted) while viewing it.
         showLibrary();
         return;
       }
-      const resolved = await HarvestDB.resolveCollectionItems(col);
+      const resolved = await AcopioDB.resolveCollectionItems(col);
       // Filter to match whichever tab this Collection was opened from — a
       // mixed Collection can appear in both, but each side must only ever
       // show its own half (see currentCollectionMode).
@@ -3283,7 +3276,7 @@
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !tab.url || !/^https?:\/\//.test(tab.url)) {
       currentHostname = null;
-      siteLineTextEl.textContent = "Harvest can't run on this page.";
+      siteLineTextEl.textContent = "Acopio can't run on this page.";
       backBtn.hidden = false;
       selectToggleBtn.hidden = true;
       gridEl.hidden = true;
@@ -3313,7 +3306,7 @@
   // has dismissed it — there's no dedicated "restore" control anymore, so
   // collapsing the panel is the recovery path.
   // Expanding back is the floating toolbar's existing "open panel" button
-  // (same Harvest.ICONS.panel glyph, toolbar.js) — collapse and expand are
+  // (same Acopio.ICONS.panel glyph, toolbar.js) — collapse and expand are
   // literally the same icon from opposite ends, not two different affordances.
   //
   // window.close() DOES close a side panel document — verified against the
@@ -3338,7 +3331,7 @@
     // time. Waiting for the callback guarantees the write is committed
     // before the panel (and this document's ability to keep the call alive)
     // goes away.
-    chrome.storage.local.set({ harvestToolbarDismissed: false }, () => {
+    chrome.storage.local.set({ acopioToolbarDismissed: false }, () => {
       window.close();
     });
   });
@@ -3356,16 +3349,16 @@
   // separate write) means every listener — this panel, the floating
   // toolbar, both content scripts — sees one atomic state change instead
   // of two, so nothing can observe an impossible "both on" moment in between.
-  function setHarvestActive(next) {
-    chrome.storage.local.set(next ? { harvestActive: true, harvestNotesActive: false } : { harvestActive: false });
+  function setAcopioActive(next) {
+    chrome.storage.local.set(next ? { acopioActive: true, acopioNotesActive: false } : { acopioActive: false });
     applyActiveState(next); // instant feedback, don't wait for the storage round-trip
   }
 
-  chrome.storage.local.get(["harvestActive"], (res) => {
-    applyActiveState(res.harvestActive === true);
+  chrome.storage.local.get(["acopioActive"], (res) => {
+    applyActiveState(res.acopioActive === true);
   });
   activeToggle.addEventListener("click", () => {
-    setHarvestActive(activeToggle.getAttribute("aria-pressed") !== "true");
+    setAcopioActive(activeToggle.getAttribute("aria-pressed") !== "true");
   });
 
   // Independent second toggle — text-selection notes capture
@@ -3379,12 +3372,12 @@
   }
 
   function setNotesActive(next) {
-    chrome.storage.local.set(next ? { harvestNotesActive: true, harvestActive: false } : { harvestNotesActive: false });
+    chrome.storage.local.set(next ? { acopioNotesActive: true, acopioActive: false } : { acopioNotesActive: false });
     applyNotesActiveState(next);
   }
 
-  chrome.storage.local.get(["harvestNotesActive"], (res) => {
-    applyNotesActiveState(res.harvestNotesActive === true);
+  chrome.storage.local.get(["acopioNotesActive"], (res) => {
+    applyNotesActiveState(res.acopioNotesActive === true);
   });
   notesToggle.addEventListener("click", () => {
     setNotesActive(notesToggle.getAttribute("aria-pressed") !== "true");
@@ -3399,15 +3392,15 @@
   // dismissed it. One unconditional write here, right at load, is a
   // simpler guarantee than trying to intercept every possible path that
   // can open a side panel.
-  chrome.storage.local.set({ harvestToolbarDismissed: true });
+  chrome.storage.local.set({ acopioToolbarDismissed: true });
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (changes.harvestNotesActive) {
-      applyNotesActiveState(changes.harvestNotesActive.newValue === true);
+    if (changes.acopioNotesActive) {
+      applyNotesActiveState(changes.acopioNotesActive.newValue === true);
     }
-    if (changes.harvestActive) {
-      applyActiveState(changes.harvestActive.newValue === true);
+    if (changes.acopioActive) {
+      applyActiveState(changes.acopioActive.newValue === true);
     }
   });
 

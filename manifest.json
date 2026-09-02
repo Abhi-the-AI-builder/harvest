@@ -1,15 +1,30 @@
 {
   "manifest_version": 3,
-  "name": "Harvest — Design Research Collector",
+  "name": "Acopio — Gather. Connect. Simplify",
   "version": "0.1.0",
   "description": "Hover any element on any site to collect colors, fonts, images, and components into a per-site design research library.",
-  "permissions": ["activeTab", "tabs", "storage", "unlimitedStorage", "contextMenus", "sidePanel", "favicon", "identity", "clipboardWrite"],
-  "host_permissions": ["<all_urls>", "https://api.figma.com/*", "https://www.figma.com/*", "https://api.notion.com/*"],
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "storage",
+    "unlimitedStorage",
+    "contextMenus",
+    "sidePanel",
+    "favicon",
+    "identity",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "https://api.figma.com/*",
+    "https://www.figma.com/*",
+    "https://api.notion.com/*"
+  ],
   "background": {
     "service_worker": "src/background.js"
   },
   "action": {
-    "default_title": "Harvest — open the collected-items panel",
+    "default_title": "Acopio — open the collected-items panel",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -26,13 +41,22 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/icon48.png", "fonts/Inter-var.woff2"],
-      "matches": ["http://*/*", "https://*/*"]
+      "resources": [
+        "icons/icon48.png",
+        "fonts/Inter-var.woff2"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
     }
   ],
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
       "js": [
         "src/content/shared.js",
         "src/content/sanitize.js",

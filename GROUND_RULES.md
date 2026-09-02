@@ -1,4 +1,4 @@
-# Harvest — Ground Rules (apply to every future change)
+# Acopio — Ground Rules (apply to every future change)
 
 Selective hover-to-collect design-research Chrome extension. Local-only, no backend, Manifest V3, Chromium-only. These are the constraints that survive past v1 — pulled from Sections 9 and 13 of the spec, plus the invariants those sections depend on.
 

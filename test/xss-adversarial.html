@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Harvest — Adversarial Test Page</title>
+<title>Acopio — Adversarial Test Page</title>
 <style>
   body { font-family: sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
   h1 { color: #222; }
@@ -13,19 +13,19 @@
 </style>
 </head>
 <body>
-  <h1>Harvest adversarial + smoke test page</h1>
+  <h1>Acopio adversarial + smoke test page</h1>
 
   <section id="xss-script">
     <h2>1. Embedded &lt;script&gt;</h2>
     <div id="script-target">
       Hover/capture this box as a component.
-      <script>window.__harvestXssFired = true; alert('xss-script');</script>
+      <script>window.__acopioXssFired = true; alert('xss-script');</script>
     </div>
   </section>
 
   <section id="xss-onclick">
     <h2>2. Inline event handler</h2>
-    <div id="onclick-target" onclick="window.__harvestXssFired = true; alert('xss-onclick')" style="padding:16px;background:#fee2e2;border-radius:6px;cursor:pointer;">
+    <div id="onclick-target" onclick="window.__acopioXssFired = true; alert('xss-onclick')" style="padding:16px;background:#fee2e2;border-radius:6px;cursor:pointer;">
       Hover/capture this box as a component (it also has an onclick attribute).
     </div>
   </section>
@@ -68,7 +68,7 @@
     <button id="button-target" style="padding:10px 18px;background:#111;color:#fff;border:none;border-radius:8px;">A button</button>
     <div class="swatch" id="color-target"></div>
     <div class="hero-bg" id="gradient-target"></div>
-    <img id="image-target" src="https://picsum.photos/seed/harvest/300/200" alt="Sample" />
+    <img id="image-target" src="https://picsum.photos/seed/acopio/300/200" alt="Sample" />
   </section>
 
   <section id="iframe-case">

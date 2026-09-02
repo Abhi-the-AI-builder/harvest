@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Harvest design preview — tooltip &amp; toolbar</title>
+<title>Acopio design preview — tooltip &amp; toolbar</title>
 <style>
   body { margin: 0; font-family: -apple-system, sans-serif; }
   section { padding: 64px; }
@@ -19,7 +19,7 @@
 
 <section class="light">
   <h1 id="heading">Design that converts</h1>
-  <p id="body-text">Harvest lets you hover over anything on the web — a color, a font pairing, a component — and pull it straight into your own research library, without ever leaving the page you're studying.</p>
+  <p id="body-text">Acopio lets you hover over anything on the web — a color, a font pairing, a component — and pull it straight into your own research library, without ever leaving the page you're studying.</p>
   <div class="swatch" id="swatch"></div>
   <a class="btn" id="btn">Get started</a>
 </section>
@@ -27,13 +27,13 @@
 <section class="dark">
   <h1 id="heading2" style="font-family: -apple-system, sans-serif;">Built for the way you actually work</h1>
   <p id="body-text2">Dark surfaces need the same tooltip to hold up — same legibility, same contrast, same confidence.</p>
-  <img class="photo" id="photo" src="https://picsum.photos/seed/harvest/220/140" alt="sample">
+  <img class="photo" id="photo" src="https://picsum.photos/seed/acopio/220/140" alt="sample">
 </section>
 
 <script>
   // ---- Minimal chrome.* stub so the real content scripts run unmodified ----
   const listeners = { storage: [], runtime: [] };
-  const storageData = { harvestActive: true, harvestSeenHint: true };
+  const storageData = { acopioActive: true, acopioSeenHint: true };
   window.chrome = {
     runtime: {
       getURL: (p) => "../" + p,
@@ -41,15 +41,15 @@
         if (msg.type === "CONTENT_SCRIPT_READY") return;
         if (msg.type === "OPEN_SIDE_PANEL") { console.log("[stub] open side panel"); return; }
         if (msg.type === "CAPTURE_ITEM") {
-          window.HarvestDB.addItem(msg.payload).then(async () => {
-            const count = await window.HarvestDB.countByHostname(msg.payload.hostname);
+          window.AcopioDB.addItem(msg.payload).then(async () => {
+            const count = await window.AcopioDB.countByHostname(msg.payload.hostname);
             cb && cb({ ok: true, count });
           });
           return;
         }
         if (msg.type === "CHECK_DUPLICATE") {
           const { hostname, type, data, selector } = msg.payload;
-          window.HarvestDB.findSimilarItem(hostname, type, data, selector).then((similar) => {
+          window.AcopioDB.findSimilarItem(hostname, type, data, selector).then((similar) => {
             cb && cb({ ok: true, similar });
           });
           return;

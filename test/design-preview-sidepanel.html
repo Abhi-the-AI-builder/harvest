@@ -2,12 +2,12 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Harvest design preview — side panel</title>
+    <title>Acopio design preview — side panel</title>
     <link rel="stylesheet" href="../src/sidepanel/sidepanel.css" />
   </head>
   <body>
     <header class="topbar">
-      <div class="icon-row" role="toolbar" aria-label="Harvest controls">
+      <div class="icon-row" role="toolbar" aria-label="Acopio controls">
         <button id="compare-toggle" class="icon-btn" type="button" aria-pressed="false" aria-label="Compare fonts" title="Pair a heading font with a body font"></button>
         <button id="active-toggle" class="icon-btn" type="button" aria-pressed="false" aria-label="Toggle hover-capture" title="Hover-capture is paused — click to resume"></button>
         <button id="density-toggle" class="icon-btn" type="button" aria-pressed="false" aria-label="Expanded view" title="Switch to expanded view"></button>
@@ -119,7 +119,7 @@
       // ---- chrome.* stub (see test/design-preview-tooltip.html for the
       // matching content-script-side stub) ----
       const listeners = { storage: [], runtime: [] };
-      const storageData = { harvestActive: true };
+      const storageData = { acopioActive: true };
       window.chrome = {
         runtime: {
           id: "preview",
@@ -162,13 +162,13 @@
     <script src="../vendor/jszip.min.js"></script>
     <script>
       // Seed a realistic library BEFORE sidepanel.js's own init reads from
-      // HarvestDB, then inject sidepanel.js — guarantees ordering without
+      // AcopioDB, then inject sidepanel.js — guarantees ordering without
       // relying on a reload race.
       (async function seed() {
         // Fresh DB every reload — this is a design preview, not a
         // persistence test, and fixed seed IDs would collide on reload.
         await new Promise((resolve) => {
-          const req = indexedDB.deleteDatabase("harvest-db");
+          const req = indexedDB.deleteDatabase("acopio-db");
           req.onsuccess = resolve;
           req.onerror = resolve;
           req.onblocked = resolve;
@@ -187,14 +187,14 @@
           { id: "i9", type: "image", family: "other", hostname: "linear.app", capturedAt: iso(1.4), sourceUrl: "https://linear.app", sourcePageTitle: "Linear", selector: "img", note: "", data: { url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200'><rect width='300' height='200' fill='%235E6AD2'/><rect x='90' y='60' width='120' height='80' fill='%23fff' opacity='0.25'/></svg>", width: 300, height: 200 } },
           { id: "i10", type: "color", family: "other", hostname: "vercel.com", capturedAt: iso(2), sourceUrl: "https://vercel.com", sourcePageTitle: "Vercel", selector: ".bg", note: "", data: { hex: "#000000" } },
         ];
-        for (const item of items) await HarvestDB.addItem(item);
-        const col = await HarvestDB.createCollection("Q3 moodboard");
-        await HarvestDB.addItemsToCollection(col.id, [
+        for (const item of items) await AcopioDB.addItem(item);
+        const col = await AcopioDB.createCollection("Q3 moodboard");
+        await AcopioDB.addItemsToCollection(col.id, [
           { folderHostname: "stripe.com", itemId: "i1" },
           { folderHostname: "stripe.com", itemId: "i3" },
           { folderHostname: "linear.app", itemId: "i7" },
         ]);
-        await HarvestDB.createCollection("Empty state check");
+        await AcopioDB.createCollection("Empty state check");
 
         const s = document.createElement("script");
         s.src = "../src/sidepanel/sidepanel.js?nocache=" + Date.now();

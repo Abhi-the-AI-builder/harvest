@@ -7,7 +7,7 @@
 // Plain script (importScripts-compatible from the service worker, and
 // loadable via a normal <script> tag from the side panel) — no bundler.
 (function (global) {
-  const DB_NAME = "harvest-db";
+  const DB_NAME = "acopio-db";
   const CURRENT_SCHEMA_VERSION = 1;
   const ITEMS_STORE = "items";
   const COLLECTIONS_STORE = "collections";
@@ -106,7 +106,7 @@
     return Math.sqrt((ar - br) ** 2 + (ag - bg) ** 2 + (ab - bb) ** 2);
   }
 
-  const HarvestDB = {
+  const AcopioDB = {
     /**
      * Adds one item. `item` must already be capture-time sanitized; this
      * function performs the second sanitization pass (Section 9 layer 2)
@@ -441,5 +441,5 @@
     SCHEMA_VERSION: CURRENT_SCHEMA_VERSION,
   };
 
-  global.HarvestDB = HarvestDB;
+  global.AcopioDB = AcopioDB;
 })(typeof self !== "undefined" ? self : window);

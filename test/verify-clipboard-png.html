@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Harvest — clipboard PNG verification</title>
+    <title>Acopio — clipboard PNG verification</title>
     <style>
       body {
         font-family: system-ui, -apple-system, sans-serif;
@@ -43,7 +43,7 @@
   <body>
     <h1>Clipboard PNG verification</h1>
     <p class="intro">
-      Loads Harvest export helpers, resolves a mock component previewImage to PNG bytes,
+      Loads Acopio export helpers, resolves a mock component previewImage to PNG bytes,
       writes <code>image/png</code> to the clipboard, and reports byte counts + MIME types.
       Open this file in Chrome (or load unpacked extension context) and click the buttons.
     </p>
@@ -88,7 +88,7 @@
 
       document.getElementById("btn-resolve").addEventListener("click", async () => {
         clearLog();
-        const H = window.HarvestExportHelpers;
+        const H = window.AcopioExportHelpers;
         try {
           const bytes = await H.resolveExportImageBytes(mockItem);
           const isPng = H.isPngBytes(bytes);
@@ -100,7 +100,7 @@
 
           document.getElementById("preview").src = PNG_1x1;
 
-          const blobs = await window.HarvestCopyHelpers.resolveItemImages(mockItem);
+          const blobs = await window.AcopioCopyHelpers.resolveItemImages(mockItem);
           log(`resolveItemImages: ${blobs.length} blob(s), first=${blobs[0]?.size || 0} bytes`, blobs.length > 0);
         } catch (err) {
           log(`ERROR: ${err.message}`, false);
@@ -110,8 +110,8 @@
       document.getElementById("btn-copy").addEventListener("click", async () => {
         clearLog();
         try {
-          window.HarvestClipboardCopy.limits.minPngBytes = 1;
-          await window.HarvestClipboardCopy.writeClipboardWithFallback([mockItem]);
+          window.AcopioClipboardCopy.limits.minPngBytes = 1;
+          await window.AcopioClipboardCopy.writeClipboardWithFallback([mockItem]);
           log("writeClipboardWithFallback: SUCCESS — clipboard now has image/png only (no competing text)", true);
           log('Paste into Notepad (Win11), Figma, or Slack to verify IMAGE appears, not just text.', null);
         } catch (err) {

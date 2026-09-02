@@ -25,8 +25,8 @@
   };
 
   function getClient() {
-    const url = global.HARVEST_SUPABASE_URL;
-    const key = global.HARVEST_SUPABASE_ANON_KEY;
+    const url = global.ACOPIO_SUPABASE_URL;
+    const key = global.ACOPIO_SUPABASE_ANON_KEY;
     const createClient = global.supabase && global.supabase.createClient;
     if (!url || !key || !createClient) return null;
     if (!client) {
@@ -51,7 +51,7 @@
   }
 
   function supabaseCallbackUrl() {
-    const base = global.HARVEST_SUPABASE_URL;
+    const base = global.ACOPIO_SUPABASE_URL;
     return base ? `${String(base).replace(/\/$/, "")}/auth/v1/callback` : null;
   }
 
@@ -99,7 +99,7 @@
         if (match && match[1]) return match[1].replace(/&amp;/g, "&");
       }
     } catch (err) {
-      console.warn("[Harvest] Couldn't resolve OAuth provider URL, using Supabase authorize URL", err);
+      console.warn("[Acopio] Couldn't resolve OAuth provider URL, using Supabase authorize URL", err);
     }
     return authorizeUrl;
   }
@@ -171,7 +171,7 @@
   }
 
   // "Login via Google" gate in front of Export to Figma/Notion — a Google
-  // sign-in only proves who's using Harvest itself (via Supabase Auth); it
+  // sign-in only proves who's using Acopio itself (via Supabase Auth); it
   // is NOT the same token as, and doesn't substitute for, actually
   // connecting a Figma or Notion account (those are separate OAuth apps,
   // see cloud-oauth.js). No custom redirect page exists for this
@@ -222,11 +222,11 @@
   try {
     const redirectUrl = getExtensionRedirectUrl();
     if (redirectUrl) {
-      console.info("[Harvest] Google sign-in redirect URI (add to Supabase → Authentication → Redirect URLs):", redirectUrl);
+      console.info("[Acopio] Google sign-in redirect URI (add to Supabase → Authentication → Redirect URLs):", redirectUrl);
     }
   } catch (_) {
     // identity permission not yet granted on first install — non-fatal
   }
 
-  global.HarvestSupabase = { getClient, ping, signInWithGoogle, signOut };
+  global.AcopioSupabase = { getClient, ping, signInWithGoogle, signOut };
 })(typeof self !== "undefined" ? self : window);

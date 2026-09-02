@@ -118,7 +118,7 @@ body { display: flex; flex-direction: column; }
 }
 .icon-btn:hover { background: var(--color-bg); color: var(--color-text); }
 .icon-btn[aria-pressed="true"] { background: var(--color-accent-wash); color: var(--color-accent); }
-/* Harvest.ICONS.note is intrinsically 10x10 (sized for the small 18px
+/* Acopio.ICONS.note is intrinsically 10x10 (sized for the small 18px
    note-badge it was originally built for, elsewhere) — every other icon
    in this row is ~15x15, so reused as-is here it read as noticeably
    smaller/harder to see than its neighbors. Forced consistent here rather
@@ -1414,7 +1414,7 @@ button.tile-note-badge:hover, button.tile-note-badge:focus-visible { background:
   background: var(--color-surface); display: flex; flex-direction: column; gap: var(--space-3);
 }
 /* Live-rendered from the user's actual captured font data — deliberately
-   exempt from the type scale above (that scale governs Harvest's own UI
+   exempt from the type scale above (that scale governs Acopio's own UI
    chrome; this text IS the content being compared, so it must show the
    real captured size/weight/line-height or the comparison is meaningless). */
 .compare-sample-heading { font-size: 22px; line-height: 1.2; color: var(--color-text); overflow-wrap: break-word; }

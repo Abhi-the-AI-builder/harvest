@@ -10,7 +10,7 @@
 //
 // Deploy: `supabase functions deploy notion-oauth-exchange`
 // Required env vars (set via `supabase secrets set`):
-//   NOTION_CLIENT_ID      — same value as HARVEST_NOTION_CLIENT_ID in the extension's config.local.js
+//   NOTION_CLIENT_ID      — same value as ACOPIO_NOTION_CLIENT_ID in the extension's config.local.js
 //   NOTION_CLIENT_SECRET  — from notion.so/my-integrations, NEVER put this in the extension itself
 //
 // The extension calls this with only the one-time authorization code and

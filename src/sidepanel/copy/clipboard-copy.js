@@ -1,9 +1,9 @@
 // Clipboard copy — single tile, section copy-all, rich HTML payloads.
 (function () {
-  if (window.HarvestClipboardCopy) return;
+  if (window.AcopioClipboardCopy) return;
 
-  const H = window.HarvestExportHelpers;
-  const CH = window.HarvestCopyHelpers;
+  const H = window.AcopioExportHelpers;
+  const CH = window.AcopioCopyHelpers;
 
   const limits = {
     minPngBytes: 200,
@@ -25,6 +25,32 @@
     return items.some((item) => item.type === "component" || item.type === "image");
   }
 
+  function describeVisualFallback(item, index = 0) {
+    const data = item.data || {};
+    const label = H.itemCopyLabel(item, index);
+    const note = itemUserNote(item);
+    const lines = [label];
+    if (item.type === "image" && data.url) lines.push(data.url);
+    if (item.sourceUrl) lines.push(`Source: ${item.sourceUrl}`);
+    if (item.selector) lines.push(`Selector: ${item.selector}`);
+    if (note) lines.push(note);
+    return lines.join("\n\n");
+  }
+
+  function fontCopyString(data) {
+    let s = `${data.family || "?"}, ${data.weight || "?"}`;
+    if (data.sizePx) s += `, ${data.sizePx}px`;
+    if (data.lineHeightPx) s += ` / ${data.lineHeightPx}px line-height`;
+    return s;
+  }
+
+  function primaryPlainText(item) {
+    const data = item.data || {};
+    if (item.type === "color") return data.hex || "?";
+    if (item.type === "font") return fontCopyString(data);
+    return null;
+  }
+
   function describeItemForCopy(item, index = 0) {
     const data = item.data || {};
     const label = H.itemCopyLabel(item, index);
@@ -37,16 +63,20 @@
       return lines.join("\n\n");
     }
 
-    // Component/image: label only, or label + note — no dimensions or metadata.
+    // Component/image with PNG: label + note only — no dimensions or metadata.
     if (isVisualRasterItem(item)) {
       return note ? `${label}\n\n${note}` : label;
+    }
+
+    if (item.type === "component" || item.type === "image") {
+      return describeVisualFallback(item, index);
     }
 
     const lines = [label];
     if (item.type === "color") {
       lines.push(data.hex || "?");
     } else if (item.type === "font") {
-      lines.push(`${data.family || "?"}, ${data.weight || "?"}`);
+      lines.push(fontCopyString(data));
     } else if (item.type === "pairing") {
       lines.push(`Heading: ${data.headingFamily || "?"} · Body: ${data.bodyFamily || "?"}`);
     }
@@ -54,19 +84,29 @@
     return lines.join("\n\n");
   }
 
+  function plainTextForClipboard(items) {
+    if (items.length === 1) {
+      const item = items[0];
+      const primary = primaryPlainText(item);
+      const note = itemUserNote(item);
+      if (primary) return note ? `${primary}\n\n${note}` : primary;
+    }
+    return items.map((item, i) => describeItemForCopy(item, i)).join("\n\n---\n\n");
+  }
+
   function htmlForItemBody(item, data) {
     const noteText = itemUserNote(item);
     if (noteText) {
-      return `<div>${Harvest.escapeHtml(noteText).replace(/\n/g, "<br>")}</div>`;
+      return `<div>${Acopio.escapeHtml(noteText).replace(/\n/g, "<br>")}</div>`;
     }
     if (item.type === "color") {
-      return `<div>${Harvest.escapeHtml(data.hex || "?")}</div>`;
+      return `<div>${Acopio.escapeHtml(data.hex || "?")}</div>`;
     }
     if (item.type === "font") {
-      return `<div>${Harvest.escapeHtml(`${data.family || "?"}, ${data.weight || "?"}`)}</div>`;
+      return `<div>${Acopio.escapeHtml(fontCopyString(data))}</div>`;
     }
     if (item.type === "pairing") {
-      return `<div>${Harvest.escapeHtml(`Heading: ${data.headingFamily || "?"} · Body: ${data.bodyFamily || "?"}`)}</div>`;
+      return `<div>${Acopio.escapeHtml(`Heading: ${data.headingFamily || "?"} · Body: ${data.bodyFamily || "?"}`)}</div>`;
     }
     return "";
   }
@@ -106,7 +146,7 @@
         }
 
         if (!visual) {
-          html += `<div style="font-weight:600;margin-bottom:8px;">${Harvest.escapeHtml(H.itemCopyLabel(item, i))}</div>`;
+          html += `<div style="font-weight:600;margin-bottom:8px;">${Acopio.escapeHtml(H.itemCopyLabel(item, i))}</div>`;
         }
         html += htmlForItemBody(item, data);
         html += `</div>`;
@@ -158,27 +198,34 @@
     return (await compositeWithLimits(pngBlobs)).blob;
   }
 
-  function assertVisualCopyReady(items, pngBlobs, visualItems) {
-    if (!itemsNeedVisualPng(items)) return;
-
-    const missing = items.filter((item) => {
-      if (item.type !== "component" && item.type !== "image") return false;
-      return !CH.itemHasImage(item);
-    });
-    if (missing.length) throw new Error(NO_SCREENSHOT_MSG);
-
-    if (!pngBlobs.length || pngBlobs.length < visualItems.length) {
-      throw new Error(NO_SCREENSHOT_MSG);
-    }
-  }
-
-  async function buildRichClipboardItem(items) {
-    const textContent = items.map((item, i) => describeItemForCopy(item, i)).join("\n\n---\n\n");
+  async function buildRichClipboardItem(items, opts = {}) {
+    const textContent = opts.visualFallback
+      ? items.map((item, i) => describeVisualFallback(item, i)).join("\n\n---\n\n")
+      : plainTextForClipboard(items);
     const clipboardTypes = {
       "text/plain": new Blob([textContent], { type: "text/plain" }),
     };
     if (shouldIncludeCopyHtml(items)) {
       clipboardTypes["text/html"] = await buildCopyHtml(items);
+    }
+    return new ClipboardItem(clipboardTypes);
+  }
+
+  async function buildColorFontClipboardItem(item) {
+    const textContent = plainTextForClipboard([item]);
+    const clipboardTypes = {
+      "text/plain": new Blob([textContent], { type: "text/plain" }),
+    };
+    if (shouldIncludeCopyHtml([item])) {
+      clipboardTypes["text/html"] = await buildCopyHtml([item]);
+    }
+    const swatchBlobs = await CH.resolveItemImages(item);
+    const swatch = swatchBlobs.find((b) => b && b.size > 0);
+    if (swatch) {
+      const validated = await H.ensureValidPngBlob(swatch);
+      if (validated && validated.size >= limits.minPngBytes) {
+        clipboardTypes["image/png"] = validated;
+      }
     }
     return new ClipboardItem(clipboardTypes);
   }
@@ -193,18 +240,39 @@
   }
 
   async function writeClipboardWithFallback(items) {
+    if (items.length === 1 && (items[0].type === "color" || items[0].type === "font")) {
+      const clipboardItem = await buildColorFontClipboardItem(items[0]);
+      try {
+        await navigator.clipboard.write([clipboardItem]);
+        return { mode: clipboardItem.types.includes("image/png") ? "dual" : "text" };
+      } catch (err) {
+        throw new Error(`Couldn't copy to clipboard: ${String((err && err.message) || err)}`);
+      }
+    }
+
     const { visualItems, pngBlobs } = await collectVisualPngBlobs(items);
 
     if (itemsNeedVisualPng(items)) {
-      assertVisualCopyReady(items, pngBlobs, visualItems);
-      const { blob: pngBlob, usedCount } = await compositeWithLimits(pngBlobs);
+      const canCopyImage = pngBlobs.length > 0 && pngBlobs.length >= visualItems.length;
+      if (canCopyImage) {
+        const { blob: pngBlob, usedCount } = await compositeWithLimits(pngBlobs);
+        try {
+          await writeImageOnlyClipboard(pngBlob);
+          return { mode: "image", usedCount, totalVisual: visualItems.length };
+        } catch (err) {
+          const msg = String((err && err.message) || err);
+          if (!msg.includes("no screenshot") && !msg.includes("Couldn't copy")) {
+            throw new Error(`Couldn't copy to clipboard: ${msg}`);
+          }
+          // fall through to rich-text fallback
+        }
+      }
+      const clipboardItem = await buildRichClipboardItem(items, { visualFallback: true });
       try {
-        await writeImageOnlyClipboard(pngBlob);
-        return { mode: "image", usedCount, totalVisual: visualItems.length };
+        await navigator.clipboard.write([clipboardItem]);
+        return { mode: "text-fallback" };
       } catch (err) {
-        const msg = String((err && err.message) || err);
-        if (msg.includes("no screenshot")) throw err;
-        throw new Error(`Couldn't copy to clipboard: ${msg}`);
+        throw new Error(`Couldn't copy to clipboard: ${String((err && err.message) || err)}`);
       }
     }
 
@@ -234,7 +302,7 @@
     btn.disabled = true;
     try {
       const result = await writeClipboardWithFallback(items);
-      btn.innerHTML = Harvest.ICONS.check;
+      btn.innerHTML = Acopio.ICONS.check;
       setTimeout(() => {
         btn.innerHTML = original;
       }, 1200);
@@ -247,11 +315,16 @@
           `Copied ${items.length} screenshot${items.length === 1 ? "" : "s"}${countNote} — paste into Slack, Figma, or any image field.`,
           "success"
         );
+      } else if (result.mode === "text-fallback") {
+        showFeedback(
+          `Copied ${items.length} item${items.length === 1 ? "" : "s"} as text — screenshot unavailable, so URL and metadata were included.`,
+          "success"
+        );
       } else {
         showFeedback(`Copied ${items.length} item${items.length === 1 ? "" : "s"}.`, "success");
       }
     } catch (err) {
-      console.error("[Harvest] section copy failed:", err);
+      console.error("[Acopio] section copy failed:", err);
       showFeedback(copyErrorMessage(err), "error");
     } finally {
       btn.disabled = false;
@@ -264,17 +337,19 @@
       await writeClipboardWithFallback([item]);
       if (btn) {
         const original = btn.innerHTML;
-        btn.innerHTML = Harvest.ICONS.check;
+        btn.innerHTML = Acopio.ICONS.check;
         setTimeout(() => { btn.innerHTML = original; }, 1200);
       }
     } catch (err) {
-      console.error("[Harvest] item copy failed:", err);
+      console.error("[Acopio] item copy failed:", err);
       showToast(copyErrorMessage(err), null);
     }
   }
 
-  window.HarvestClipboardCopy = {
+  window.AcopioClipboardCopy = {
     describeItemForCopy,
+    plainTextForClipboard,
+    fontCopyString,
     buildCopyHtml,
     buildRichClipboardItem,
     buildVisualPngBlob,

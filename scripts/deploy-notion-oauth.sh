@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy Notion OAuth Edge Function and set server-side secrets.
-# Run from the harvest/ folder after: npx supabase login
+# Run from the acopio/ folder after: npx supabase login
 #
 # Usage:
 #   NOTION_CLIENT_SECRET="secret_..." bash scripts/deploy-notion-oauth.sh
@@ -34,4 +34,4 @@ echo "Setting secrets..."
 npx supabase secrets set "NOTION_CLIENT_ID=${NOTION_CLIENT_ID}"
 npx supabase secrets set "NOTION_CLIENT_SECRET=${NOTION_CLIENT_SECRET}"
 
-echo "Done. Reload the Harvest extension and test Export to Notion."
+echo "Done. Reload the Acopio extension and test Export to Notion."

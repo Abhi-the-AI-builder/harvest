@@ -1,6 +1,6 @@
 {
-  "name": "Harvest Import",
-  "id": "harvest-import-local-dev",
+  "name": "Acopio Import",
+  "id": "acopio-import-local-dev",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "ui.html",

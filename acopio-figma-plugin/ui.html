@@ -11,6 +11,7 @@
     --error: #f24822;
     --error-bg: #fef0ee;
     --radius-sm: 8px;
+    --radius-md: 16px;
   }
 
   * { box-sizing: border-box; }
@@ -32,6 +33,7 @@
     flex-direction: column;
     padding: 16px;
     gap: 12px;
+    overflow-y: auto;
   }
 
   h1 {
@@ -45,6 +47,41 @@
     color: var(--text-muted);
     margin: 0;
     line-height: 1.5;
+  }
+
+  .welcome-card {
+    background: #17181a;
+    color: #ffffff;
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .welcome-card[hidden] { display: none !important; }
+
+  .welcome-eyebrow {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .welcome-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .welcome-body {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.88);
   }
 
   button {
@@ -103,12 +140,18 @@
 </style>
 
 <div class="content">
-  <div>
-    <h1>Harvest Import</h1>
-    <p class="subtitle">Import items copied from the Harvest Chrome extension. Each item becomes a frame with its preview and note.</p>
+  <div id="acopio-welcome" class="welcome-card" hidden>
+    <p class="welcome-eyebrow">Opened from Acopio</p>
+    <p class="welcome-title" id="welcome-title">Export ready</p>
+    <p class="welcome-body" id="welcome-body"></p>
   </div>
 
-  <button class="btn-primary" id="import-btn" type="button">Import from Harvest</button>
+  <div>
+    <h1>Acopio Import</h1>
+    <p class="subtitle">Import items copied from the Acopio Chrome extension. Each item becomes a frame with its preview and note.</p>
+  </div>
+
+  <button class="btn-primary" id="import-btn" type="button">Import from Acopio</button>
   <button class="btn-secondary" id="paste-btn" type="button">Paste from clipboard</button>
 
   <div id="status" role="status" aria-live="polite"></div>
@@ -123,6 +166,9 @@
   const pasteBtn = document.getElementById("paste-btn");
   const closeBtn = document.getElementById("close-btn");
   const statusEl = document.getElementById("status");
+  const welcomeEl = document.getElementById("acopio-welcome");
+  const welcomeTitleEl = document.getElementById("welcome-title");
+  const welcomeBodyEl = document.getElementById("welcome-body");
 
   const SUPPORTED_VERSIONS = [1, 2];
   let importing = false;
@@ -135,7 +181,7 @@
 
   function validatePayload(payload) {
     if (!payload || typeof payload !== "object") {
-      return "Clipboard doesn't contain a Harvest export.";
+      return "Clipboard doesn't contain a Acopio export.";
     }
     if (!SUPPORTED_VERSIONS.includes(payload.version)) {
       return `Unsupported export version (${payload.version ?? "missing"}).`;
@@ -144,6 +190,29 @@
       return "Export has no items to import.";
     }
     return null;
+  }
+
+  function siteCountFor(items) {
+    return new Set(items.map((item) => (item && item.hostname) || "unknown")).size;
+  }
+
+  function showWelcomeForPayload(payload, { autoImporting } = {}) {
+    const count = payload.items.length;
+    const sites = siteCountFor(payload.items);
+    const siteNote = sites > 1 ? ` from ${sites} sites` : "";
+    const scope = payload.scopeLabel ? ` (${payload.scopeLabel})` : "";
+    welcomeTitleEl.textContent = `${count} item${count === 1 ? "" : "s"}${siteNote}${scope}`;
+    if (autoImporting) {
+      welcomeBodyEl.textContent =
+        "Importing from your clipboard now. First time here? Install this plugin once via Plugins → Development → Import plugin from manifest — choose acopio-figma-plugin/manifest.json in the Acopio repo.";
+    } else if (payload.openedFromExtension || payload.autoImport) {
+      welcomeBodyEl.textContent =
+        "Acopio copied your export and opened Figma. Run this plugin once (Plugins → Development → Acopio Import, or ⌘⌥P on Mac). It reads the clipboard automatically — or click Import from Acopio below. First time? Import the plugin from acopio-figma-plugin/manifest.json.";
+    } else {
+      welcomeBodyEl.textContent =
+        "Acopio export found on your clipboard. Click Import from Acopio, or Paste from clipboard if you copied again in the extension.";
+    }
+    welcomeEl.hidden = false;
   }
 
   function setBusy(busy, label) {
@@ -177,14 +246,14 @@
     try {
       const text = await readClipboardText();
       if (!text || !text.trim()) {
-        showError("Clipboard is empty. In Harvest, use Export to Figma first.");
+        showError("Clipboard is empty. In Acopio, use Export to Figma first.");
         return;
       }
       let payload;
       try {
         payload = JSON.parse(text);
       } catch (_) {
-        showError("Clipboard doesn't contain valid Harvest JSON.");
+        showError("Clipboard doesn't contain valid Acopio JSON.");
         return;
       }
       const err = validatePayload(payload);
@@ -192,9 +261,10 @@
         showError(err);
         return;
       }
+      showWelcomeForPayload(payload, { autoImporting: false });
       sendImport(payload);
     } catch (_) {
-      showError("Couldn't read clipboard. Click Paste from clipboard after copying in Harvest.");
+      showError("Couldn't read clipboard. Click Paste from clipboard after copying in Acopio.");
     } finally {
       importBtn.disabled = importing;
       pasteBtn.disabled = importing;
@@ -223,11 +293,13 @@
       } catch (_) {
         return;
       }
-      if (!payload.autoImport) return;
+      if (!payload.autoImport && !payload.openedFromExtension) return;
       const err = validatePayload(payload);
       if (err) return;
-      setStatus("Found Harvest export — importing…");
-      sendImport(payload);
+      showWelcomeForPayload(payload, { autoImporting: Boolean(payload.autoImport) });
+      if (payload.autoImport) {
+        sendImport(payload);
+      }
     } catch (_) {
       // Clipboard denied or empty — user can click Import manually.
     }
@@ -250,6 +322,7 @@
       setBusy(false);
       const skipped = msg.failed ? ` (${msg.failed} skipped)` : "";
       setStatus(`Imported ${msg.imported} item${msg.imported === 1 ? "" : "s"}${skipped}.`, "success");
+      welcomeBodyEl.textContent = `Imported ${msg.imported} item${msg.imported === 1 ? "" : "s"} onto this page.`;
       closeBtn.textContent = "Close";
     } else if (msg.type === "import-error") {
       setBusy(false);
