@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — Harvest</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #fafafa;
+        --text: #1a1a1a;
+        --muted: #666;
+        --accent: #5b21b6;
+        --border: #e5e5e5;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 16px/1.6 system-ui, -apple-system, Segoe UI, sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 48px 24px 96px;
+      }
+      h1 { font-size: 31px; line-height: 1.2; margin: 0 0 8px; }
+      h2 { font-size: 20px; margin: 32px 0 12px; }
+      p, li { margin: 0 0 12px; }
+      ul { padding-left: 24px; }
+      .updated { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+      table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+      th, td { border: 1px solid var(--border); padding: 12px; text-align: left; vertical-align: top; }
+      th { background: #fff; }
+      a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Privacy Policy — Harvest</h1>
+      <p class="updated"><strong>Last updated:</strong> September 1, 2026</p>
+
+      <p>Harvest ("the extension") is a Chrome extension for design research. This policy describes what data the extension handles and how.</p>
+
+      <h2>Summary</h2>
+      <ul>
+        <li>Captured design items (colors, fonts, images, components, notes) are stored <strong>locally in your browser</strong> by default.</li>
+        <li>The extension does <strong>not</strong> sell your data or run advertising analytics.</li>
+        <li>Optional cloud features (Google sign-in, Notion export, Figma account connection) only run when you use them.</li>
+      </ul>
+
+      <h2>Data stored locally</h2>
+      <p>When you collect items, Harvest stores them in <strong>IndexedDB</strong> on your device, inside the extension's own storage. This includes:</p>
+      <ul>
+        <li>Captured design data (hex values, font metrics, image URLs, sanitized HTML, screenshots)</li>
+        <li>Optional notes you add</li>
+        <li>Collections you create</li>
+        <li>Extension preferences (e.g. whether hover-capture is on)</li>
+      </ul>
+      <p>This local data stays on your device unless you export it (ZIP, clipboard, Figma JSON, or Notion).</p>
+
+      <h2>Data sent over the network</h2>
+      <p>Harvest only makes network requests when you are using a feature that requires it:</p>
+      <table>
+        <thead>
+          <tr><th>When</th><th>What is sent</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Browsing any site with capture on</td><td>The extension injects UI into pages you visit; it reads DOM/CSS from elements you hover or select</td><td>Core capture behavior</td></tr>
+          <tr><td>Export to Notion</td><td>Item titles, descriptions, and public image URLs you chose to export</td><td>Create a Notion page you requested</td></tr>
+          <tr><td>Sign in with Google</td><td>OAuth tokens via Supabase Auth</td><td>Verify your Harvest account for cloud export</td></tr>
+          <tr><td>Connect Notion / Figma</td><td>OAuth authorization codes and tokens</td><td>Connect your Notion or Figma account at your request</td></tr>
+          <tr><td>Supabase (auth only)</td><td>Session tokens for Google sign-in</td><td>Keep you signed in between sessions</td></tr>
+        </tbody>
+      </table>
+      <p>Harvest does <strong>not</strong> upload your full local library to the cloud automatically.</p>
+
+      <h2>Third-party services</h2>
+      <p>If you use optional cloud features, these services may process data under their own policies:</p>
+      <ul>
+        <li><strong>Google</strong> — Sign-in (OAuth)</li>
+        <li><strong>Supabase</strong> — Authentication for Harvest sign-in</li>
+        <li><strong>Notion</strong> — Page creation when you export</li>
+        <li><strong>Figma</strong> — Account connection (OAuth); layer creation uses a separate Figma plugin you install manually</li>
+      </ul>
+
+      <h2>Permissions</h2>
+      <p>Harvest requests Chrome permissions needed for its features:</p>
+      <ul>
+        <li><strong>Access to websites you visit</strong> — inject the hover-capture tooltip and read element styles on pages you are researching</li>
+        <li><strong>Storage</strong> — save your library locally</li>
+        <li><strong>Side panel</strong> — show your collected library</li>
+        <li><strong>Identity</strong> — Google, Notion, and Figma sign-in flows</li>
+      </ul>
+
+      <h2>Data retention and deletion</h2>
+      <ul>
+        <li><strong>Local data:</strong> Remove items in the Library, or uninstall the extension to clear local storage.</li>
+        <li><strong>Notion pages:</strong> Managed in your Notion workspace.</li>
+        <li><strong>Auth sessions:</strong> Sign out in the extension, or clear extension data in Chrome settings.</li>
+      </ul>
+
+      <h2>Children's privacy</h2>
+      <p>Harvest is not directed at children under 13.</p>
+
+      <h2>Changes</h2>
+      <p>We may update this policy. The "Last updated" date at the top will change when we do.</p>
+
+      <h2>Contact</h2>
+      <p>For privacy questions about Harvest, open an issue at:<br />
+        <a href="https://github.com/Abhi-the-AI-builder/harvest/issues">https://github.com/Abhi-the-AI-builder/harvest/issues</a>
+      </p>
+    </main>
+  </body>
+</html>
