@@ -28,14 +28,11 @@ panel (the library). That constrains the palette more than a typical app:
   the single interaction a user repeats hundreds of times. Everything else
   (grids, modals, list rows) stays quiet and disciplined, per CRED's
   restraint-everywhere-except-the-signature-moment principle.
-- The brand mark (`icons/icon*.png`) is a warm red/coral mascot. The
-  primary UI accent is a separate, cooler navy. This is a deliberate split,
-  not an oversight: the mascot is playful identity shown in small doses
-  (toolbar drag handle, panel branding); the UI accent is functional and
-  needs to read as calm/professional across hundreds of repeated hovers, so
-  it stays a distinct, quieter navy rather than matching the logo hue
-  1:1 — the same way many products separate an expressive icon from a
-  restrained product-chrome color.
+- The brand mark (`icons/icon*.png`) is a dark rounded-square grid of dots —
+  a quiet "gathering" motif, not a mascot. The primary UI accent is a
+  separate, cooler navy. This is a deliberate split: the icon is identity
+  in small doses (toolbar brand, extension chrome); the UI accent is
+  functional and stays calm/professional across hundreds of repeated hovers.
 
 None of the three AI-default clichés apply: not warm-cream-serif-terracotta,
 not near-black-neon, not broadsheet-hairline-zero-radius.
