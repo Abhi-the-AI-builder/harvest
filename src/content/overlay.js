@@ -1774,7 +1774,39 @@
     canvas.width = bitmap.width;
     canvas.height = bitmap.height;
     canvas.getContext("2d").drawImage(bitmap, 0, 0);
+    bitmap.close();
     return canvasToPngBlob(canvas);
+  }
+  async function dataUrlToPngDataUrl(dataUrl) {
+    if (!dataUrl) return null;
+    if (String(dataUrl).startsWith("data:image/png")) return dataUrl;
+    try {
+      const blob = await urlToPngBlob(dataUrl);
+      if (!blob) return dataUrl;
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (_) {
+      return dataUrl;
+    }
+  }
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  function overlayCopyLabel(tagInfo) {
+    if (tagInfo.type === "component") return "Component 1";
+    if (tagInfo.type === "image") return "Image 1";
+    if (tagInfo.type === "color") return "Color 1";
+    if (tagInfo.type === "font") return "Font 1";
+    return "Item 1";
   }
   function colorSwatchPngBlob(data) {
     const canvas = document.createElement("canvas");
@@ -1888,48 +1920,35 @@
   }
   async function copyForPaste(el, tagInfo, data, btn) {
     try {
+      const note = noteValue.trim();
+      const label = overlayCopyLabel(tagInfo);
       const imageBlob = await resolveCopyImageBlob(tagInfo, data, el);
-      let items;
-      if (imageBlob) {
-        // Image-only when one exists — not bundled alongside text/plain or
-        // text/html anymore. Real, confirmed behavior (not a guess):
-        // reading the clipboard back right after a copy showed all three
-        // formats genuinely present, including a valid, correctly-sized
-        // PNG — the write itself was never the problem. The problem is
-        // that a paste TARGET gets to choose which of several offered
-        // formats to use, and a plain-text-first paste handler (a chat
-        // input's own default, confirmed live: pasting a real captured
-        // component here showed the text description, not the image,
-        // even though the image was sitting right there in the same
-        // clipboard write) will happily take text/plain over image/png
-        // every time both are offered — nothing about how the Clipboard
-        // API works lets the WRITER express "prefer this one." The only
-        // lever actually available here is to stop offering the
-        // competing formats at all when a real image was captured, so an
-        // image-aware target has nothing else to mistakenly prefer. This
-        // does give up the "paste raw HTML into html.to.design" path
-        // specifically for a component that also has a real screenshot —
-        // the deliberate trade, since that's the rarer need and an
-        // available screenshot is the common case.
-        items = { [imageBlob.type || "image/png"]: imageBlob };
+      const isVisual = (tagInfo.type === "component" || tagInfo.type === "image") && imageBlob;
+      const clipboardTypes = {};
+
+      if (isVisual) {
+        clipboardTypes["image/png"] = imageBlob;
+        const plainText = note ? `${label}\n\n${note}` : label;
+        clipboardTypes["text/plain"] = new Blob([plainText], { type: "text/plain" });
+        if (note) {
+          const dataUrl = await blobToDataUrl(imageBlob);
+          const noteHtml = Harvest.escapeHtml(note).replace(/\n/g, "<br>");
+          const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><img src="${dataUrl}" style="max-width:480px;display:block;margin-bottom:8px;" /><div>${noteHtml}</div></body></html>`;
+          clipboardTypes["text/html"] = new Blob([html], { type: "text/html" });
+        }
+      } else if (imageBlob) {
+        clipboardTypes["image/png"] = imageBlob;
+        clipboardTypes["text/plain"] = new Blob([copyDescriptionFor(tagInfo, data, el)], { type: "text/plain" });
+        clipboardTypes["text/html"] = new Blob([copyDescriptionFor(tagInfo, data, el)], { type: "text/html" });
       } else {
-        // No image was ever captured for this element (best-effort,
-        // documented elsewhere — a blocked cross-origin fetch, a
-        // not-yet-resolved screenshot) — the ONLY thing worth pasting is
-        // the text description, so text stays text here, same as always.
         const text = copyDescriptionFor(tagInfo, data, el);
-        items = { "text/plain": new Blob([text], { type: "text/plain" }) };
-        // Component only — the html.to.design workflow (a real Figma
-        // plugin, not Figma's own generic paste handling) accepts pasted
-        // HTML as an input and converts it to genuine editable
-        // layers/Auto Layout inside Figma itself; this is what makes
-        // THAT actually work, by giving it real markup to parse when
-        // there's no screenshot to offer instead.
+        clipboardTypes["text/plain"] = new Blob([text], { type: "text/plain" });
         if (tagInfo.type === "component" && data.outerHTML) {
-          items["text/html"] = new Blob([data.outerHTML], { type: "text/html" });
+          clipboardTypes["text/html"] = new Blob([data.outerHTML], { type: "text/html" });
         }
       }
-      await navigator.clipboard.write([new ClipboardItem(items)]);
+
+      await navigator.clipboard.write([new ClipboardItem(clipboardTypes)]);
       flashCopyFeedback(btn);
     } catch (err) {
       console.error("[Harvest] copy failed:", err);
@@ -2279,8 +2298,53 @@
     }, 2600);
   }
 
+  let isCollectingPreview = false;
+
+  async function inlineImageUrlAtCapture(data) {
+    if (!data || !data.url || data.isVideo || data.inlineDataUrl) return;
+    try {
+      const resp = await fetch(data.url);
+      if (!resp.ok) return;
+      const blob = await resp.blob();
+      data.inlineDataUrl = await blobToDataUrl(blob);
+    } catch (_) {
+      // Export paths can still try the live URL — this is best-effort at collect time.
+    }
+  }
+
+  async function assignPreviewImageAndFinalize(el, tagInfo, data) {
+    isCollectingPreview = true;
+    try {
+      if (tagInfo.type === "component") {
+        // Always take a fresh full-resolution capture at collect time — do not
+        // gate on lastElementCapture matching (that left previewImage unset when
+        // the passive hover preview was stale or missing, breaking sidepanel copy/ZIP).
+        let source = await captureElementScreenshot(el);
+        if (!source && lastElementCapture && lastElementCapture.el === el && lastElementCapture.dataUrl) {
+          source = lastElementCapture.dataUrl;
+        }
+        if (source) {
+          data.previewImage = await dataUrlToPngDataUrl(source);
+        }
+      } else if (tagInfo.type === "image") {
+        await inlineImageUrlAtCapture(data);
+      }
+    } catch (_) {
+      if (tagInfo.type === "component" && lastElementCapture && lastElementCapture.el === el && lastElementCapture.dataUrl) {
+        try {
+          data.previewImage = await dataUrlToPngDataUrl(lastElementCapture.dataUrl);
+        } catch (_) {
+          data.previewImage = lastElementCapture.dataUrl;
+        }
+      }
+    } finally {
+      isCollectingPreview = false;
+    }
+    doFinalize(el, tagInfo, data);
+  }
+
   function onCollectClick() {
-    if (isSaving) return; // a fast double-click must not send two CAPTURE_ITEM messages for one click
+    if (isSaving || isCollectingPreview) return; // a fast double-click must not send two CAPTURE_ITEM messages for one click
     let el = currentTarget;
     let tagInfo = currentTagInfo;
     let data;
@@ -2308,25 +2372,7 @@
       showInlineError("This element changed — try again.");
       return;
     }
-    // Reuse the exact crop the tooltip already showed for this element,
-    // rather than firing a second captureVisibleTab call at collect time —
-    // same image either way, and this one's already paid for.
-    if (tagInfo.type === "component" && lastElementCapture && lastElementCapture.el === el) {
-      data.previewImage = lastElementCapture.dataUrl;
-    }
-    // No size gate here — sanitizeCaptureElement always returns the full
-    // html regardless of size (Harvest.buildCaptureData's oversizeInfo
-    // never actually truncated anything, it only ever fed a "large
-    // section, capture anyway?" confirmation), so that prompt was pure
-    // friction for zero actual protection — removed, a capture always goes
-    // through.
-    // Duplicate status is already shown proactively on hover (the
-    // "Already in your collection" badge — see render()'s own
-    // checkDuplicate call) — before you've clicked anything. Re-running the
-    // same check here and blocking the click behind a second "you already
-    // have this, save anyway?" confirmation just repeated a decision you'd
-    // already effectively made by clicking Collect after seeing that badge.
-    doFinalize(el, tagInfo, data);
+    assignPreviewImageAndFinalize(el, tagInfo, data);
   }
 
   function doFinalize(el, tagInfo, data) {

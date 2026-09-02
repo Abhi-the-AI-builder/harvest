@@ -1,9 +1,11 @@
 .DS_Store
 .env
 .env.*
+src/config.local.js
 *.pem
 *.key
 node_modules/
+supabase/.temp/
 dist/
 .chrome-profile/
 *.crx

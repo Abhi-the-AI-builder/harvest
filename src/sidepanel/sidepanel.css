@@ -393,8 +393,8 @@ body { display: flex; flex-direction: column; }
      could actually fire tile A's neighbor's hidden button instead. */
   opacity: 0; pointer-events: none; transition: opacity var(--ease-fast), background var(--ease-fast), color var(--ease-fast);
 }
-.tile:hover .card-delete-btn, .card:hover .card-delete-btn, .tile .card-delete-btn:focus-visible, .card .card-delete-btn:focus-visible { opacity: 1; pointer-events: auto; }
-.tile .card-delete-btn:hover, .card .card-delete-btn:hover { background: var(--color-danger-wash); color: var(--color-danger); border-color: rgba(195,61,46,0.3); }
+.tile:hover .card-delete-btn, .card:hover .card-delete-btn, .tile .card-delete-btn:focus-visible, .card .card-delete-btn:focus-visible, .tile .card-delete-btn:hover, .card .card-delete-btn:hover { opacity: 1; pointer-events: auto; }
+.tile .card-delete-btn:hover, .card .card-delete-btn:hover { background: var(--color-surface); color: var(--color-danger); border-color: rgba(195,61,46,0.3); }
 
 /* Per-image/component quick download — bottom-left, mirroring delete's
    top-right, hover-only same as delete on individual tiles/cards. Built for
@@ -408,9 +408,24 @@ body { display: flex; flex-direction: column; }
   box-shadow: var(--shadow-raised); opacity: 0; pointer-events: none; cursor: pointer;
   transition: opacity var(--ease-fast), background var(--ease-fast), color var(--ease-fast);
 }
-.tile:hover .card-download-btn, .card:hover .card-download-btn, .folder-card:hover .card-download-btn, .card-download-btn:focus-visible { opacity: 1; pointer-events: auto; }
-.card-download-btn:hover { background: var(--color-accent-wash); color: var(--color-accent); border-color: var(--color-accent); }
+.tile:hover .card-download-btn, .card:hover .card-download-btn, .folder-card:hover .card-download-btn, .card-download-btn:hover, .card-download-btn:focus-visible { opacity: 1; pointer-events: auto; }
+.card-download-btn:hover { background: var(--color-surface); color: var(--color-accent); border-color: var(--color-accent); }
 .card-download-btn svg { width: 12px; height: 12px; }
+
+/* Per-tile copy — bottom-left; when download also exists it sits one slot
+   to the right (see .card-copy-btn-with-download). Icon-only tertiary,
+   hover-only same as download/delete. */
+.card-copy-btn {
+  position: absolute; bottom: 6px; left: 6px; z-index: 3; width: 22px; height: 22px; border-radius: var(--radius-full);
+  background: var(--color-surface); border: 1px solid var(--color-border-strong);
+  display: flex; align-items: center; justify-content: center; color: var(--color-text-muted);
+  box-shadow: var(--shadow-raised); opacity: 0; pointer-events: none; cursor: pointer;
+  transition: opacity var(--ease-fast), background var(--ease-fast), color var(--ease-fast);
+}
+.card-copy-btn-with-download { left: 32px; }
+.tile:hover .card-copy-btn, .card:hover .card-copy-btn, .folder-card:hover .card-copy-btn, .card-copy-btn:hover, .card-copy-btn:focus-visible { opacity: 1; pointer-events: auto; }
+.card-copy-btn:hover { background: var(--color-surface); color: var(--color-accent); border-color: var(--color-accent); }
+.card-copy-btn svg { width: 12px; height: 12px; }
 
 /* "Add a note" — bottom-right, tucked inside the corner the same way
    download sits inset at bottom-left (not hanging off the edge like delete
@@ -428,8 +443,8 @@ body { display: flex; flex-direction: column; }
   box-shadow: var(--shadow-raised); opacity: 0; pointer-events: none; cursor: pointer;
   transition: opacity var(--ease-fast), background var(--ease-fast), color var(--ease-fast);
 }
-.tile:hover .tile-edit-btn, .card:hover .tile-edit-btn, .tile-edit-btn:focus-visible { opacity: 1; pointer-events: auto; }
-.tile-edit-btn:hover { background: var(--color-accent-wash); color: var(--color-accent); border-color: var(--color-accent); }
+.tile:hover .tile-edit-btn, .card:hover .tile-edit-btn, .tile-edit-btn:hover, .tile-edit-btn:focus-visible { opacity: 1; pointer-events: auto; }
+.tile-edit-btn:hover { background: var(--color-surface); color: var(--color-accent); border-color: var(--color-accent); }
 
 /* Select mode toggle + selection checkboxes on item tiles/cards */
 .select-toggle-btn {
@@ -479,7 +494,16 @@ body { display: flex; flex-direction: column; }
   position: sticky; bottom: 0; display: flex; flex-direction: column; gap: var(--space-2);
   padding: var(--space-3) var(--space-4); background: var(--color-text); color: var(--color-surface); font-size: var(--text-caption);
 }
-.select-chips { display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: 2px; }
+.select-chips {
+  display: flex; gap: var(--space-2); overflow-x: auto; overflow-y: hidden;
+  /* Hide the horizontal scrollbar — on Windows its ~17px track was painting
+     over the chip labels (padding-bottom: 2px wasn't enough). Chips still
+     scroll via trackpad/shift-wheel/touch; anything past the cap collapses
+     into the "+N more" chip anyway. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.select-chips::-webkit-scrollbar { display: none; }
 .select-chip {
   display: flex; align-items: center; gap: var(--space-1); flex: none;
   background: rgba(255,255,255,0.12); border-radius: var(--radius-full); padding: 3px var(--space-2) 3px 3px;
@@ -496,15 +520,31 @@ body { display: flex; flex-direction: column; }
 }
 .select-chip-remove:hover { color: #fff; }
 .select-chip-overflow { background: none; color: rgba(255,255,255,0.65); padding: 3px var(--space-1); }
-.select-bar-actions { display: flex; align-items: center; gap: var(--space-3); }
-.select-bar-spacer { flex: 1; }
+.select-bar-actions {
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: nowrap; width: 100%;
+}
+.select-bar-spacer { flex: 1; min-width: 0; }
 .select-bar-btn {
   border: 1px solid rgba(255,255,255,0.25); background: transparent; color: var(--color-surface);
-  border-radius: var(--radius-full); padding: var(--space-2) var(--space-3); font-size: var(--text-caption); font-weight: 600; cursor: pointer;
+  border-radius: var(--radius-sm); padding: 0 var(--space-3); min-height: 36px; font-size: var(--text-caption); font-weight: 600; cursor: pointer;
+  white-space: nowrap; flex: none; display: inline-flex; align-items: center; justify-content: center;
   transition: background var(--ease-fast);
 }
 .select-bar-btn:hover { background: rgba(255,255,255,0.1); }
+.select-bar-btn-with-icon { gap: var(--space-1); padding-left: var(--space-2); padding-right: var(--space-3); }
+.select-bar-btn-icon { display: flex; align-items: center; opacity: 0.9; }
+.select-bar-btn-icon svg { width: 14px; height: 14px; }
+.select-bar-btn-icon-only {
+  width: 36px; min-width: 36px; height: 36px; padding: 0; border-radius: var(--radius-sm);
+}
+.select-bar-btn-icon-only svg { width: 14px; height: 14px; }
 .select-bar-btn-danger { border-color: rgba(238,140,131,0.5); color: #EE8C83; }
+
+/* Item multiselect bar — export stays content-width so "Add to Collection"
+   and delete keep room alongside chips in a narrow side panel. */
+#select-bar .export-split { flex: 0 0 auto; }
+#select-bar .export-primary-btn { flex: 0 0 auto; padding: 0 var(--space-2); }
+#select-bar .select-bar-btn-with-icon { padding-right: var(--space-2); }
 
 /* Pattern 7 (CLAUDE.md) — a split button for the export action instead of
    several same-weight buttons competing in one row. Radius-full pill
@@ -514,17 +554,18 @@ body { display: flex; flex-direction: column; }
    the row, which is what turned every button into a stretched blob. A
    fixed --radius-sm here holds its shape at any width; the extra export
    destinations move into a menu instead of a fourth competing button. */
-.export-split { position: relative; display: flex; align-items: stretch; flex: none; }
+.export-split { position: relative; display: flex; align-items: stretch; flex: 1 1 auto; min-width: 0; overflow: visible; }
 .export-primary-btn {
   border: 1px solid rgba(255,255,255,0.25); border-right: none; background: transparent; color: var(--color-surface);
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm); padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm); padding: 0 var(--space-3); min-height: 36px;
   font-size: var(--text-caption); font-weight: 600; cursor: pointer; white-space: nowrap;
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   transition: background var(--ease-fast);
 }
 .export-primary-btn:hover { background: rgba(255,255,255,0.1); }
 .export-chevron-btn {
   border: 1px solid rgba(255,255,255,0.25); background: transparent; color: var(--color-surface);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0; padding: 0 var(--space-2); cursor: pointer;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0; padding: 0 var(--space-2); min-height: 36px; cursor: pointer;
   display: flex; align-items: center; justify-content: center; flex: none;
   transition: background var(--ease-fast);
 }
@@ -535,17 +576,29 @@ body { display: flex; flex-direction: column; }
    with the chevron hidden, the primary button is the whole control again,
    so it gets its right side back instead of staying visibly cut off. */
 .export-split-solo .export-primary-btn { border-radius: var(--radius-sm); border-right: 1px solid rgba(255,255,255,0.25); }
+/* GitHub-style action menu — fixed positioning (set in JS) so the panel
+   never clips it; white surface, border, two-layer shadow, heading row. */
 .export-menu {
-  position: absolute; bottom: calc(100% + var(--space-2)); right: 0; min-width: 200px;
-  background: var(--color-surface); border-radius: var(--radius-sm); box-shadow: var(--shadow-overlay);
-  padding: var(--space-1); display: flex; flex-direction: column; gap: 1px; z-index: 20;
+  position: fixed; z-index: 500; min-width: 220px; width: max-content;
+  background: var(--color-surface); border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 3px rgba(140,149,159,0.15), 0 8px 24px rgba(27,31,36,0.24);
+  padding: var(--space-2); display: flex; flex-direction: column; gap: var(--space-1);
+}
+.export-menu-heading {
+  margin: 0; padding: var(--space-1) var(--space-2) var(--space-2);
+  font-size: var(--text-caption); font-weight: 600; line-height: 1.3;
+  color: var(--color-text-muted);
 }
 .export-menu-item {
-  border: none; background: none; text-align: left; padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-xs); font-size: var(--text-caption); font-weight: 600; color: var(--color-text);
-  cursor: pointer; white-space: nowrap; transition: background var(--ease-fast);
+  border: none; background: none; text-align: left; width: 100%;
+  padding: var(--space-2) var(--space-3); border-radius: var(--radius-xs);
+  font-size: var(--text-body); font-weight: 500; line-height: 20px; color: var(--color-text);
+  cursor: pointer; white-space: nowrap; font-family: inherit;
+  transition: background var(--ease-fast);
 }
 .export-menu-item:hover { background: var(--color-bg); }
+.export-menu-item:active { background: var(--color-accent-wash); }
 
 /* Lightweight custom confirm modal — never a native window.confirm(),
    same reasoning as the tooltip's size-cap confirm: it froze the tab and
@@ -706,6 +759,17 @@ body { display: flex; flex-direction: column; }
   border: 1px solid var(--color-border-strong);
   box-shadow: 0 1px 3px rgba(140,149,159,0.15), 0 8px 24px rgba(27,31,36,0.24);
 }
+.sp-modal-picker-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); margin-bottom: 8px;
+}
+.sp-modal-picker-header .sp-modal-title { margin-bottom: 0; flex: 1; min-width: 0; }
+.sp-modal-close {
+  flex: none; width: 32px; height: 32px; border: none; border-radius: 6px; background: none;
+  color: var(--color-text-muted); display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; margin: -4px -8px 0 0; transition: background var(--ease-fast), color var(--ease-fast);
+}
+.sp-modal-close:hover { background: var(--color-bg); color: var(--color-text); }
+.sp-modal-close svg { pointer-events: none; }
 .sp-modal-picker .sp-modal-title {
   font-size: 14px; font-weight: 600; line-height: 20px; margin-bottom: 8px;
 }
@@ -713,14 +777,13 @@ body { display: flex; flex-direction: column; }
 .sp-modal-picker .collection-picker-row { padding: 8px 12px; border-radius: 6px; gap: 8px; }
 .sp-modal-picker .collection-picker-name { font-size: 14px; line-height: 20px; }
 .sp-modal-picker .collection-picker-count { font-size: 12px; }
-.sp-modal-picker .collection-picker-new { gap: 8px; margin-top: 8px; }
-.sp-modal-picker .collection-picker-new input { padding: 8px 12px; font-size: 14px; line-height: 20px; border-radius: 6px; }
+.sp-modal-picker .collection-picker-new { gap: 8px; margin-top: 8px; align-items: stretch; }
+.sp-modal-picker .collection-picker-new input { padding: 8px 12px; font-size: 14px; line-height: 20px; border-radius: 6px; min-width: 0; }
 .sp-modal-picker .collection-picker-new input:focus {
   outline: none; border-color: #0969DA; box-shadow: 0 0 0 3px rgba(9,105,218,0.3);
 }
-.sp-modal-picker .collection-picker-new button,
-.sp-modal-picker .sp-modal-cancel {
-  padding: 5px 16px; font-size: 14px; font-weight: 500; line-height: 20px; border-radius: 6px;
+.sp-modal-picker .collection-picker-new button {
+  padding: 5px 16px; font-size: 14px; font-weight: 500; line-height: 20px; border-radius: 6px; flex: none;
 }
 
 /* Undo toast */
@@ -996,7 +1059,14 @@ button.tile-note-badge:hover, button.tile-note-badge:focus-visible { background:
      heading runs straight into the body text as one flat sentence. */
   white-space: pre-line;
 }
-.note-tile-text-expanded { -webkit-line-clamp: unset; }
+/* Dropping -webkit-box when expanded — leaving display:-webkit-box with
+   -webkit-line-clamp:unset still stacks inline children vertically and
+   collapses whitespace text nodes between them, so a split heading
+   ("Deploy custom" + \n + "integrations in days") read as one run-on
+   word ("customintegrationsin"). Normal block flow preserves spaces. */
+.note-tile-text-expanded {
+  display: block; -webkit-line-clamp: unset; -webkit-box-orient: unset; overflow: visible;
+}
 .note-tile-expand-btn {
   display: block; margin-top: var(--space-1); padding: 0; border: none; background: none;
   font-size: 11px; font-weight: 600; color: var(--color-accent); cursor: pointer;
@@ -1189,7 +1259,7 @@ button.tile-note-badge:hover, button.tile-note-badge:focus-visible { background:
   cursor: pointer; box-shadow: var(--shadow-raised); transition: background var(--ease-fast), color var(--ease-fast);
 }
 .note-tile-action-btn svg { width: 12px; height: 12px; }
-.note-tile-action-btn:hover { background: var(--color-accent-wash); color: var(--color-accent); border-color: var(--color-accent); }
+.note-tile-action-btn:hover { background: var(--color-surface); color: var(--color-accent); border-color: var(--color-accent); }
 /* .tile-edit-btn/.card-delete-btn are reused inside .note-tile-actions
    (buildEditBtn/buildDeleteBtn) — neither .tile nor .card wraps a
    .note-tile, so they'd otherwise fall back to .card-delete-btn's base
@@ -1205,8 +1275,8 @@ button.tile-note-badge:hover, button.tile-note-badge:focus-visible { background:
   background: var(--color-surface); border: 1px solid var(--color-border-strong); color: var(--color-text-muted);
   backdrop-filter: none;
 }
-.note-tile-actions .card-delete-btn:hover { background: var(--color-danger-wash); color: var(--color-danger); border-color: rgba(195,61,46,0.3); }
-.note-tile-actions .tile-edit-btn:hover { background: var(--color-accent-wash); color: var(--color-accent); border-color: var(--color-accent); }
+.note-tile-actions .card-delete-btn:hover { background: var(--color-surface); color: var(--color-danger); border-color: rgba(195,61,46,0.3); }
+.note-tile-actions .tile-edit-btn:hover { background: var(--color-surface); color: var(--color-accent); border-color: var(--color-accent); }
 
 .card {
   display: flex; gap: var(--space-3); align-items: center; background: var(--color-surface); border-radius: var(--radius-sm);

@@ -1,11 +1,16 @@
 (function () {
-  // Figma export (both "Export to Figma" and "Export for Figma
-  // Plugin"/"Copy for Figma plugin") is still under active development —
-  // not ready to ship. Flip this back to true locally to keep working on
-  // it; everything it gates (buttons, listeners, the export functions
-  // themselves) stays fully in place either way, this just controls
-  // whether it's reachable from the deployed UI.
-  const ENABLE_FIGMA_EXPORT = false;
+  // Figma's public REST API has no endpoint that creates design nodes —
+  // that only exists via the Plugin API, which is exactly what the
+  // companion harvest-figma-plugin/ in this repo uses:
+  // "Export to Figma" downloads the v2 JSON payload that plugin's code.js
+  // already parses (layoutTree-aware, per-type node building —
+  // buildComponentCardFromTree etc.). This is the real, working path to
+  // actual Figma layers — turned on.
+  const ENABLE_FIGMA_EXPORT = true;
+  // "Download JSON for plugin" — full layoutTree export as a file, for
+  // debugging or manual import. Hidden when false; performPluginJsonExport()
+  // stays wired either way.
+  const ENABLE_FIGMA_PLUGIN_COPY = true;
   const gridEl = document.getElementById("grid");
   const emptyEl = document.getElementById("empty");
   const siteLineEl = document.getElementById("site-line");
@@ -30,8 +35,8 @@
   const selectExportZipBtn = document.getElementById("select-export-zip-btn");
   const selectExportToggleBtn = document.getElementById("select-export-toggle-btn");
   const selectExportMenu = document.getElementById("select-export-menu");
+  const selectExportNotionBtn = document.getElementById("select-export-notion-btn");
   const selectExportFigmaBtn = document.getElementById("select-export-figma-btn");
-  const selectExportPluginBtn = document.getElementById("select-export-plugin-btn");
   const selectExportPluginCopyBtn = document.getElementById("select-export-plugin-copy-btn");
   const selectAddBtn = document.getElementById("select-add-btn");
   const selectRemoveBtn = document.getElementById("select-remove-btn");
@@ -44,8 +49,8 @@
   const libraryExportZipBtn = document.getElementById("library-export-zip-btn");
   const libraryExportToggleBtn = document.getElementById("library-export-toggle-btn");
   const libraryExportMenu = document.getElementById("library-export-menu");
+  const libraryExportNotionBtn = document.getElementById("library-export-notion-btn");
   const libraryExportFigmaBtn = document.getElementById("library-export-figma-btn");
-  const libraryExportPluginBtn = document.getElementById("library-export-plugin-btn");
   const libraryExportPluginCopyBtn = document.getElementById("library-export-plugin-copy-btn");
   const compareViewEl = document.getElementById("compare-view");
   const compareHeadingSelect = document.getElementById("compare-heading-select");
@@ -60,16 +65,16 @@
   compareToggle.innerHTML = Harvest.ICONS.compare;
   collapseBtn.innerHTML = Harvest.ICONS.panel;
 
-  // With Figma export off, the chevron has nothing left to open (all three
-  // of its menu items are Figma destinations) — hiding it rather than
-  // leaving a dropdown that opens empty. .export-split-solo restores the
-  // primary button's own full pill shape (it's normally only rounded on
-  // the left, since the chevron usually continues the pill on the right).
+  // With Figma export off, only its own 3 menu items hide — the chevron
+  // and dropdown themselves stay (Export to Notion is a real, independent
+  // destination now, not gated by this flag). Only fall back to the
+  // full-pill "nothing to open" treatment if Notion ever gets flagged off
+  // too and truly leaves the menu empty.
   if (!ENABLE_FIGMA_EXPORT) {
-    [libraryExportToggleBtn, selectExportToggleBtn].forEach((btn) => { btn.hidden = true; });
-    [libraryExportToggleBtn.closest(".export-split"), selectExportToggleBtn.closest(".export-split")].forEach((el) => {
-      el.classList.add("export-split-solo");
-    });
+    document.querySelectorAll("#library-export-figma-btn, #select-export-figma-btn").forEach((btn) => { btn.hidden = true; });
+  }
+  if (!ENABLE_FIGMA_PLUGIN_COPY) {
+    document.querySelectorAll("#library-export-plugin-copy-btn, #select-export-plugin-copy-btn").forEach((btn) => { btn.hidden = true; });
   }
 
   // Expanded-view density toggle was removed — the Library now always
@@ -380,6 +385,18 @@
     }, 10000);
   }
 
+  const sanitizeFilename = HarvestExportHelpers.sanitizeFilename;
+  let exportContext = null;
+
+  function showExportFeedback(msg, type = "info") {
+    showToast(type === "error" ? `${msg}` : msg, null);
+  }
+
+  const copyDeps = {
+    showFeedback: showExportFeedback,
+    showToast,
+  };
+
   // --- Lightweight custom confirm modal (never native window.confirm) ---
   function showConfirm({ title, body, confirmLabel, onConfirm }) {
     modalRoot.innerHTML = "";
@@ -672,6 +689,38 @@
       onClick();
     });
     return btn;
+  }
+
+  function buildCopyBtn(item) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "card-copy-btn";
+    btn.innerHTML = Harvest.ICONS.copy;
+    btn.setAttribute("aria-label", "Copy this item");
+    btn.title = "Copy";
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      copyOneItem(item, btn);
+    });
+    return btn;
+  }
+
+  function appendTileActionButtons(tile, item) {
+    const hasDownload = item.type === "image" || item.type === "component";
+    const copyBtn = buildCopyBtn(item);
+    if (hasDownload) {
+      copyBtn.classList.add("card-copy-btn-with-download");
+      tile.appendChild(copyBtn);
+      if (item.type === "image") tile.appendChild(buildDownloadBtn(() => downloadOneImage(item)));
+      else tile.appendChild(buildDownloadBtn(() => downloadOneComponent(item), "Download this component"));
+    } else {
+      tile.appendChild(copyBtn);
+    }
+    if (!item.note) tile.appendChild(buildEditBtn(item));
+  }
+
+  async function copyOneItem(item, btn) {
+    await HarvestClipboardCopy.copySingleItem(item, btn, copyDeps);
   }
 
   // Factored out the same way buildDeleteBtn/buildDownloadBtn already are —
@@ -1015,9 +1064,7 @@
       tile.addEventListener("click", () => toggleItemSelected(item, tile));
     } else {
       tile.appendChild(buildDeleteBtn(() => deleteItemFlow(item)));
-      if (item.type === "image") tile.appendChild(buildDownloadBtn(() => downloadOneImage(item)));
-      else if (item.type === "component") tile.appendChild(buildDownloadBtn(() => downloadOneComponent(item), "Download this component"));
-      if (!item.note) tile.appendChild(buildEditBtn(item));
+      appendTileActionButtons(tile, item);
     }
     return tile;
   }
@@ -1126,9 +1173,7 @@
       card.addEventListener("click", () => toggleItemSelected(item, card));
     } else {
       card.appendChild(buildDeleteBtn(() => deleteItemFlow(item)));
-      if (item.type === "image") card.appendChild(buildDownloadBtn(() => downloadOneImage(item)));
-      else if (item.type === "component") card.appendChild(buildDownloadBtn(() => downloadOneComponent(item), "Download this component"));
-      if (!item.note) card.appendChild(buildEditBtn(item));
+      appendTileActionButtons(card, item);
     }
     return card;
   }
@@ -1283,15 +1328,39 @@
     return merged;
   }
 
+  // A heading with a manual <br> (or multiple text nodes) used to produce
+  // several adjacent headingRanges with a \n sitting in the gap between
+  // them. The renderer treated that gap as plain body text, so pre-line
+  // forced an early line break when collapsed and -webkit-box ate the
+  // gap's whitespace when expanded (words ran together). Coalesce any
+  // ranges separated only by whitespace — a real heading→body break always
+  // has non-heading body text after the gap, not another heading range.
+  function mergeAdjacentHeadingRanges(text, headingRanges) {
+    const sorted = (Array.isArray(headingRanges) ? headingRanges : [])
+      .filter((h) => h.start < h.end && h.start >= 0 && h.end <= text.length)
+      .sort((a, b) => a.start - b.start);
+    const merged = [];
+    for (const h of sorted) {
+      const last = merged[merged.length - 1];
+      if (last) {
+        const gap = text.slice(last.end, h.start);
+        if (h.start <= last.end || /^[\s]*$/.test(gap)) {
+          last.end = Math.max(last.end, h.end);
+          continue;
+        }
+      }
+      merged.push({ start: h.start, end: h.end });
+    }
+    return merged;
+  }
+
   // Renders text as a mix of plain text nodes and <mark> spans at the
   // given offsets — the inverse of getTextOffsetIn, and the only place
   // that ever builds a note-tile-text's actual DOM content, so the two
   // stay in sync by construction.
   function renderNoteText(container, text, highlights, headingRanges) {
     container.innerHTML = "";
-    const heads = (Array.isArray(headingRanges) ? headingRanges : [])
-      .filter((h) => h.start < h.end && h.start >= 0 && h.end <= text.length)
-      .sort((a, b) => a.start - b.start);
+    const heads = mergeAdjacentHeadingRanges(text, headingRanges);
     // Appends [from, to) as plain content, splitting further on any
     // heading ranges inside it so text captured from an h1-h6 on the
     // source page renders bold here too — the whole selection used to
@@ -1323,7 +1392,7 @@
         // heading's own span, so this can't touch the actual
         // heading-to-body break (which lives outside any heading range) or
         // shift any offset highlight positions are computed against.
-        strong.textContent = text.slice(hs, he).replace(/\n+/g, " ");
+        strong.textContent = text.slice(hs, he).replace(/[\r\n]+/g, " ");
         container.appendChild(strong);
         cursor = he;
       });
@@ -1761,25 +1830,7 @@
   }
 
   async function copyOneNote(item, btn) {
-    // Was navigator.clipboard.writeText(item.data.text) — plain text only,
-    // dropping images/links/tags/the personal annotation entirely. The
-    // section-level "copy all" (copyAllInSection) already builds a rich
-    // text/plain + text/html ClipboardItem with inline images for the same
-    // note type — this now goes through the identical buildRichClipboardItem
-    // helper with a one-item array, so a single note's own copy button can
-    // never be less complete than copying it as part of a section.
-    try {
-      const clipboardItem = buildRichClipboardItem([item]);
-      await navigator.clipboard.write([clipboardItem]);
-      if (btn) {
-        const original = btn.innerHTML;
-        btn.innerHTML = Harvest.ICONS.check;
-        setTimeout(() => { btn.innerHTML = original; }, 1200);
-      }
-    } catch (err) {
-      console.error("[Harvest] note copy failed:", err);
-      showToast("Couldn't copy — try again.", null);
-    }
+    await HarvestClipboardCopy.copySingleItem(item, btn, copyDeps);
   }
 
   // Text-native equivalent of "Download all" for images (downloadAllImages
@@ -2088,6 +2139,12 @@
         : `${n} sites selected — ${totalItems} item${totalItems === 1 ? "" : "s"}`;
   }
 
+  function clearExportMenuPosition(menuEl) {
+    menuEl.style.left = "";
+    menuEl.style.top = "";
+    menuEl.style.visibility = "";
+  }
+
   function exitFolderSelectMode() {
     folderSelectMode = false;
     selectedFolderHostnames.clear();
@@ -2096,6 +2153,7 @@
     librarySelectBarEl.hidden = true;
     libraryExportMenu.hidden = true;
     libraryExportToggleBtn.setAttribute("aria-expanded", "false");
+    clearExportMenuPosition(libraryExportMenu);
   }
 
   libraryTabsSelectToggle.addEventListener("click", () => {
@@ -2116,27 +2174,54 @@
   function folderSelectionExportContext() {
     const hosts = Array.from(selectedFolderHostnames);
     const items = hosts.flatMap((h) => selectedFolderItemsMap.get(h) || []);
-    const scopeLabel = hosts.length === 1 ? hosts[0] : `${hosts.length} sites`;
-    const scopeKey = hosts.length === 1 ? sanitizeFilename(hosts[0]) : "harvest-export";
-    return { items, allItems: items, scopeKey, scopeLabel };
+    const siteCount = hosts.length;
+    const itemCount = items.length;
+    const itemLabel = `${itemCount} item${itemCount === 1 ? "" : "s"}`;
+    const scopeLabel =
+      siteCount === 1 ? `${hosts[0]} — ${itemLabel}` : `${siteCount} sites, ${itemLabel}`;
+    const scopeKey =
+      siteCount === 1
+        ? sanitizeFilename(hosts[0])
+        : sanitizeFilename(`harvest-export-${siteCount}-sites-${itemCount}-items`);
+    return { items, allItems: items, scopeKey, scopeLabel, siteCount, hosts };
   }
   // Shared open/close wiring for the two export split-button menus (folder
   // selection + item selection) — closes on an outside click or Escape, and
-  // never lets both bars' menus sit open at once.
+  // never lets both bars' menus sit open at once. Menus use position:fixed
+  // (see .export-menu) anchored to the chevron so they aren't clipped by the
+  // narrow split-button flex container.
+  function positionExportMenu(anchorBtn, menuEl) {
+    menuEl.hidden = false;
+    menuEl.style.visibility = "hidden";
+    const margin = 8;
+    const r = anchorBtn.getBoundingClientRect();
+    const menuWidth = menuEl.offsetWidth;
+    const menuHeight = menuEl.offsetHeight;
+    let left = r.right - menuWidth;
+    left = Math.max(margin, Math.min(left, window.innerWidth - menuWidth - margin));
+    let top = r.top - menuHeight - margin;
+    if (top < margin) top = r.bottom + margin;
+    menuEl.style.left = `${left}px`;
+    menuEl.style.top = `${top}px`;
+    menuEl.style.visibility = "";
+  }
   function setupExportMenu(toggleBtn, menuEl) {
     const close = () => {
       menuEl.hidden = true;
       toggleBtn.setAttribute("aria-expanded", "false");
+      clearExportMenuPosition(menuEl);
     };
     toggleBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const willOpen = menuEl.hidden;
       libraryExportMenu.hidden = true;
       libraryExportToggleBtn.setAttribute("aria-expanded", "false");
+      clearExportMenuPosition(libraryExportMenu);
       selectExportMenu.hidden = true;
       selectExportToggleBtn.setAttribute("aria-expanded", "false");
+      clearExportMenuPosition(selectExportMenu);
       if (willOpen) {
-        menuEl.hidden = false;
+        positionExportMenu(toggleBtn, menuEl);
         toggleBtn.setAttribute("aria-expanded", "true");
       }
     });
@@ -2162,23 +2247,23 @@
     exitFolderSelectMode();
     performZipExport();
   });
+  libraryExportNotionBtn.addEventListener("click", () => {
+    if (selectedFolderHostnames.size === 0) return;
+    exportContext = folderSelectionExportContext();
+    exitFolderSelectMode();
+    performNotionExport();
+  });
   libraryExportFigmaBtn.addEventListener("click", () => {
     if (selectedFolderHostnames.size === 0) return;
     exportContext = folderSelectionExportContext();
     exitFolderSelectMode();
-    performFigmaExport();
-  });
-  libraryExportPluginBtn.addEventListener("click", () => {
-    if (selectedFolderHostnames.size === 0) return;
-    exportContext = folderSelectionExportContext();
-    exitFolderSelectMode();
-    performPluginJsonExport();
+    performExportToFigma();
   });
   libraryExportPluginCopyBtn.addEventListener("click", () => {
     if (selectedFolderHostnames.size === 0) return;
     exportContext = folderSelectionExportContext();
     exitFolderSelectMode();
-    performPluginClipboardExport();
+    performPluginJsonExport();
   });
 
   function buildCollectionCard(collection, resolvedItems, mode) {
@@ -2235,6 +2320,23 @@
   }
 
   // --- "Add to Collection" picker ------------------------------------
+  function appendPickerHeader(modal, titleText, onClose) {
+    const header = document.createElement("div");
+    header.className = "sp-modal-picker-header";
+    const title = document.createElement("div");
+    title.className = "sp-modal-title";
+    title.textContent = titleText;
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "sp-modal-close";
+    closeBtn.setAttribute("aria-label", "Close");
+    closeBtn.innerHTML = Harvest.ICONS.close;
+    closeBtn.addEventListener("click", onClose);
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    modal.appendChild(header);
+  }
+
   async function showCollectionPicker(items) {
     const collections = await HarvestDB.getAllCollections();
     modalRoot.innerHTML = "";
@@ -2243,10 +2345,12 @@
     const modal = document.createElement("div");
     modal.className = "sp-modal sp-modal-picker";
 
-    const h = document.createElement("div");
-    h.className = "sp-modal-title";
-    h.textContent = `Add ${items.length} item${items.length === 1 ? "" : "s"} to a Collection`;
-    modal.appendChild(h);
+    const closePicker = () => { modalRoot.innerHTML = ""; };
+    appendPickerHeader(
+      modal,
+      `Add ${items.length} item${items.length === 1 ? "" : "s"} to a Collection`,
+      closePicker
+    );
 
     const list = document.createElement("div");
     list.className = "collection-picker-list";
@@ -2316,19 +2420,8 @@
     newRow.appendChild(createBtn);
     modal.appendChild(newRow);
 
-    const actions = document.createElement("div");
-    actions.className = "sp-modal-actions";
-    actions.style.marginTop = "var(--space-4)";
-    const cancelBtn = document.createElement("button");
-    cancelBtn.type = "button";
-    cancelBtn.className = "sp-modal-cancel";
-    cancelBtn.textContent = "Cancel";
-    cancelBtn.addEventListener("click", () => { modalRoot.innerHTML = ""; });
-    actions.appendChild(cancelBtn);
-    modal.appendChild(actions);
-
     overlay.appendChild(modal);
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) modalRoot.innerHTML = ""; });
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) closePicker(); });
     modalRoot.appendChild(overlay);
   }
 
@@ -2414,6 +2507,7 @@
     updateSelectBar();
     selectExportMenu.hidden = true;
     selectExportToggleBtn.setAttribute("aria-expanded", "false");
+    clearExportMenuPosition(selectExportMenu);
   }
   selectExportZipBtn.addEventListener("click", () => {
     if (selectedItems.size === 0) return;
@@ -2421,23 +2515,23 @@
     exitSelectModeAfterExport();
     performZipExport();
   });
+  selectExportNotionBtn.addEventListener("click", () => {
+    if (selectedItems.size === 0) return;
+    exportContext = itemSelectionExportContext();
+    exitSelectModeAfterExport();
+    performNotionExport();
+  });
   selectExportFigmaBtn.addEventListener("click", () => {
     if (selectedItems.size === 0) return;
     exportContext = itemSelectionExportContext();
     exitSelectModeAfterExport();
-    performFigmaExport();
-  });
-  selectExportPluginBtn.addEventListener("click", () => {
-    if (selectedItems.size === 0) return;
-    exportContext = itemSelectionExportContext();
-    exitSelectModeAfterExport();
-    performPluginJsonExport();
+    performExportToFigma();
   });
   selectExportPluginCopyBtn.addEventListener("click", () => {
     if (selectedItems.size === 0) return;
     exportContext = itemSelectionExportContext();
     exitSelectModeAfterExport();
-    performPluginClipboardExport();
+    performPluginJsonExport();
   });
 
   selectRemoveBtn.addEventListener("click", () => {
@@ -2886,717 +2980,83 @@
     modalRoot.appendChild(overlay);
   }
 
-  // --- Export flow (Section 7F) -------------------------------------------
-  // The separate full-screen Export view (a per-folder include/exclude
-  // checklist, a split ZIP/Figma/handoff-sheet button) is gone — ZIP and
-  // Figma each trigger directly from wherever you selected items (the
-  // Sites-grid folder bar, or the item-select bar), so there's no scope-
-  // narrowing screen or handoff-sheet PNG option anymore, on purpose.
-  let exportContext = null; // { items, allItems, scopeKey, scopeLabel } for whichever export just ran
-
-  function sanitizeFilename(name) {
-    // Section 9's export guardrail: a hostname/collection name is
-    // attacker-controllable in theory, so it must never be trusted raw as
-    // a filesystem path segment — strip path-traversal and null bytes.
-    return String(name).replace(/[/\\:*?"<>|]+/g, "-").replace(/\.\./g, "-").replace(/\x00/g, "").trim().slice(0, 80) || "untitled";
-  }
-
-  // Both export actions trigger directly from a select bar now, never from
-  // a dedicated export screen — feedback always goes through the same
-  // toast every other action in this panel (delete, add-to-collection)
-  // already uses, not a status line on a screen that no longer exists.
-  function showExportFeedback(msg, type = "info") {
-    showToast(type === "error" ? `${msg}` : msg, null);
-  }
-
-  async function performZipExport() {
-    if (!exportContext || exportContext.items.length === 0) {
-      showExportFeedback("Nothing to export in this scope.", "error");
-      return;
-    }
-    showExportFeedback("Building ZIP…");
-    try {
-      const zip = new JSZip();
-      const byHost = new Map();
-      for (const item of exportContext.items) {
-        const key = sanitizeFilename(item.hostname || "unknown");
-        if (!byHost.has(key)) byHost.set(key, []);
-        byHost.get(key).push(item);
-      }
-      // No manifest.txt index file anymore — every item now writes its own
-      // descriptively-named file(s) instead, so the filename itself (plus,
-      // where the filename can't carry everything, the file's own content)
-      // is the record. Colors/fonts previously had NO real file at all
-      // (manifest.txt was their only trace) — colorSwatchPngBlobSP/
-      // fontSamplePngBlobSP already exist (built for the clipboard-copy
-      // export below) and are reused verbatim here instead of writing a
-      // second swatch generator.
-      for (const [hostKey, hostItems] of byHost) {
-        const folder = zip.folder(hostKey);
-        for (const item of hostItems) {
-          const id6 = item.id.slice(0, 6);
-          if (item.type === "color") {
-            const hex = (item.data.hex || "color").replace("#", "").toUpperCase();
-            const noteSlug = item.note ? `-${sanitizeFilename(item.note.slice(0, 30))}` : "";
-            const blob = await colorSwatchPngBlobSP(item.data);
-            folder.file(`color-${hex}${noteSlug}-${id6}.png`, blob);
-          } else if (item.type === "pairing") {
-            const heading = sanitizeFilename(item.data.headingFamily || "heading");
-            const body = sanitizeFilename(item.data.bodyFamily || "body");
-            const lines = [`Heading font: ${item.data.headingFamily || "?"}`, `Body font: ${item.data.bodyFamily || "?"}`];
-            if (item.note) lines.push(`Note: ${item.note}`);
-            folder.file(`pairing-${heading}-${body}-${id6}.txt`, lines.join("\n"));
-          } else if (item.type === "font") {
-            const family = sanitizeFilename(item.data.family || "font");
-            const size = item.data.sizePx ? `${item.data.sizePx}px` : "";
-            const base = `font-${family}${size ? "-" + size : ""}-${id6}`;
-            const blob = await fontSamplePngBlobSP(item.data);
-            folder.file(`${base}.png`, blob);
-            const lines = [
-              `Family: ${item.data.family || "?"}`,
-              `Weight: ${item.data.weight || "?"}`,
-              `Size: ${item.data.sizePx ? item.data.sizePx + "px" : "?"}`,
-            ];
-            if (item.note) lines.push(`Note: ${item.note}`);
-            folder.file(`${base}.txt`, lines.join("\n"));
-          } else if (item.type === "image") {
-            const dims = item.data.width && item.data.height ? `${item.data.width}x${item.data.height}` : "size-unknown";
-            const desc = sanitizeFilename(item.selector || "image");
-            // Best-effort fetch at export time (Section 8 explicitly
-            // allows this) — falls back to a link-only .txt file on CORS
-            // failure, so the URL/note aren't lost even without a real
-            // image file.
-            let fetched = false;
-            if (item.data.url) {
-              try {
-                const resp = await fetch(item.data.url);
-                if (resp.ok) {
-                  const blob = await resp.blob();
-                  const ext = (item.data.format || "jpg").split("?")[0].replace(/[^a-z0-9]/gi, "") || "jpg";
-                  folder.file(`image-${desc}-${dims}-${id6}.${ext}`, blob);
-                  fetched = true;
-                }
-              } catch (_) {
-                // fall through to link-only
-              }
-            }
-            if (!fetched) {
-              const lines = [`Link: ${item.data.url || "no URL"}`, `Size: ${dims}`];
-              if (item.note) lines.push(`Note: ${item.note}`);
-              folder.file(`image-${desc}-${dims}-link-only-${id6}.txt`, lines.join("\n"));
-            }
-          } else if (item.type === "note") {
-            // Was missing entirely — a note in an exported scope (a mixed
-            // Collection, a multi-select including notes) fell through
-            // every branch above and contributed nothing: no file, no
-            // manifest line, while the export still reported "N items
-            // exported" as if it had. Reuses noteTextBlockFor/
-            // noteFilenameFor (already build the descriptive slug + full
-            // Markdown body used by the single-note download) rather than
-            // a second, divergent format, and best-effort fetches the
-            // note's own captured images as real files.
-            const noteFilename = noteFilenameFor(item);
-            folder.file(noteFilename, noteTextBlockFor(item));
-            if (Array.isArray(item.data.images)) {
-              const noteBase = noteFilename.replace(/\.md$/, "");
-              for (let i = 0; i < item.data.images.length; i++) {
-                try {
-                  const resp = await fetch(item.data.images[i]);
-                  if (resp.ok) {
-                    const blob = await resp.blob();
-                    const ext = (blob.type.split("/")[1] || "jpg").split("+")[0];
-                    folder.file(`${noteBase}-img${i + 1}.${ext}`, blob);
-                  }
-                } catch (_) {
-                  // one image failing to fetch shouldn't drop the note's text
-                }
-              }
-            }
-          } else if (item.type === "component") {
-            const dims = item.data.boundingBoxWidth && item.data.boundingBoxHeight
-              ? `${item.data.boundingBoxWidth}x${item.data.boundingBoxHeight}` : "size-unknown";
-            const desc = sanitizeFilename(item.selector || "component");
-            const base = `component-${desc}-${dims}-${id6}`;
-            // The real screenshot (captureElementPreview, overlay.js) is
-            // exactly what the tooltip and Library tile showed for this
-            // component — a handoff export that only shipped the raw HTML
-            // and left that out would be missing the one thing that made
-            // this capture recognizable at a glance. The note used to only
-            // live in manifest.txt — now it travels with the file itself,
-            // as a leading HTML comment.
-            const noteComment = item.note ? `<!-- Note: ${item.note.replace(/-->/g, "--\\>")} -->\n` : "";
-            folder.file(`${base}.html`, noteComment + (item.data.outerHTML || ""));
-            if (item.data.previewImage && item.data.previewImage.startsWith("data:image/jpeg;base64,")) {
-              folder.file(`${base}.jpg`, item.data.previewImage.split(",")[1], { base64: true });
-            }
-          }
-        }
-      }
-      const blob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${exportContext.scopeKey}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      showExportFeedback(`ZIP downloaded — ${exportContext.items.length} item${exportContext.items.length === 1 ? "" : "s"}.`, "success");
-    } catch (err) {
-      // Section 8: "Zip generation or browser download gets blocked →
-      // catch and surface a retry option, don't fail silently."
-      showExportFeedback(`Export failed: ${String((err && err.message) || err)}. Try again?`, "error");
-    }
-  }
-  async function performFigmaExport() {
-    const colors = exportContext ? exportContext.items.filter((i) => i.type === "color") : [];
-    if (colors.length === 0) {
-      showExportFeedback("No colors in this scope to copy.", "error");
-      return;
-    }
-    const swatch = 80, gap = 16;
-    const width = colors.length * (swatch + gap) - gap;
-    const height = swatch + 30;
-    let rects = "";
-    colors.forEach((c, i) => {
-      const x = i * (swatch + gap);
-      const hex = (c.data.hex || "#cccccc").replace(/[^#0-9a-fA-F]/g, "");
-      rects += `<rect x="${x}" y="0" width="${swatch}" height="${swatch}" rx="8" fill="${hex}"/>`;
-      rects += `<text x="${x}" y="${swatch + 18}" font-size="11" font-family="Inter, sans-serif" fill="#333333">${hex}</text>`;
-    });
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${rects}</svg>`;
-    try {
-      await navigator.clipboard.writeText(svg);
-      showExportFeedback(`Copied ${colors.length} color${colors.length === 1 ? "" : "s"} — paste directly into a Figma canvas.`, "success");
-    } catch (err) {
-      showExportFeedback(`Couldn't copy to clipboard: ${String((err && err.message) || err)}`, "error");
-    }
-  }
-
-  // --- Export-time asset inlining (images + SVG icon rasterization) ------
-  // content.js's capture pass is synchronous (it hooks directly into
-  // overlay.js's hover/collect flow), so it can only capture raw material
-  // for icons/images — the SVG markup itself, its resolved `currentColor`,
-  // the image URL — never fetch or rasterize anything. This export path is
-  // already fully async, so it's where that raw material actually becomes
-  // an inlineDataUrl the plugin can hand straight to figma.createImage(),
-  // instead of the plugin falling back to a flat gray placeholder for
-  // every icon and network-blocked image.
-  function svgMarkupToPngDataUrl(svgMarkup, resolvedColor, width, height) {
+  // --- Export / copy (src/sidepanel/export/, src/sidepanel/copy/) ---------
+  function showNotionPagePicker(pages) {
     return new Promise((resolve) => {
-      try {
-        const resolvedMarkup = resolvedColor ? svgMarkup.replace(/currentColor/g, resolvedColor) : svgMarkup;
-        const scale = 2; // rasterize above captured size for a crisp Figma fill
-        const w = Math.max(1, Math.round((width || 24) * scale));
-        const h = Math.max(1, Math.round((height || 24) * scale));
-        const svgUrl = URL.createObjectURL(new Blob([resolvedMarkup], { type: "image/svg+xml" }));
-        const img = new Image();
-        img.onload = () => {
-          try {
-            const canvas = document.createElement("canvas");
-            canvas.width = w;
-            canvas.height = h;
-            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL("image/png"));
-          } catch (_) {
-            resolve(undefined);
-          } finally {
-            URL.revokeObjectURL(svgUrl);
-          }
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(svgUrl);
-          resolve(undefined);
-        };
-        img.src = svgUrl;
-      } catch (_) {
-        resolve(undefined);
+      modalRoot.innerHTML = "";
+      const overlay = document.createElement("div");
+      overlay.className = "sp-modal-overlay";
+      const modal = document.createElement("div");
+      modal.className = "sp-modal sp-modal-picker";
+      const closePicker = () => { modalRoot.innerHTML = ""; resolve(null); };
+      appendPickerHeader(modal, "Export to which Notion page?", closePicker);
+      const list = document.createElement("div");
+      list.className = "collection-picker-list";
+      if (pages.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "sp-modal-body";
+        empty.textContent = 'No pages are shared with Harvest yet — open Notion, share a page with the "Harvest" integration, then try again.';
+        list.appendChild(empty);
       }
-    });
-  }
-  async function inlineImageUrlSP(node) {
-    if (!node.url) return;
-    try {
-      const resp = await fetch(node.url);
-      if (!resp.ok) return;
-      const contentType = resp.headers.get("content-type") || "";
-      if (contentType.includes("svg") || /\.svg(\?|#|$)/i.test(node.url)) {
-        // An <img src="*.svg">/<video poster="*.svg"> icon — figma.createImage()
-        // only ever accepts raster bytes (PNG/JPEG), never raw SVG XML, so
-        // this needs the same canvas rasterization real icon-placeholder
-        // leaves already get below, not a plain blob-to-dataURL inline (that
-        // would hand code.js an unusable SVG-flavored "PNG" that
-        // figma.createImage silently rejects). Confirmed live: a real
-        // Next.js <img src="/icons/arrow-right.svg"> button icon produced
-        // exactly that — a permanently-broken inlineDataUrl, always falling
-        // back to the gray placeholder. An externally-referenced SVG loaded
-        // via <img>/<video poster> can never inherit the page's CSS anyway
-        // (a real browser limitation, not something lost here) — no
-        // resolvedColor substitution needed, unlike an inline <svg>.
-        const svgText = await resp.text();
-        const dataUrl = await svgMarkupToPngDataUrl(svgText, null, node.width, node.height);
-        if (dataUrl) node.inlineDataUrl = dataUrl;
-        return;
-      }
-      const blob = await resp.blob();
-      node.inlineDataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
+      pages.forEach((p) => {
+        const row = document.createElement("div");
+        row.className = "collection-picker-row";
+        const icon = document.createElement("div");
+        icon.className = "collection-picker-icon";
+        icon.innerHTML = Harvest.ICONS.folder;
+        row.appendChild(icon);
+        const text = document.createElement("div");
+        text.className = "collection-picker-text";
+        const name = document.createElement("div");
+        name.className = "collection-picker-name";
+        name.textContent = p.title;
+        text.appendChild(name);
+        row.appendChild(text);
+        row.addEventListener("click", () => { modalRoot.innerHTML = ""; resolve(p.id); });
+        list.appendChild(row);
       });
-    } catch (_) {
-      // fall through — plugin falls back to a placeholder for this leaf
-    }
-  }
-  async function inlineTreeAssets(node) {
-    if (!node || typeof node !== "object") return;
-    if (node.kind === "image" && node.url) {
-      await inlineImageUrlSP(node);
-    } else if (node.kind === "icon-placeholder" && node.svgMarkup) {
-      const dataUrl = await svgMarkupToPngDataUrl(node.svgMarkup, node.resolvedColor, node.width, node.height);
-      if (dataUrl) node.inlineDataUrl = dataUrl;
-    }
-    if (Array.isArray(node.children)) {
-      await Promise.all(node.children.map(inlineTreeAssets));
-    }
-  }
-
-  // A single self-contained JSON file for the companion Figma plugin
-  // (harvest-figma-plugin, a separate project) to import — deliberately
-  // NOT the same shape as the human-readable ZIP export above, which only
-  // ever wrote color/font items as one manifest.txt line each with no real
-  // per-item file. The plugin needs every item's actual structured data to
-  // create real Figma nodes (a rectangle for a color, styled text for a
-  // font, an image fill for a photo), not a line of prose to re-parse.
-  // Images are fetched and inlined as base64 here (the plugin's own
-  // manifest declares networkAccess: none, so it can't fetch anything
-  // itself at import time) — same best-effort/fall-through-on-CORS-
-  // failure approach the ZIP export already uses; a failed fetch just
-  // leaves that one item's image blank rather than failing the export.
-  // Shared by both consumers below (the file-download export and the new
-  // clipboard-copy export) — building the payload (fetching/inlining every
-  // image and icon asset) is the expensive, identical part; only what
-  // happens to the finished JSON afterward differs.
-  async function buildPluginJsonPayload() {
-    const items = await Promise.all(
-      exportContext.items.map(async (item) => {
-        const out = {
-          id: item.id,
-          type: item.type,
-          family: item.family,
-          hostname: item.hostname,
-          sourceUrl: item.sourceUrl,
-          note: item.note || "",
-          data: { ...item.data },
-        };
-        delete out.data.__sanitizeResult; // internal-only, never meant to leave content.js
-        if (item.type === "image" && item.data.url && !item.data.isVideo) {
-          // Same fetch-and-inline logic the layoutTree leaves use below
-          // (inlineImageUrlSP already handles the SVG-source case
-          // correctly — figma.createImage() only accepts raster bytes,
-          // so a directly-collected SVG icon/illustration needs the same
-          // rasterization, not a raw blob-to-dataURL inline).
-          await inlineImageUrlSP(out.data);
-        }
-        if (item.type === "component" && out.data.layoutTree) {
-          await inlineTreeAssets(out.data.layoutTree);
-        }
-        return out;
-      })
-    );
-    return {
-      version: 2, // v2: component items carry data.layoutTree (a nested Auto-Layout-aware tree) instead of the old flat data.layers array
-      exportedAt: new Date().toISOString(),
-      scopeLabel: exportContext.scopeLabel,
-      items,
-    };
-  }
-
-  async function performPluginJsonExport() {
-    if (!exportContext || exportContext.items.length === 0) {
-      showExportFeedback("Nothing to export in this scope.", "error");
-      return;
-    }
-    showExportFeedback("Building export…");
-    try {
-      const payload = await buildPluginJsonPayload();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${exportContext.scopeKey}-figma-plugin.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      showExportFeedback(`Exported ${payload.items.length} item${payload.items.length === 1 ? "" : "s"} — import this file in the Harvest Figma plugin.`, "success");
-    } catch (err) {
-      showExportFeedback(`Export failed: ${String((err && err.message) || err)}. Try again?`, "error");
-    }
-  }
-
-  // The clipboard-bridge alternative to the file download above — same
-  // payload, written as plain text instead of downloaded, so the Harvest
-  // Figma plugin's own "Paste from clipboard" button can read it straight
-  // back out with no file to save/find/re-open. Plain navigator.clipboard
-  // writeText (not a multi-format ClipboardItem the way a single
-  // component's copy-for-paste is) because a whole multi-item export
-  // doesn't have one sensible flat image to represent it — pasting this
-  // text into anything other than the Harvest plugin just shows raw JSON,
-  // which is expected: this format exists for the plugin to read, not for
-  // general sharing (copyForPaste in overlay.js already covers "copy one
-  // component as a shareable image").
-  async function performPluginClipboardExport() {
-    if (!exportContext || exportContext.items.length === 0) {
-      showExportFeedback("Nothing to export in this scope.", "error");
-      return;
-    }
-    showExportFeedback("Building export…");
-    try {
-      const payload = await buildPluginJsonPayload();
-      await navigator.clipboard.writeText(JSON.stringify(payload));
-      showExportFeedback(
-        `Copied ${payload.items.length} item${payload.items.length === 1 ? "" : "s"} — open the Harvest Figma plugin and paste.`,
-        "success"
-      );
-    } catch (err) {
-      showExportFeedback(`Couldn't copy to clipboard: ${String((err && err.message) || err)}`, "error");
-    }
-  }
-
-  // --- Item grid (shared by per-site view and collection-detail) --------
-  // Grouped by type (Colors / Fonts / Images / Components), each its own
-  // labeled section — the flat mixed grid this replaced put every capture
-  // type in one undifferentiated pile with nothing distinguishing them
-  // beyond the small corner chip, which read as a dump rather than a
-  // collected, organized set (design-extractor's own per-site view groups
-  // the same way). Images get a "Download all" action on their section
-  // header, so grabbing every photo from a site doesn't require a detour
-  // through the separate Export view for the same items.
-  // --- Copy-all-in-section --------------------------------------------
-  // Same "paste into Figma/Claude/docs" clipboard payload the tooltip's
-  // own per-item copy button builds (overlay.js's copyForPaste), just
-  // built from the already-stored item.data instead of a live page
-  // element — the library only ever has the captured snapshot, no DOM to
-  // re-read. One real navigator.clipboard.write() call carrying one
-  // ClipboardItem per item in the section: a paste target that accepts
-  // multiple items (Figma takes several pasted images/nodes at once)
-  // gets all of them, one that only reads the first still gets a
-  // genuinely usable single result, not an error.
-  function canvasToPngBlobSP(canvas) {
-    return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-  }
-  async function urlToPngBlobSP(url) {
-    const res = await fetch(url);
-    const srcBlob = await res.blob();
-    if (srcBlob.type === "image/png") return srcBlob;
-    const bitmap = await createImageBitmap(srcBlob);
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    canvas.getContext("2d").drawImage(bitmap, 0, 0);
-    return canvasToPngBlobSP(canvas);
-  }
-  function colorSwatchPngBlobSP(data) {
-    const canvas = document.createElement("canvas");
-    canvas.width = 320;
-    canvas.height = 200;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = data.hex || "#cccccc";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    return canvasToPngBlobSP(canvas);
-  }
-  function fontSamplePngBlobSP(data) {
-    const canvas = document.createElement("canvas");
-    canvas.width = 480;
-    canvas.height = 160;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#17181A";
-    const size = Math.min(data.sizePx || 32, 72);
-    ctx.font = `${data.weight || 400} ${size}px ${data.fallbackStack || "sans-serif"}`;
-    ctx.textBaseline = "middle";
-    ctx.fillText((data.sampleText || data.family || "Aa").slice(0, 24) || "Aa", 16, canvas.height / 2);
-    return canvasToPngBlobSP(canvas);
-  }
-  // Best-effort — a blocked cross-origin fetch or a component that never
-  // got a screenshot just means no image half of that one item's copy,
-  // not a failure of the whole section.
-  async function resolveItemImageBlobSP(item) {
-    const data = item.data || {};
-    try {
-      if (item.type === "color") return await colorSwatchPngBlobSP(data);
-      if (item.type === "font") return await fontSamplePngBlobSP(data);
-      if (item.type === "image" && (data.inlineDataUrl || data.url)) return await urlToPngBlobSP(data.inlineDataUrl || data.url);
-      if (item.type === "component" && data.previewImage) return await urlToPngBlobSP(data.previewImage);
-    } catch (_) {
-      // fall through to null
-    }
-    return null;
-  }
-  function describeItemForCopySP(item) {
-    const data = item.data || {};
-    const src = item.sourceUrl || "";
-    // The personal annotation (item.note — set via the pencil/edit button,
-    // separate from a note-type item's own captured text) was missing from
-    // every branch below — copying a component you'd annotated "use this
-    // for the hero redesign" silently dropped that note from the paste.
-    // The ZIP export (performZipExport) already appends it to every
-    // manifest line; this brings the clipboard copy path to parity.
-    const myNote = item.note ? `\nMy note: ${item.note}` : "";
-    if (item.type === "color") {
-      const gradientNote = data.isGradient ? ` (gradient: ${data.gradientStops})` : "";
-      return `Color: ${data.hex || "?"}${gradientNote}\nFrom: ${src}${myNote}`;
-    }
-    if (item.type === "font") {
-      const lh = data.lineHeightPx ? `/${Math.round(data.lineHeightPx)}px` : "";
-      return `Font: ${data.family}, ${data.weight}, ${Math.round(data.sizePx || 0)}px${lh}\nSample: "${data.sampleText || ""}"\nFrom: ${src}${myNote}`;
-    }
-    if (item.type === "image") {
-      // isVideo only ever covers the <video>-tag GIF-replacement pattern
-      // (content.js's own comment on that field). A real, reported gap:
-      // the far more common Pinterest case — an actual animated .gif FILE
-      // served through a plain <img> tag, no <video> involved anywhere —
-      // has isVideo:false (correctly, there's genuinely no video element)
-      // but was still just labeled plain "Image", with no way to tell it
-      // was animated without opening it. data.format already holds the
-      // real file extension (content.js computes it from the URL at
-      // capture time) — checking it here costs nothing new, no extra
-      // field, no capture-time change needed.
-      const isGif = data.isVideo || String(data.format || "").toLowerCase() === "gif";
-      const gifNote = isGif ? " (GIF)" : "";
-      return `Image: ${Math.round(data.width || 0)}×${Math.round(data.height || 0)}px${gifNote}\n${data.url || ""}\nFrom: ${src}${myNote}`;
-    }
-    if (item.type === "note") {
-      // Without this branch a note would fall through into the
-      // component-shaped code below and read data.layoutTree/data.layers,
-      // neither of which exist on a note — the text itself IS the content.
-      // A note's own "My note" is already appended by noteTextBlockFor
-      // elsewhere — myNote here still applies since it's item.note (the
-      // separate annotation field), not the captured text.
-      const mediaNote = [
-        data.images && data.images.length ? `${data.images.length} image${data.images.length === 1 ? "" : "s"}` : null,
-        data.links && data.links.length ? `${data.links.length} link${data.links.length === 1 ? "" : "s"}` : null,
-        data.truncated ? "truncated at capture" : null,
-      ]
-        .filter(Boolean)
-        .join(", ");
-      // Tags were the one field noteTextBlockFor (the .md download) already
-      // carried that this copy path didn't — same gap class as myNote above.
-      const tagsNote =
-        Array.isArray(item.tags) && item.tags.length
-          ? `\nTags: ${item.tags.map((key) => (NOTE_TAGS.find((t) => t.key === key) || {}).label || key).join(", ")}`
-          : "";
-      return `${data.text || ""}${mediaNote ? `\n(${mediaNote})` : ""}\nFrom: ${src}${tagsNote}${myNote}`;
-    }
-    // Components carry a structured layoutTree (see content.js's
-    // extractComponentLayers) — a quick kind tally is a real, honest
-    // summary of what's in the paste, same spirit as the tooltip's own
-    // "Contains:" line, just without a live element to walk here.
-    // data.layers is the old flat shape from before the tree rewrite —
-    // still read as a fallback so an export made before that change
-    // keeps working exactly as it did.
-    const leaves = data.layoutTree
-      ? Harvest.flattenComponentTree(data.layoutTree)
-      : Array.isArray(data.layers)
-      ? data.layers
-      : [];
-    const kinds = [...new Set(leaves.map((l) => l.kind))];
-    const containsNote = kinds.length ? `\nContains: ${kinds.join(", ")}` : "";
-    return `Component: ${Math.round(data.boundingBoxWidth || 0)}×${Math.round(data.boundingBoxHeight || 0)}px${containsNote}\nFrom: ${src}${myNote}`;
-  }
-  // Checked synchronously so the caller knows, per item, whether it's
-  // worth trying to fetch an image at all. A note counts too now — its
-  // "image" isn't a rendered swatch/sample but real captured <img> URLs
-  // (extractMediaFromRange, notes.js).
-  function itemHasImageSP(item) {
-    const data = item.data || {};
-    if (item.type === "color" || item.type === "font") return true;
-    if (item.type === "image") return Boolean(data.inlineDataUrl || data.url);
-    if (item.type === "component") return Boolean(data.previewImage);
-    if (item.type === "note") return Array.isArray(data.images) && data.images.length > 0;
-    return false;
-  }
-  // Plural — a note can carry several captured images, everything else
-  // carries at most one. Best-effort per URL: one blocked cross-origin
-  // fetch just means that one image is skipped, not a failure of the
-  // whole item's copy.
-  async function resolveItemImagesSP(item) {
-    const data = item.data || {};
-    const blobs = [];
-    try {
-      if (item.type === "color") {
-        const b = await colorSwatchPngBlobSP(data);
-        if (b) blobs.push(b);
-      } else if (item.type === "font") {
-        const b = await fontSamplePngBlobSP(data);
-        if (b) blobs.push(b);
-      } else if (item.type === "image" && (data.inlineDataUrl || data.url)) {
-        const b = await urlToPngBlobSP(data.inlineDataUrl || data.url);
-        if (b) blobs.push(b);
-      } else if (item.type === "component" && data.previewImage) {
-        const b = await urlToPngBlobSP(data.previewImage);
-        if (b) blobs.push(b);
-      } else if (item.type === "note" && Array.isArray(data.images)) {
-        // Capped at 3 — a note showing 5 image chips is a real capture,
-        // but embedding all 5 as base64 in one clipboard payload risks a
-        // multi-megabyte paste for what's meant to be a quick reference.
-        for (const url of data.images.slice(0, 3)) {
-          try {
-            const b = await urlToPngBlobSP(url);
-            if (b) blobs.push(b);
-          } catch (_) {
-            // skip this one image, keep going
-          }
-        }
-      }
-    } catch (_) {
-      // fall through to whatever was already collected
-    }
-    return blobs;
-  }
-  function blobToDataUrlSP(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
+      modal.appendChild(list);
+      overlay.appendChild(modal);
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) closePicker(); });
+      modalRoot.appendChild(overlay);
     });
   }
-  // Builds the text/html representation for a multi-item copy — each
-  // item's description as a line, its image(s) (if any) inline right
-  // after as real <img> tags with base64 data: sources. A target that
-  // reads rich clipboard content (Figma, Docs, most browser editors) gets
-  // the actual images; a target that only reads plain text (Notepad) just
-  // sees the text/plain sibling representation instead — same ClipboardItem,
-  // two representations of it, the browser picks whichever the paste
-  // target actually supports.
-  async function buildCopyHtmlSP(items) {
-    // Global cap across the WHOLE multi-item copy, not just per-item —
-    // without it, "copy all" on a section with several image-heavy notes
-    // could try to fetch+re-encode dozens of images sequentially, and
-    // navigator.clipboard.write()'s own returned promise doesn't resolve
-    // until every payload Promise it was given has settled — so the
-    // button would sit disabled with no feedback for however long that
-    // took, worst case tens of seconds for a large section.
-    const MAX_TOTAL_IMAGES = 6;
-    // Budgets decided synchronously, up front, one pass — NOT inside the
-    // parallel per-item work below. Checking a shared "remaining" counter
-    // from inside several already-started async callbacks is a real race:
-    // every item's callback runs synchronously up to its first `await`,
-    // so all of them would read the same pre-decrement "remaining" value
-    // and each think it had the full budget, overshooting the cap. Fixed
-    // budgets up front means the parallel fetch below can't race on it.
-    let remaining = MAX_TOTAL_IMAGES;
-    const budgets = items.map((item) => {
-      if (!itemHasImageSP(item) || remaining <= 0) return 0;
-      const take = Math.min(remaining, item.type === "note" ? 3 : 1);
-      remaining -= take;
-      return take;
+
+  function performZipExport() {
+    return HarvestZipExport.performZipExport(exportContext, {
+      showFeedback: showExportFeedback,
+      noteFilenameFor,
+      noteTextBlockFor,
     });
-    // Parallel across items (each item's own images still resolve one at
-    // a time inside it) — navigator.clipboard.write() already fired
-    // before this function's caller even awaits it, so this only affects
-    // how long the paste target waits for real image data, not whether
-    // the click itself stays responsive; still worth not serializing
-    // unnecessarily across items that don't depend on each other at all.
-    const parts = await Promise.all(
-      items.map(async (item, i) => {
-        const desc = Harvest.escapeHtml(describeItemForCopySP(item)).replace(/\n/g, "<br>");
-        let html = `<div style="margin-bottom:12px;">${desc}`;
-        if (budgets[i] > 0) {
-          try {
-            const blobs = (await resolveItemImagesSP(item)).slice(0, budgets[i]);
-            for (const blob of blobs) {
-              try {
-                const dataUrl = await blobToDataUrlSP(blob);
-                html += `<br><img src="${dataUrl}" style="max-width:400px;display:block;margin-top:6px;" />`;
-              } catch (_) {
-                // skip this one image, keep going
-              }
-            }
-          } catch (_) {
-            // resolveItemImagesSP itself failed for this item — the text
-            // description above is still valid, don't lose it over this
-          }
-        }
-        html += `</div>`;
-        return html;
-      })
-    );
-    return new Blob([parts.join("")], { type: "text/html" });
   }
-  // ONE ClipboardItem, not one per item — Chrome's clipboard.write()
-  // reliably supports a single ClipboardItem per call; an array of several
-  // was the actual bug in an earlier version of the section-copy code
-  // (failed the same way on a 2-item section and an 8-item one alike,
-  // regardless of what was inside each item's payload). That one
-  // ClipboardItem still carries BOTH a text/plain and a text/html
-  // representation — the real, standard way rich copy works (this is how
-  // Docs/Notion/Figma-style "copy" is actually implemented): plain text for
-  // a target like Notepad that only reads text/plain, real inline images
-  // for a target that reads text/html. Shared by both the section-level
-  // "copy all" and the single-item per-tile copy button below — a single
-  // note's own copy button used to just do navigator.clipboard.writeText
-  // (text only, no images/links/tags/annotation), which was a genuine gap:
-  // the exact same item copied via "copy all" in its section came out
-  // fuller than copied on its own. Same code path now, so a single item's
-  // copy can never be less complete than a multi-item one.
-  function buildRichClipboardItem(items) {
-    const textPromise = Promise.resolve(
-      new Blob([items.map((item) => describeItemForCopySP(item)).join("\n\n---\n\n")], { type: "text/plain" })
-    );
-    const htmlPromise = buildCopyHtmlSP(items);
-    return new ClipboardItem({ "text/plain": textPromise, "text/html": htmlPromise });
+
+  function performNotionExport() {
+    return HarvestNotionExport.performNotionExport(exportContext, {
+      showFeedback: showExportFeedback,
+      showNotionPagePicker,
+    });
   }
+
+  function performExportToFigma() {
+    return HarvestFigmaExport.performExportToFigma(exportContext, {
+      showFeedback: showExportFeedback,
+    });
+  }
+
+  function performPluginJsonExport() {
+    return HarvestFigmaExport.performPluginJsonExport(exportContext, {
+      showFeedback: showExportFeedback,
+    });
+  }
+
+  function performPluginClipboardExport() {
+    return HarvestFigmaExport.performPluginClipboardExport(exportContext, {
+      showFeedback: showExportFeedback,
+    });
+  }
+
   function copyAllInSection(items, btn) {
-    if (items.length === 0) {
-      showExportFeedback("Nothing to copy in this section.", "error");
-      return;
-    }
-    const original = btn.innerHTML;
-    btn.disabled = true;
-    // Everything synchronous below (describeItemForCopySP over every
-    // item, `new ClipboardItem`, `navigator.clipboard.write`) is wrapped
-    // in this try — any of those CAN throw synchronously (a malformed
-    // item, ClipboardItem/Clipboard API unavailable in this context,
-    // an invalid MIME key) and previously did so OUTSIDE any try/catch
-    // here, which is a real dead-end bug: the exception would propagate
-    // straight out of this function, .then()/.catch()/.finally() below
-    // would never run, and the button would stay disabled=true forever
-    // with zero feedback — a silently broken control, not just a failed
-    // copy. Wrapping the setup means every failure path, sync or async,
-    // now reaches the same catch/finally and always resets the button.
-    try {
-      // Both payload values inside buildRichClipboardItem are Promises, so
-      // write() itself still fires synchronously here, before any of the
-      // async image fetching starts — keeps the click's user-activation
-      // window from expiring first.
-      const clipboardItem = buildRichClipboardItem(items);
-      navigator.clipboard.write([clipboardItem]).then(handleCopySuccess).catch(handleCopyFailure).finally(resetCopyBtn);
-    } catch (err) {
-      handleCopyFailure(err);
-      resetCopyBtn();
-    }
-    function resetCopyBtn() {
-      btn.disabled = false;
-    }
-    function handleCopyFailure(err) {
-      console.error("[Harvest] section copy failed:", err);
-      showExportFeedback("Couldn't copy this section — try again.", "error");
-    }
-    function handleCopySuccess() {
-      btn.innerHTML = Harvest.ICONS.check;
-      setTimeout(() => {
-        btn.innerHTML = original;
-      }, 1200);
-      showExportFeedback(
-        `Copied ${items.length} item${items.length === 1 ? "" : "s"} — paste into Figma, Claude, or docs.`,
-        "success"
-      );
-    }
+    HarvestClipboardCopy.copyAllInSection(items, btn, copyDeps);
   }
 
   const TYPE_SECTION_LABEL = { color: "Colors", font: "Fonts", image: "Images", component: "Components", note: "Notes" };

@@ -3,8 +3,8 @@
   "name": "Harvest — Design Research Collector",
   "version": "0.1.0",
   "description": "Hover any element on any site to collect colors, fonts, images, and components into a per-site design research library.",
-  "permissions": ["activeTab", "tabs", "storage", "unlimitedStorage", "contextMenus", "sidePanel", "favicon"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": ["activeTab", "tabs", "storage", "unlimitedStorage", "contextMenus", "sidePanel", "favicon", "identity", "clipboardWrite"],
+  "host_permissions": ["<all_urls>", "https://api.figma.com/*", "https://www.figma.com/*", "https://api.notion.com/*"],
   "background": {
     "service_worker": "src/background.js"
   },

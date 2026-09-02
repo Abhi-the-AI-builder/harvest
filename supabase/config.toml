@@ -1,0 +1,8 @@
+# Minimal Supabase project config for Edge Function deploys.
+project_id = "cpzqpmjyshxxpmxsqfni"
+
+[api]
+enabled = true
+
+[functions.notion-oauth-exchange]
+verify_jwt = false

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Harvest — verify recent fixes</title>
+    <link rel="stylesheet" href="../src/sidepanel/sidepanel.css" />
+    <style>
+      body { padding: 24px; max-width: 960px; margin: 0 auto; font-family: system-ui, sans-serif; }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      .section { margin: 32px 0; padding: 16px; border: 1px solid #e5e5e5; border-radius: 12px; }
+      .section h2 { font-size: 16px; margin: 0 0 12px; }
+      .pass { color: #1E8F72; font-weight: 600; }
+      .fail { color: #C33D2E; font-weight: 600; }
+      pre { background: #f6f6f6; padding: 12px; border-radius: 8px; overflow: auto; font-size: 12px; }
+      .folder-card-demo { width: 200px; position: relative; }
+      #results { margin-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>Harvest fix verification</h1>
+    <p>Automated checks for export/copy modules + visual fixtures for CSS fixes.</p>
+
+    <div class="section" id="zip-section">
+      <h2>ZIP export — components as .png</h2>
+      <div id="zip-results"></div>
+    </div>
+
+    <div class="section" id="copy-section">
+      <h2>Copy — image then note order</h2>
+      <div id="copy-results"></div>
+    </div>
+
+    <div class="section" id="notion-section">
+      <h2>Notion — component image blocks</h2>
+      <div id="notion-results"></div>
+    </div>
+
+    <div class="section" id="note-heading-section">
+      <h2>Note heading — collapsed vs expanded</h2>
+      <div class="note-tile" style="max-width: 360px;">
+        <div class="note-tile-body">
+          <div class="note-tile-text" id="note-collapsed">
+            <span class="note-tile-heading-text">Deploy custom</span>
+            integrations in days
+          </div>
+        </div>
+      </div>
+      <p style="font-size:12px;color:#666;">Collapsed (3-line clamp)</p>
+      <div class="note-tile" style="max-width: 360px; margin-top: 16px;">
+        <div class="note-tile-body">
+          <div class="note-tile-text note-tile-text-expanded" id="note-expanded">
+            <span class="note-tile-heading-text">Deploy custom</span>
+            integrations in days
+          </div>
+        </div>
+      </div>
+      <p style="font-size:12px;color:#666;">Expanded (block flow, word spacing preserved)</p>
+    </div>
+
+    <div class="section" id="download-hover-section">
+      <h2>Folder card — download button direct hover</h2>
+      <button class="folder-card folder-card-demo" type="button" id="folder-demo">
+        <div class="folder-cover" style="height: 140px; background: #EDEAFB; border-radius: 16px; position: relative;">
+          <button class="card-download-btn" type="button" id="dl-btn" style="opacity:1;pointer-events:auto;" aria-label="Download">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 2.5v7.5"/><path d="M5 7.5 8 10.5 11 7.5"/><path d="M3.5 12.5h9"/></svg>
+          </button>
+        </div>
+      </button>
+      <p style="font-size:12px;color:#666;">Hover the download button — icon should stay solid white on accent background.</p>
+    </div>
+
+    <div id="results"></div>
+
+    <script src="../src/content/shared.js"></script>
+    <script src="../vendor/jszip.min.js"></script>
+    <script src="../src/sidepanel/export/export-helpers.js"></script>
+    <script src="../src/sidepanel/export/zip-export.js"></script>
+    <script src="../src/sidepanel/export/notion-export.js"></script>
+    <script src="../src/sidepanel/copy/copy-helpers.js"></script>
+    <script src="../src/sidepanel/copy/clipboard-copy.js"></script>
+    <script>
+      const results = [];
+
+      function log(id, ok, msg) {
+        const el = document.getElementById(id);
+        const p = document.createElement("p");
+        p.className = ok ? "pass" : "fail";
+        p.textContent = (ok ? "PASS: " : "FAIL: ") + msg;
+        el.appendChild(p);
+        results.push({ ok, msg });
+      }
+
+      // 1x1 red PNG data URL for mock component preview
+      const PNG_1x1 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+      async function testZipComponentPng() {
+        const mockItem = {
+          id: "comp-abc123",
+          type: "component",
+          hostname: "example.com",
+          selector: "div.hero",
+          data: { previewImage: PNG_1x1, boundingBoxWidth: 100, boundingBoxHeight: 50 },
+          note: "Test component note",
+        };
+        const zip = new JSZip();
+        const folder = zip.folder("example-com");
+        const notedVisuals = [];
+        await HarvestZipExport.ZIP_WRITERS.component(folder, mockItem, notedVisuals);
+        const files = Object.keys(folder.files).filter((k) => !k.endsWith("/"));
+        const hasPng = files.some((f) => f.endsWith(".png"));
+        const hasHtml = files.some((f) => f.endsWith(".html"));
+        log("zip-results", hasPng && !hasHtml, `component exports as .png (${files.join(", ")})`);
+        if (notedVisuals.length) {
+          const rtf = await HarvestZipExport.buildNotedVisualsRtf(notedVisuals);
+          const hasImage = rtf.includes("\\jpegblip") || rtf.includes("\\pngblip");
+          const hasNote = rtf.includes("Test component note");
+          log("zip-results", hasImage && hasNote, "notes-with-images.rtf has embedded image + note text");
+        }
+      }
+
+      function testCopyOrder() {
+        const item = {
+          type: "component",
+          data: { previewImage: PNG_1x1, family: "Inter" },
+          note: "My annotation",
+        };
+        const text = HarvestClipboardCopy.describeItemForCopy(item, 0);
+        const lines = text.split("\n\n");
+        const noteIdx = lines.indexOf("My annotation");
+        const hasLabelFirst = lines[0] === "Component 1";
+        log("copy-results", hasLabelFirst && noteIdx === 1, "plain text: label first, note second (no metadata)");
+        log("copy-results", !text.includes("×") && !text.includes("px"), "plain text has no dimensions metadata");
+
+        const itemNoNote = {
+          type: "component",
+          data: { previewImage: PNG_1x1 },
+        };
+        const textOnly = HarvestClipboardCopy.describeItemForCopy(itemNoNote, 0);
+        log("copy-results", textOnly === "Component 1", "no-note copy: label only");
+      }
+
+      async function testNotionBlocks() {
+        const item = {
+          id: "c1",
+          type: "component",
+          data: { previewImage: PNG_1x1 },
+          note: "Notion note",
+        };
+        // Stub chrome.runtime for upload
+        if (!window.chrome) window.chrome = {};
+        chrome.runtime = {
+          sendMessage: async () => ({ ok: true, fileUploadId: "upload-test-id" }),
+        };
+        const blocks = await HarvestNotionExport.buildNotionBlocksForItems([item]);
+        const imageBlock = blocks.find((b) => b.type === "image" && b.image && b.image.type === "file_upload");
+        log("notion-results", !!imageBlock, "component produces Notion image block with file_upload");
+        log("notion-results", imageBlock && imageBlock.image.file_upload.id === "upload-test-id", "image block has upload id");
+      }
+
+      function testNoteHeadingCss() {
+        const collapsed = document.getElementById("note-collapsed");
+        const expanded = document.getElementById("note-expanded");
+        const collapsedDisplay = getComputedStyle(collapsed).display;
+        const expandedDisplay = getComputedStyle(expanded).display;
+        log("results", collapsedDisplay.includes("box") || collapsedDisplay === "-webkit-box", "collapsed uses -webkit-box clamp");
+        log("results", expandedDisplay === "block", "expanded uses display:block");
+      }
+
+      Promise.all([testZipComponentPng(), testNotionBlocks()]).then(() => {
+        testCopyOrder();
+        testNoteHeadingCss();
+        const passed = results.filter((r) => r.ok).length;
+        const total = results.length;
+        const summary = document.createElement("p");
+        summary.innerHTML = `<strong>Summary: ${passed}/${total} checks passed</strong>`;
+        document.getElementById("results").appendChild(summary);
+      });
+    </script>
+  </body>
+</html>

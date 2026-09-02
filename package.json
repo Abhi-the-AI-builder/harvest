@@ -1,0 +1,33 @@
+{
+  "name": "harvest",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "build:store": "bash scripts/build-store-zip.sh",
+    "supabase:deploy-notion": "supabase functions deploy notion-oauth-exchange",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Abhi-the-AI-builder/harvest.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Abhi-the-AI-builder/harvest/issues"
+  },
+  "homepage": "https://github.com/Abhi-the-AI-builder/harvest#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "supabase": "^2.116.0"
+  }
+}

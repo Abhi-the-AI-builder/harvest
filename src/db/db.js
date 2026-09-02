@@ -70,6 +70,31 @@
     return `${ref.folderHostname}|${ref.itemId}`;
   }
 
+  function stamp(record) {
+    if (record && typeof record === "object") {
+      record.updatedAt = new Date().toISOString();
+    }
+  }
+
+  function notifyCloud() {
+    try {
+      if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({ type: "CLOUD_NOTIFY" }).catch(() => {});
+      }
+    } catch (_) {
+      /* tests / plain pages — no extension runtime */
+    }
+  }
+
+  async function readTombstones(store) {
+    const row = await promisifyRequest(store.get("cloudTombstones"));
+    return row && Array.isArray(row.entries) ? row.entries : [];
+  }
+
+  async function writeTombstones(store, entries) {
+    await promisifyRequest(store.put({ key: "cloudTombstones", entries }));
+  }
+
   function hexDistance(hexA, hexB) {
     if (!hexA || !hexB) return Infinity;
     const clean = (h) => h.replace("#", "").padStart(6, "0");
@@ -92,9 +117,11 @@
     async addItem(item) {
       if (!item.id) throw new Error("item.id is required");
       if (!item.hostname) throw new Error("item.hostname is required");
+      if (!item.updatedAt) stamp(item);
       const t = await tx([ITEMS_STORE], "readwrite");
       const store = t.objectStore(ITEMS_STORE);
       await promisifyRequest(store.add(item));
+      notifyCloud();
       return item;
     },
 
@@ -120,7 +147,9 @@
       const item = await promisifyRequest(store.get(id));
       if (!item) return null;
       item.note = note;
+      stamp(item);
       await promisifyRequest(store.put(item));
+      notifyCloud();
       return item;
     },
 
@@ -135,7 +164,9 @@
       if (!item) return null;
       item.data = item.data || {};
       item.data.tags = tags;
+      stamp(item);
       await promisifyRequest(store.put(item));
+      notifyCloud();
       return item;
     },
 
@@ -151,7 +182,9 @@
       if (!item) return null;
       item.data = item.data || {};
       item.data.highlights = highlights;
+      stamp(item);
       await promisifyRequest(store.put(item));
+      notifyCloud();
       return item;
     },
 
@@ -169,7 +202,9 @@
       if (!item || item.type !== "image" || !item.data) return null;
       item.data.width = width;
       item.data.height = height;
+      stamp(item);
       await promisifyRequest(store.put(item));
+      notifyCloud();
       return item;
     },
 
@@ -192,13 +227,19 @@
      * if the user clicks undo. Returns null if the item didn't exist.
      */
     async deleteItem(id) {
-      const t = await tx([ITEMS_STORE, COLLECTIONS_STORE], "readwrite");
+      const t = await tx([ITEMS_STORE, COLLECTIONS_STORE, META_STORE], "readwrite");
       const itemsStore = t.objectStore(ITEMS_STORE);
       const collectionsStore = t.objectStore(COLLECTIONS_STORE);
 
       const item = await promisifyRequest(itemsStore.get(id));
       if (!item) return null;
       await promisifyRequest(itemsStore.delete(id));
+
+      const metaStore = t.objectStore(META_STORE);
+      const tombstones = await readTombstones(metaStore);
+      const next = tombstones.filter((e) => !(e.kind === "item" && e.id === id));
+      next.push({ kind: "item", id, deletedAt: new Date().toISOString() });
+      await writeTombstones(metaStore, next);
 
       const allCollections = await promisifyRequest(collectionsStore.getAll());
       const affectedCollections = [];
@@ -213,14 +254,23 @@
           await promisifyRequest(collectionsStore.put(col));
         }
       }
+      notifyCloud();
       return { item, affectedCollections };
     },
 
     /** Undo for deleteItem — puts the item back AND restores its membership in every collection it was removed from. */
     async restoreItem(item, affectedCollectionIds) {
-      const t = await tx([ITEMS_STORE, COLLECTIONS_STORE], "readwrite");
+      const t = await tx([ITEMS_STORE, COLLECTIONS_STORE, META_STORE], "readwrite");
       const itemsStore = t.objectStore(ITEMS_STORE);
+      stamp(item);
       await promisifyRequest(itemsStore.put(item));
+
+      const metaStore = t.objectStore(META_STORE);
+      const tombstones = await readTombstones(metaStore);
+      await writeTombstones(
+        metaStore,
+        tombstones.filter((e) => !(e.kind === "item" && e.id === item.id))
+      );
 
       const collectionsStore = t.objectStore(COLLECTIONS_STORE);
       for (const colId of affectedCollectionIds || []) {

@@ -485,10 +485,11 @@
           <button id="library-export-toggle-btn" class="export-chevron-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More export options">
             <svg viewBox="0 0 12 8" width="10" height="7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1.5 6 6.5 11 1.5"/></svg>
           </button>
-          <div id="library-export-menu" class="export-menu" hidden role="menu">
+          <div id="library-export-menu" class="export-menu" hidden role="menu" aria-labelledby="library-export-menu-heading">
+            <p id="library-export-menu-heading" class="export-menu-heading">More export options</p>
+            <button id="library-export-notion-btn" class="export-menu-item" type="button" role="menuitem">Export to Notion</button>
             <button id="library-export-figma-btn" class="export-menu-item" type="button" role="menuitem">Export to Figma</button>
-            <button id="library-export-plugin-btn" class="export-menu-item" type="button" role="menuitem">Export for Figma Plugin</button>
-            <button id="library-export-plugin-copy-btn" class="export-menu-item" type="button" role="menuitem">Copy for Figma plugin</button>
+            <button id="library-export-plugin-copy-btn" class="export-menu-item" type="button" role="menuitem">Download JSON for plugin</button>
           </div>
         </div>
       </div>
@@ -499,20 +500,27 @@
     <div id="select-bar" class="select-bar" hidden>
       <div id="select-chips" class="select-chips"></div>
       <div class="select-bar-actions">
-        <span class="select-bar-spacer"></span>
         <div class="export-split">
           <button id="select-export-zip-btn" class="export-primary-btn" type="button">Export as ZIP</button>
           <button id="select-export-toggle-btn" class="export-chevron-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More export options">
             <svg viewBox="0 0 12 8" width="10" height="7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1.5 6 6.5 11 1.5"/></svg>
           </button>
-          <div id="select-export-menu" class="export-menu" hidden role="menu">
+          <div id="select-export-menu" class="export-menu" hidden role="menu" aria-labelledby="select-export-menu-heading">
+            <p id="select-export-menu-heading" class="export-menu-heading">More export options</p>
+            <button id="select-export-notion-btn" class="export-menu-item" type="button" role="menuitem">Export to Notion</button>
             <button id="select-export-figma-btn" class="export-menu-item" type="button" role="menuitem">Export to Figma</button>
-            <button id="select-export-plugin-btn" class="export-menu-item" type="button" role="menuitem">Export for Figma Plugin</button>
-            <button id="select-export-plugin-copy-btn" class="export-menu-item" type="button" role="menuitem">Copy for Figma plugin</button>
+            <button id="select-export-plugin-copy-btn" class="export-menu-item" type="button" role="menuitem">Download JSON for plugin</button>
           </div>
         </div>
-        <button id="select-add-btn" class="select-bar-btn" type="button">Add to Collection</button>
-        <button id="select-remove-btn" class="select-bar-btn select-bar-btn-danger" type="button">Remove</button>
+        <button id="select-add-btn" class="select-bar-btn select-bar-btn-with-icon" type="button" title="Add to Collection">
+          <span class="select-bar-btn-icon" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M2 4.2c0-.66.54-1.2 1.2-1.2h3l1.3 1.6h5.3c.66 0 1.2.54 1.2 1.2v6c0 .66-.54 1.2-1.2 1.2H3.2c-.66 0-1.2-.54-1.2-1.2V4.2Z"/></svg>
+          </span>
+          <span class="select-bar-btn-label">Add to Collection</span>
+        </button>
+        <button id="select-remove-btn" class="select-bar-btn-icon-only select-bar-btn-danger" type="button" aria-label="Remove selected items" title="Remove">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12"/><path d="M12.5 4v9.2a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1V4"/><path d="M5.5 4V3a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/><line x1="6.5" y1="7.5" x2="6.5" y2="11"/><line x1="9.5" y1="7.5" x2="9.5" y2="11"/></svg>
+        </button>
       </div>
     </div>
 
@@ -545,6 +553,12 @@
     <script src="../content/shared.js"></script>
     <script src="../db/db.js"></script>
     <script src="../../vendor/jszip.min.js"></script>
+    <script src="export/export-helpers.js"></script>
+    <script src="export/zip-export.js"></script>
+    <script src="export/notion-export.js"></script>
+    <script src="export/figma-export.js"></script>
+    <script src="copy/copy-helpers.js"></script>
+    <script src="copy/clipboard-copy.js"></script>
     <script src="sidepanel.js"></script>
   </body>
 </html>

@@ -2,6 +2,25 @@
 // registers the context-menu entry point (Section 2.8), routes messages
 // from content scripts.
 importScripts("db/db.js");
+importScripts("../vendor/supabase.js");
+importScripts("config.js");
+try {
+  importScripts("config.local.js");
+} catch (_err) {
+  // Optional dev overrides — production values come from config.js.
+}
+importScripts("db/supabase-client.js");
+importScripts("db/cloud-oauth.js");
+
+HarvestSupabase.ping()
+  .then((result) => {
+    if (result.ok) {
+      console.info("[Harvest] Supabase reachable", { signedIn: result.signedIn });
+    } else {
+      console.warn("[Harvest] Supabase ping failed", result.error);
+    }
+  })
+  .catch((err) => console.warn("[Harvest] Supabase ping threw", err));
 
 const CONTEXT_MENU_ID = "harvest-collect-element";
 // Declared up here (not down with the rest of the restricted-tab tracking
@@ -316,6 +335,120 @@ function queueCaptureVisibleTab(windowId, tabId, previewToken) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return undefined;
 
+  if (message.type === "GET_SUPABASE_STATUS") {
+    HarvestSupabase.ping()
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+
+  // "Login via Google" gate for the export destination picker, plus the
+  // two per-destination account connections. Handlers are thin — all the
+  // actual OAuth/token logic lives in supabase-client.js (Google) and
+  // cloud-oauth.js (Figma/Notion), same split as everywhere else in this
+  // file (background.js routes messages, doesn't contain business logic).
+  if (message.type === "SIGN_IN_WITH_GOOGLE") {
+    HarvestSupabase.signInWithGoogle()
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+  if (message.type === "SIGN_OUT_GOOGLE") {
+    HarvestSupabase.signOut()
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+  if (message.type === "CONNECT_FIGMA") {
+    HarvestCloudOAuth.connectFigma()
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+  if (message.type === "GET_FIGMA_STATUS") {
+    HarvestCloudOAuth.figmaStatus().then((result) => sendResponse(result));
+    return true;
+  }
+  if (message.type === "DISCONNECT_FIGMA") {
+    HarvestCloudOAuth.disconnectFigma().then((result) => sendResponse(result));
+    return true;
+  }
+  if (message.type === "CONNECT_NOTION") {
+    HarvestCloudOAuth.connectNotion()
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+  if (message.type === "GET_NOTION_STATUS") {
+    HarvestCloudOAuth.notionStatus().then((result) => sendResponse(result));
+    return true;
+  }
+  if (message.type === "DISCONNECT_NOTION") {
+    HarvestCloudOAuth.disconnectNotion().then((result) => sendResponse(result));
+    return true;
+  }
+  if (message.type === "NOTION_SEARCH_PAGES") {
+    HarvestCloudOAuth.notionSearchPages()
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+  if (message.type === "NOTION_CREATE_PAGE") {
+    HarvestCloudOAuth.notionCreatePage(message.payload.parentPageId, message.payload.title, message.payload.blocks)
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+  if (message.type === "NOTION_UPLOAD_FILE") {
+    const { base64, dataUrl, filename, mime } = message.payload || {};
+    (async () => {
+      try {
+        let blob;
+        if (dataUrl && String(dataUrl).startsWith("data:")) {
+          const comma = String(dataUrl).indexOf(",");
+          const b64 = comma >= 0 ? String(dataUrl).slice(comma + 1) : "";
+          if (!b64) {
+            sendResponse({ ok: false, error: "Image data URL was empty." });
+            return;
+          }
+          const mimeMatch = /^data:([^;,]+)/.exec(String(dataUrl));
+          const dataMime = mimeMatch ? mimeMatch[1] : mime || "image/png";
+          const bin = atob(b64.replace(/\s/g, ""));
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          blob = new Blob([bytes], { type: dataMime });
+        } else {
+          const bin = atob(base64 || "");
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          blob = new Blob([bytes], { type: mime || "image/png" });
+        }
+        if (!blob || !blob.size) {
+          sendResponse({ ok: false, error: "Image data was empty." });
+          return;
+        }
+        // Notion and clipboard consumers expect PNG — re-encode JPEG/WebP data URLs.
+        if (blob.type && blob.type !== "image/png") {
+          try {
+            const bitmap = await createImageBitmap(blob);
+            const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+            canvas.getContext("2d").drawImage(bitmap, 0, 0);
+            bitmap.close();
+            const pngBlob = await canvas.convertToBlob({ type: "image/png" });
+            if (pngBlob && pngBlob.size) blob = pngBlob;
+          } catch (_) {
+            // keep original blob if conversion fails
+          }
+        }
+        const result = await HarvestCloudOAuth.notionUploadFileBlob(blob, filename);
+        sendResponse(result);
+      } catch (err) {
+        sendResponse({ ok: false, error: String((err && err.message) || err) });
+      }
+    })();
+    return true;
+  }
+
   if (message.type === "CONTENT_SCRIPT_READY") {
     const tabId = sender.tab && sender.tab.id;
     if (tabId !== undefined) {
@@ -488,9 +621,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type !== "CAPTURE_ITEM") return undefined;
 
+  async function blobToDataUrl(blob) {
+    const buf = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return `data:${blob.type || "application/octet-stream"};base64,${btoa(binary)}`;
+  }
+
+  async function inlineImageAtSave(item) {
+    const data = item.data || {};
+    if (item.type !== "image" || !data.url || data.isVideo || data.inlineDataUrl) return;
+    try {
+      const resp = await fetch(data.url);
+      if (!resp.ok) return;
+      data.inlineDataUrl = await blobToDataUrl(await resp.blob());
+    } catch (_) {
+      // Content script may have already inlined; export still tries data.url.
+    }
+  }
+
   (async () => {
     try {
       const item = message.payload;
+
+      await inlineImageAtSave(item);
 
       if (item.type === "component" && item.data && item.data.outerHTML) {
         const { html, flagged } = reSanitizeHtml(item.data.outerHTML);

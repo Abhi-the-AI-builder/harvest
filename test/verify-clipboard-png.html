@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Harvest — clipboard PNG verification</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        max-width: 720px;
+        margin: 32px auto;
+        padding: 0 16px;
+        color: #17181a;
+        line-height: 1.5;
+      }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      .intro { color: #5c5f66; font-size: 14px; margin: 0 0 24px; }
+      button {
+        background: #1d3461;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 12px 20px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover { opacity: 0.92; }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      pre {
+        background: #f6f6f8;
+        padding: 16px;
+        border-radius: 8px;
+        font-size: 12px;
+        overflow: auto;
+        border: 1px solid #e8eaed;
+      }
+      .pass { color: #1e8f72; font-weight: 600; }
+      .fail { color: #c33d2e; font-weight: 600; }
+      #preview { margin: 16px 0; border: 1px solid #e8eaed; border-radius: 8px; max-width: 200px; }
+      .row { margin: 16px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Clipboard PNG verification</h1>
+    <p class="intro">
+      Loads Harvest export helpers, resolves a mock component previewImage to PNG bytes,
+      writes <code>image/png</code> to the clipboard, and reports byte counts + MIME types.
+      Open this file in Chrome (or load unpacked extension context) and click the buttons.
+    </p>
+
+    <div class="row">
+      <button type="button" id="btn-resolve">1. Resolve PNG bytes</button>
+      <button type="button" id="btn-copy">2. Copy to clipboard</button>
+      <button type="button" id="btn-read">3. Read clipboard back</button>
+    </div>
+
+    <img id="preview" alt="Resolved PNG preview" />
+    <pre id="log">Click "Resolve PNG bytes" to start.</pre>
+
+    <script src="../src/content/shared.js"></script>
+    <script src="../src/sidepanel/export/export-helpers.js"></script>
+    <script src="../src/sidepanel/copy/copy-helpers.js"></script>
+    <script src="../src/sidepanel/copy/clipboard-copy.js"></script>
+    <script>
+      const PNG_1x1 =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+      const mockItem = {
+        type: "component",
+        data: { previewImage: PNG_1x1, boundingBoxWidth: 120, boundingBoxHeight: 80 },
+        note: "Manual clipboard test note",
+      };
+
+      const logEl = document.getElementById("log");
+      let lastPngBlob = null;
+
+      function log(msg, ok) {
+        const line = document.createElement("div");
+        if (ok === true) line.className = "pass";
+        if (ok === false) line.className = "fail";
+        line.textContent = msg;
+        logEl.appendChild(line);
+      }
+
+      function clearLog() {
+        logEl.textContent = "";
+      }
+
+      document.getElementById("btn-resolve").addEventListener("click", async () => {
+        clearLog();
+        const H = window.HarvestExportHelpers;
+        try {
+          const bytes = await H.resolveExportImageBytes(mockItem);
+          const isPng = H.isPngBytes(bytes);
+          log(`resolveExportImageBytes: ${bytes.length} bytes`, isPng);
+          log(`PNG magic: 0x${bytes[0].toString(16)} 0x${bytes[1].toString(16)}`, isPng);
+
+          lastPngBlob = await H.ensureValidPngBlob(new Blob([bytes], { type: "image/png" }));
+          log(`ensureValidPngBlob: ${lastPngBlob.size} bytes, type=${lastPngBlob.type}`, lastPngBlob.size > 0);
+
+          document.getElementById("preview").src = PNG_1x1;
+
+          const blobs = await window.HarvestCopyHelpers.resolveItemImages(mockItem);
+          log(`resolveItemImages: ${blobs.length} blob(s), first=${blobs[0]?.size || 0} bytes`, blobs.length > 0);
+        } catch (err) {
+          log(`ERROR: ${err.message}`, false);
+        }
+      });
+
+      document.getElementById("btn-copy").addEventListener("click", async () => {
+        clearLog();
+        try {
+          window.HarvestClipboardCopy.limits.minPngBytes = 1;
+          await window.HarvestClipboardCopy.writeClipboardWithFallback([mockItem]);
+          log("writeClipboardWithFallback: SUCCESS — clipboard now has image/png only (no competing text)", true);
+          log('Paste into Notepad (Win11), Figma, or Slack to verify IMAGE appears, not just text.', null);
+        } catch (err) {
+          log(`Clipboard write FAILED: ${err.message}`, false);
+          log("Note: clipboard API requires a secure context and user gesture.", null);
+        }
+      });
+
+      document.getElementById("btn-read").addEventListener("click", async () => {
+        clearLog();
+        try {
+          const items = await navigator.clipboard.read();
+          for (const item of items) {
+            log(`ClipboardItem types: ${item.types.join(", ")}`, true);
+            for (const type of item.types) {
+              const blob = await item.getType(type);
+              if (type === "image/png") {
+                const buf = await blob.arrayBuffer();
+                const bytes = new Uint8Array(buf);
+                const isPng = bytes[0] === 0x89 && bytes[1] === 0x50;
+                log(`  image/png: ${bytes.length} bytes, magic=${isPng ? "89 50" : "INVALID"}`, isPng);
+              } else if (type.startsWith("text/")) {
+                const text = await blob.text();
+                log(`  ${type}: ${text.length} chars — "${text.slice(0, 80)}${text.length > 80 ? "…" : ""}"`, true);
+              } else {
+                log(`  ${type}: ${blob.size} bytes`, true);
+              }
+            }
+          }
+        } catch (err) {
+          log(`Clipboard read FAILED: ${err.message}`, false);
+        }
+      });
+    </script>
+  </body>
+</html>
