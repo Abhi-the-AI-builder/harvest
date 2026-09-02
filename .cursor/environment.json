@@ -1,0 +1,4 @@
+{
+  "name": "Harvest — Design Research Collector",
+  "install": "node .cursor/validate.mjs"
+}
