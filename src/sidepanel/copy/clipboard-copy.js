@@ -233,10 +233,10 @@
   async function writeImageOnlyClipboard(pngBlob) {
     const validated = await H.ensureValidPngBlob(pngBlob);
     if (!validated || validated.size < limits.minPngBytes) {
-      throw new Error(NO_SCREENSHOT_MSG);
+      return false;
     }
     await navigator.clipboard.write([new ClipboardItem({ "image/png": validated })]);
-    return validated;
+    return true;
   }
 
   async function writeClipboardWithFallback(items) {
@@ -253,20 +253,34 @@
     const { visualItems, pngBlobs } = await collectVisualPngBlobs(items);
 
     if (itemsNeedVisualPng(items)) {
-      const canCopyImage = pngBlobs.length > 0 && pngBlobs.length >= visualItems.length;
+      // Count every component/image in the selection — not only ones that
+      // already look image-bearing. A missing screenshot must fall through
+      // to text rather than silently dropping that item from an image paste.
+      const visualTypeCount = items.filter(
+        (item) => item.type === "component" || item.type === "image"
+      ).length;
+      const canCopyImage =
+        pngBlobs.length > 0 &&
+        pngBlobs.length >= visualTypeCount &&
+        pngBlobs.length >= visualItems.length;
       if (canCopyImage) {
         const { blob: pngBlob, usedCount } = await compositeWithLimits(pngBlobs);
-        try {
-          await writeImageOnlyClipboard(pngBlob);
-          return { mode: "image", usedCount, totalVisual: visualItems.length };
-        } catch (err) {
-          const msg = String((err && err.message) || err);
-          if (!msg.includes("no screenshot") && !msg.includes("Couldn't copy")) {
-            throw new Error(`Couldn't copy to clipboard: ${msg}`);
+        if (pngBlob) {
+          try {
+            const wrote = await writeImageOnlyClipboard(pngBlob);
+            if (wrote) {
+              return { mode: "image", usedCount, totalVisual: visualItems.length };
+            }
+          } catch (err) {
+            const msg = String((err && err.message) || err);
+            if (!msg.includes("Couldn't copy") && !msg.includes("Document is not focused") && !msg.includes("NotAllowedError")) {
+              // Unexpected clipboard failure — still try text fallback below.
+            }
           }
-          // fall through to rich-text fallback
         }
       }
+      // No usable screenshot (or image write failed) — copy rich text with
+      // URL/selector metadata instead of failing the whole action.
       const clipboardItem = await buildRichClipboardItem(items, { visualFallback: true });
       try {
         await navigator.clipboard.write([clipboardItem]);
@@ -334,11 +348,14 @@
   async function copySingleItem(item, btn, deps) {
     const showToast = deps.showToast;
     try {
-      await writeClipboardWithFallback([item]);
+      const result = await writeClipboardWithFallback([item]);
       if (btn) {
         const original = btn.innerHTML;
         btn.innerHTML = Acopio.ICONS.check;
         setTimeout(() => { btn.innerHTML = original; }, 1200);
+      }
+      if (result && result.mode === "text-fallback" && showToast) {
+        showToast("Copied as text — no screenshot on this item.", null);
       }
     } catch (err) {
       console.error("[Acopio] item copy failed:", err);

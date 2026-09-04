@@ -390,44 +390,107 @@
     showToast,
   };
 
-  // --- Lightweight custom confirm modal (never native window.confirm) ---
-  function showConfirm({ title, body, confirmLabel, onConfirm }) {
+  // --- Shared GitHub-style dialog shell (never native window.confirm) ---
+  function closeModal() {
     modalRoot.innerHTML = "";
+  }
+
+  function openModalShell(opts = {}) {
+    const extraClass = typeof opts === "string" ? opts : (opts.extraClass || "");
+    const onDismiss = typeof opts === "string" ? null : (opts.onDismiss || null);
+    closeModal();
     const overlay = document.createElement("div");
     overlay.className = "sp-modal-overlay";
     const modal = document.createElement("div");
-    modal.className = "sp-modal";
-    const h = document.createElement("div");
-    h.className = "sp-modal-title";
-    h.textContent = title;
+    modal.className = extraClass ? `sp-modal ${extraClass}` : "sp-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    overlay.appendChild(modal);
+
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        dismiss();
+      }
+    };
+    const close = () => {
+      document.removeEventListener("keydown", onKey, true);
+      modalRoot.innerHTML = "";
+    };
+    const dismiss = () => {
+      close();
+      if (onDismiss) onDismiss();
+    };
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) dismiss();
+    });
+    document.addEventListener("keydown", onKey, true);
+    modalRoot.appendChild(overlay);
+    return { overlay, modal, close, dismiss };
+  }
+
+  function appendModalHeader(modal, titleText, onClose) {
+    const header = document.createElement("div");
+    header.className = "sp-modal-header";
+    const title = document.createElement("div");
+    title.className = "sp-modal-title";
+    title.id = "sp-modal-title";
+    title.textContent = titleText;
+    modal.setAttribute("aria-labelledby", "sp-modal-title");
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "sp-modal-close";
+    closeBtn.setAttribute("aria-label", "Close");
+    closeBtn.innerHTML = Acopio.ICONS.close;
+    closeBtn.addEventListener("click", onClose);
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    modal.appendChild(header);
+    return header;
+  }
+
+  function appendModalMain(modal) {
+    const main = document.createElement("div");
+    main.className = "sp-modal-main";
+    modal.appendChild(main);
+    return main;
+  }
+
+  function appendModalFooter(modal, actionsEl) {
+    const footer = document.createElement("div");
+    footer.className = "sp-modal-footer";
+    footer.appendChild(actionsEl);
+    modal.appendChild(footer);
+    return footer;
+  }
+
+  function showConfirm({ title, body, confirmLabel, onConfirm }) {
+    const { modal, close, dismiss } = openModalShell();
+    appendModalHeader(modal, title, dismiss);
+    const main = appendModalMain(modal);
     const p = document.createElement("div");
     p.className = "sp-modal-body";
     p.textContent = body;
+    main.appendChild(p);
     const actions = document.createElement("div");
     actions.className = "sp-modal-actions";
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.className = "sp-modal-cancel";
     cancelBtn.textContent = "Cancel";
-    cancelBtn.addEventListener("click", () => { modalRoot.innerHTML = ""; });
+    cancelBtn.addEventListener("click", dismiss);
     const confirmBtn = document.createElement("button");
     confirmBtn.type = "button";
     confirmBtn.className = "sp-modal-confirm";
     confirmBtn.textContent = confirmLabel;
     confirmBtn.addEventListener("click", () => {
-      modalRoot.innerHTML = "";
+      close();
       onConfirm();
     });
     actions.appendChild(cancelBtn);
     actions.appendChild(confirmBtn);
-    modal.appendChild(h);
-    modal.appendChild(p);
-    modal.appendChild(actions);
-    overlay.appendChild(modal);
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) modalRoot.innerHTML = "";
-    });
-    modalRoot.appendChild(overlay);
+    appendModalFooter(modal, actions);
+    confirmBtn.focus();
   }
 
   // --- Note editor (add/edit a note after capture) -------------------
@@ -438,28 +501,19 @@
   // panel already listens for below), so no separate refresh call is
   // needed here — the existing listener repaints the grid once it lands.
   function showNoteEditor(item) {
-    modalRoot.innerHTML = "";
-    const overlay = document.createElement("div");
-    overlay.className = "sp-modal-overlay";
-    const modal = document.createElement("div");
-    modal.className = "sp-modal sp-modal-note";
+    const { modal, close, dismiss } = openModalShell();
+    appendModalHeader(modal, item.note ? "Edit note" : "Add a note", dismiss);
 
-    const h = document.createElement("div");
-    h.className = "sp-modal-title";
-    h.textContent = item.note ? "Edit note" : "Add a note";
-    modal.appendChild(h);
-
+    const main = appendModalMain(modal);
     const textarea = document.createElement("textarea");
     textarea.className = "note-editor-textarea";
     textarea.maxLength = 140;
     textarea.value = item.note || "";
     textarea.placeholder = "A short note about this capture…";
-    modal.appendChild(textarea);
+    main.appendChild(textarea);
 
     const actions = document.createElement("div");
     actions.className = "sp-modal-actions";
-    actions.style.marginTop = "var(--space-4)";
-
     if (item.note) {
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
@@ -468,7 +522,7 @@
       removeBtn.title = "Remove note";
       removeBtn.setAttribute("aria-label", "Remove note");
       removeBtn.addEventListener("click", () => {
-        modalRoot.innerHTML = "";
+        close();
         chrome.runtime.sendMessage({ type: "UPDATE_NOTE", payload: { id: item.id, note: "" } });
       });
       actions.appendChild(removeBtn);
@@ -477,23 +531,19 @@
     cancelBtn.type = "button";
     cancelBtn.className = "sp-modal-cancel";
     cancelBtn.textContent = "Cancel";
-    cancelBtn.addEventListener("click", () => { modalRoot.innerHTML = ""; });
+    cancelBtn.addEventListener("click", dismiss);
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.className = "sp-modal-confirm sp-modal-confirm-accent";
     saveBtn.textContent = "Save note";
     saveBtn.addEventListener("click", () => {
       const note = textarea.value.trim();
-      modalRoot.innerHTML = "";
+      close();
       chrome.runtime.sendMessage({ type: "UPDATE_NOTE", payload: { id: item.id, note } });
     });
     actions.appendChild(cancelBtn);
     actions.appendChild(saveBtn);
-    modal.appendChild(actions);
-
-    overlay.appendChild(modal);
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) modalRoot.innerHTML = ""; });
-    modalRoot.appendChild(overlay);
+    appendModalFooter(modal, actions);
     textarea.focus();
   }
 
@@ -1022,7 +1072,7 @@
     tile.appendChild(chip);
 
     // A note typed at collect time was previously only reachable via this
-    // tile's own `title` attribute — a native browser tooltip nobody
+    // tile's own title attribute — a native browser tooltip nobody
     // discovers by looking at the grid. A small visible badge (full text on
     // its own hover) means "this one has a note" is actually visible, not
     // just technically present in the DOM somewhere. Rich tiles (color/
@@ -1851,7 +1901,7 @@
   // Chrome's local favicon cache (already stored on-device from normal
   // browsing) via the "favicon" permission's _favicon endpoint — NOT a new
   // network request to the remote site. This is the whole reason it's
-  // worth using over a naive `https://${hostname}/favicon.ico` <img src>,
+  // worth using over a naive https://HOSTNAME/favicon.ico img src,
   // which WOULD be a real new outbound call to an arbitrary remembered
   // site regardless of what's currently being browsed, and that's exactly
   // the class of thing Section 9's local-only commitment rules out.
@@ -1867,9 +1917,9 @@
   // folder) with a white paper "flap" peeling up over it at the bottom,
   // carrying the name + metadata — the shape the user pointed at directly
   // and asked to be used, on top of (not instead of) everything already
-  // here (fan, favicon/pin, hostname, count). `badgeNode` is built by the
+  // here (fan, favicon/pin, hostname, count). badgeNode is built by the
   // caller since a folder and a Collection use different badges for the
-  // same slot; `metaHtml` is the count/recency line, now living in the
+  // same slot; metaHtml is the count/recency line, now living in the
   // white flap rather than below the card.
   function buildFanCover(items, tintSeed, name, badgeNode, overflowCount, metaHtml) {
     const cover = document.createElement("div");
@@ -1924,7 +1974,7 @@
     // (holding the name, like a hanging-folder tab) with a concave curve
     // where it meets the lower body (the meta line + corner badge) —
     // not a single smoothly-curved edge, a real folder-tab silhouette.
-    // `.folder-flap-notch`'s radial-gradient is the standard CSS technique
+    // .folder-flap-notch's radial-gradient is the standard CSS technique
     // for a concave ("inverted") rounded corner: transparent inside the
     // quarter-circle nearest the tab, filled outside it, so the notch
     // shows the tint color, not a hard seam.
@@ -1944,7 +1994,7 @@
     meta.className = "folder-flap-meta";
     meta.innerHTML = metaHtml;
     body.appendChild(meta);
-    // notch is a CHILD of tab (not a sibling) so its `left/top: 100%`
+    // notch is a CHILD of tab (not a sibling) so its left/top: 100%
     // resolves against the tab's own box — meaning it automatically
     // tracks the tab's real fit-content width instead of needing a fixed
     // pixel value known in advance.
@@ -2267,7 +2317,8 @@
 
     const pinBadge = document.createElement("div");
     pinBadge.className = "folder-favicon folder-pin-badge";
-    pinBadge.innerHTML = Acopio.ICONS.pin;
+    // Created folders use the folder glyph (site folders use favicons).
+    pinBadge.innerHTML = Acopio.ICONS.folder;
 
     const metaHtml = `${relativeTime(collection.lastUpdatedAt)} &middot; <strong>${resolvedItems.length}</strong> item${resolvedItems.length === 1 ? "" : "s"}`;
     const cover = buildFanCover(resolvedItems, collection.name, collection.name, pinBadge, Math.max(0, resolvedItems.length - 3), metaHtml);
@@ -2313,43 +2364,21 @@
   }
 
   // --- "Add to Collection" picker ------------------------------------
-  function appendPickerHeader(modal, titleText, onClose) {
-    const header = document.createElement("div");
-    header.className = "sp-modal-picker-header";
-    const title = document.createElement("div");
-    title.className = "sp-modal-title";
-    title.textContent = titleText;
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "sp-modal-close";
-    closeBtn.setAttribute("aria-label", "Close");
-    closeBtn.innerHTML = Acopio.ICONS.close;
-    closeBtn.addEventListener("click", onClose);
-    header.appendChild(title);
-    header.appendChild(closeBtn);
-    modal.appendChild(header);
-  }
-
   async function showCollectionPicker(items) {
     const collections = await AcopioDB.getAllCollections();
-    modalRoot.innerHTML = "";
-    const overlay = document.createElement("div");
-    overlay.className = "sp-modal-overlay";
-    const modal = document.createElement("div");
-    modal.className = "sp-modal sp-modal-picker";
-
-    const closePicker = () => { modalRoot.innerHTML = ""; };
-    appendPickerHeader(
+    const { modal, close, dismiss } = openModalShell();
+    appendModalHeader(
       modal,
       `Add ${items.length} item${items.length === 1 ? "" : "s"} to a Collection`,
-      closePicker
+      dismiss
     );
 
+    const main = appendModalMain(modal);
     const list = document.createElement("div");
     list.className = "collection-picker-list";
     if (collections.length === 0) {
       const empty = document.createElement("div");
-      empty.className = "sp-modal-body";
+      empty.className = "sp-modal-body is-muted";
       empty.textContent = "No Collections yet — create one below.";
       list.appendChild(empty);
     }
@@ -2378,13 +2407,13 @@
       row.addEventListener("click", async () => {
         const refs = items.map((it) => ({ folderHostname: it.hostname, itemId: it.id }));
         await AcopioDB.addItemsToCollection(col.id, refs);
-        modalRoot.innerHTML = "";
+        close();
         exitSelectMode();
         showToast(`Added to "${col.name}"`, null);
       });
       list.appendChild(row);
     });
-    modal.appendChild(list);
+    main.appendChild(list);
 
     const newRow = document.createElement("div");
     newRow.className = "collection-picker-new";
@@ -2405,17 +2434,13 @@
       const col = await AcopioDB.createCollection(name);
       const refs = items.map((it) => ({ folderHostname: it.hostname, itemId: it.id }));
       await AcopioDB.addItemsToCollection(col.id, refs);
-      modalRoot.innerHTML = "";
+      close();
       exitSelectMode();
       showToast(`Created "${name}" with ${items.length} item${items.length === 1 ? "" : "s"}`, null);
     });
     newRow.appendChild(input);
     newRow.appendChild(createBtn);
-    modal.appendChild(newRow);
-
-    overlay.appendChild(modal);
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) closePicker(); });
-    modalRoot.appendChild(overlay);
+    main.appendChild(newRow);
   }
 
   // --- View chrome dispatch -------------------------------------------
@@ -2583,7 +2608,7 @@
       // moment a checkbox was clicked, so a capture or delete landing
       // while the grid stayed open (via the ITEMS_UPDATED live-refresh)
       // left it exporting a stale item list, and a host that lost every
-      // item this way vanished from `folders` entirely with no card left
+      // item this way vanished from folders entirely with no card left
       // to uncheck it from — its selection would otherwise never clear.
       if (selectedFolderHostnames.size > 0) {
         const liveHosts = new Set(folders.map((f) => f.hostname));
@@ -2924,11 +2949,8 @@
   // collect/delete — so it earns a beat of its own, same restraint logic
   // as the tooltip's collect-moment).
   function showPairingSavedConfirm(heading, body) {
-    modalRoot.innerHTML = "";
-    const overlay = document.createElement("div");
-    overlay.className = "sp-modal-overlay";
-    const modal = document.createElement("div");
-    modal.className = "sp-modal sp-modal-hero";
+    const { modal, close, dismiss } = openModalShell();
+    appendModalHeader(modal, "Pairing saved", dismiss);
 
     const hero = document.createElement("div");
     hero.className = "sp-modal-hero-band";
@@ -2947,48 +2969,44 @@
     hero.appendChild(preview);
     modal.appendChild(hero);
 
-    const content = document.createElement("div");
-    content.className = "sp-modal-hero-content";
-    const title = document.createElement("div");
-    title.className = "sp-modal-title";
-    title.textContent = "Pairing saved";
+    const main = appendModalMain(modal);
     const bodyText = document.createElement("div");
     bodyText.className = "sp-modal-body";
     bodyText.textContent = `${heading.data.family} + ${body.data.family} — browsable in your library like any other capture.`;
+    main.appendChild(bodyText);
+
     const actions = document.createElement("div");
     actions.className = "sp-modal-actions";
     const doneBtn = document.createElement("button");
     doneBtn.type = "button";
     doneBtn.className = "sp-modal-confirm sp-modal-confirm-accent";
     doneBtn.textContent = "Done";
-    doneBtn.addEventListener("click", () => { modalRoot.innerHTML = ""; });
+    doneBtn.addEventListener("click", close);
     actions.appendChild(doneBtn);
-    content.appendChild(title);
-    content.appendChild(bodyText);
-    content.appendChild(actions);
-    modal.appendChild(content);
-
-    overlay.appendChild(modal);
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) modalRoot.innerHTML = ""; });
-    modalRoot.appendChild(overlay);
+    appendModalFooter(modal, actions);
   }
 
   // --- Export / copy (src/sidepanel/export/, src/sidepanel/copy/) ---------
   function showNotionPagePicker(pages) {
     return new Promise((resolve) => {
-      modalRoot.innerHTML = "";
-      const overlay = document.createElement("div");
-      overlay.className = "sp-modal-overlay";
-      const modal = document.createElement("div");
-      modal.className = "sp-modal sp-modal-picker";
-      const closePicker = () => { modalRoot.innerHTML = ""; resolve(null); };
-      appendPickerHeader(modal, "Export to which Notion page?", closePicker);
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        close();
+        resolve(value);
+      };
+      const { modal, close } = openModalShell({
+        onDismiss: () => finish(null),
+      });
+      appendModalHeader(modal, "Export to which Notion page?", () => finish(null));
+      const main = appendModalMain(modal);
       const list = document.createElement("div");
       list.className = "collection-picker-list";
       if (pages.length === 0) {
         const empty = document.createElement("div");
-        empty.className = "sp-modal-body";
-        empty.textContent = 'No pages are shared with Acopio yet — open Notion, share a page with the "Acopio" integration, then try again.';
+        empty.className = "sp-modal-body is-muted";
+        empty.textContent = `No pages are shared with Acopio yet — open Notion, share a page with the "Acopio" integration, then try again.`;
         list.appendChild(empty);
       }
       pages.forEach((p) => {
@@ -3005,13 +3023,10 @@
         name.textContent = p.title;
         text.appendChild(name);
         row.appendChild(text);
-        row.addEventListener("click", () => { modalRoot.innerHTML = ""; resolve(p.id); });
+        row.addEventListener("click", () => finish(p.id));
         list.appendChild(row);
       });
-      modal.appendChild(list);
-      overlay.appendChild(modal);
-      overlay.addEventListener("click", (e) => { if (e.target === overlay) closePicker(); });
-      modalRoot.appendChild(overlay);
+      main.appendChild(list);
     });
   }
 

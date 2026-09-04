@@ -1122,7 +1122,7 @@
   // Step 2: actually build the item and send it to the background worker.
   // Called either immediately (no confirmation needed) or after the user
   // clicks "capture anyway" in overlay.js's inline confirm.
-  Acopio.finalizeCapture = function finalizeCapture(el, tagInfo, data, note, callback) {
+  Acopio.finalizeCapture = function finalizeCapture(el, tagInfo, data, note, callback, options) {
     // No isConnected gate here — onCollectClick is the one place that
     // decides whether `data` came from a still-live element or a cached
     // pre-disconnect snapshot (overlay.js's lastKnownCapture), and either
@@ -1134,7 +1134,7 @@
       id: Acopio.uuid(),
       type: tagInfo.type,
       family: tagInfo.family,
-      hostname: Acopio.hostname(),
+      hostname: (options && options.hostname) || Acopio.hostname(),
       capturedAt: new Date().toISOString(),
       sourceUrl: window.location.href,
       sourcePageTitle: document.title,
@@ -1229,6 +1229,23 @@
       });
     } catch (_) {
       callback([], 0);
+    }
+  };
+
+  Acopio.fetchCollectionRecentItems = function fetchCollectionRecentItems(collectionId, limit, callback) {
+    try {
+      chrome.runtime.sendMessage(
+        { type: "GET_COLLECTION_RECENT_ITEMS", payload: { collectionId, limit } },
+        (response) => {
+          if (chrome.runtime.lastError || !response || !response.ok) {
+            callback([], 0, null);
+            return;
+          }
+          callback(response.items || [], response.total || 0, response.name || null);
+        }
+      );
+    } catch (_) {
+      callback([], 0, null);
     }
   };
 

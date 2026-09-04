@@ -60,10 +60,16 @@
   --type-component-bg: #FBF0DC; --type-component-fg: #B07D1F;
   --type-note-bg: #E3EEFB; --type-note-fg: #2A6CA8;
 
-  /* Shadow — 3 levels only */
+  /* Shadow — 3 levels only, plus one segment-control raise matched to
+     the GitHub-style Library tabs (soft contact shadow, not overlay lift). */
   --shadow-resting: 0 1px 2px rgba(23,24,26,0.06);
   --shadow-raised: 0 2px 6px rgba(23,24,26,0.08), 0 8px 20px rgba(23,24,26,0.10);
   --shadow-overlay: 0 8px 24px rgba(23,24,26,0.14), 0 24px 48px rgba(23,24,26,0.16);
+  --shadow-segment: 0 1px 2px rgba(23,24,26,0.08), 0 1px 1px rgba(23,24,26,0.04);
+
+  /* Library segmented control track — recessed off-white from the GitHub
+     reference (#F0F0F0 avg), a step below --color-bg so the pill reads. */
+  --seg-track-bg: #F0F0F0;
 
   /* Motion */
   --ease-fast: 120ms ease-out;
@@ -177,11 +183,10 @@ body { display: flex; flex-direction: column; }
    occupying one card's worth of width like a stray label would. */
 /* .library-tabs and .library-grid share the same var(--space-4) left
    padding, so their CONTAINERS line up — but a tab chip's own text sits
-   further in than that, inset by .tab-group's 2px padding plus the chip's
-   own var(--space-3) horizontal padding. Matching that exact offset here
-   is what makes "SITES" visually start under "Sites" instead of under the
-   pill's outer edge. */
-.notes-tab-section-label { grid-column: 1 / -1; margin-top: var(--space-2); padding-left: calc(2px + var(--space-3)); }
+   further in than that, inset by .tab-group's track padding plus the chip's
+   own horizontal padding. Matching that exact offset here is what makes
+   "SITES" visually start under "Sites" instead of under the pill's outer edge. */
+.notes-tab-section-label { grid-column: 1 / -1; margin-top: var(--space-2); padding-left: calc(var(--space-1) + var(--space-3)); }
 .notes-tab-section-label:first-child { margin-top: 0; }
 .grid-section-actions { display: flex; align-items: center; gap: var(--space-2); }
 .grid-section-action { border: none; background: none; color: var(--color-accent); font-size: var(--text-caption); font-weight: 700; cursor: pointer; padding: 0; }
@@ -470,22 +475,66 @@ body { display: flex; flex-direction: column; }
 .select-check[data-checked="true"] { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-surface); }
 .tile.selectable .card-delete-btn, .card.selectable .card-delete-btn { display: none; } /* selection and per-item delete don't coexist visually */
 
-/* Sites / Collections sub-tabs inside the library view. A real segmented
-   control (one tinted track, the active side riding a raised white pill)
-   instead of two loose same-weight outline chips sitting directly on the
-   page background — the loose-chip version had no visual home of its own
-   and read as two filter buttons rather than one control with two states.
-   Bottom padding added (was 0) so the row doesn't sit flush against the
-   first folder card below it. */
-.library-tabs { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4) var(--space-4); background: var(--color-surface); }
-.tab-group { display: flex; gap: 2px; background: var(--color-bg); border-radius: var(--radius-full); padding: 2px; flex: none; }
+/* Sites / Collections / Notes — GitHub-style segmented control.
+   Recessed pill track + raised white active segment; equal-width tabs;
+   weight/color (not underline) carry selection. */
+.library-tabs {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--color-surface);
+}
+.tab-group {
+  display: flex; align-items: stretch; flex: 1; min-width: 0; gap: 0;
+  background: var(--seg-track-bg);
+  border-radius: var(--radius-full);
+  padding: var(--space-1);
+  /* Soft inset so the track reads recessed against the white surface. */
+  box-shadow: inset 0 1px 2px rgba(23,24,26,0.06);
+}
 .tab-chip {
-  border: none; background: none; border-radius: var(--radius-full);
-  padding: var(--space-1) var(--space-3); font-size: var(--text-caption); font-weight: 600; color: var(--color-text-muted); cursor: pointer;
+  flex: 1; min-width: 0;
+  border: none; background: transparent;
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3);
+  font-family: inherit;
+  font-size: var(--text-body);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  text-align: center;
+  white-space: nowrap;
   transition: background var(--ease-fast), color var(--ease-fast), box-shadow var(--ease-fast);
 }
-.tab-chip:hover { color: var(--color-text); }
-.tab-chip[aria-pressed="true"] { background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-raised); }
+/* Inactive hover — text steps up; faint wash so the hit target reads. */
+.tab-chip:hover:not([aria-pressed="true"]):not(:disabled) {
+  color: var(--color-text);
+  background: rgba(23,24,26,0.04);
+}
+/* Active segment — white raised pill, bold near-black label. */
+.tab-chip[aria-pressed="true"] {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 700;
+  box-shadow: var(--shadow-segment);
+}
+.tab-chip[aria-pressed="true"]:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-segment);
+}
+.tab-chip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-full);
+  z-index: 1;
+}
+.tab-chip:disabled,
+.tab-chip[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
 
 /* Bottom action bar shown while items are selected. Two rows: a scrolling
    chip strip (Pattern 4 — selected items as removable chips, not a bare
@@ -600,105 +649,103 @@ body { display: flex; flex-direction: column; }
 .export-menu-item:hover { background: var(--color-bg); }
 .export-menu-item:active { background: var(--color-accent-wash); }
 
-/* Lightweight custom confirm modal — never a native window.confirm(),
-   same reasoning as the tooltip's size-cap confirm: it froze the tab and
-   looked like generic browser chrome, not this design system. */
+/* Shared GitHub/Primer dialog shell — every side-panel popup (delete
+   confirm, note editor, collection/Notion picker, pairing saved) uses
+   the same header / body / footer structure. Metrics intentionally match
+   Primer (12px shell radius, 6px controls, two-layer floating shadow)
+   rather than --radius-lg so these dialogs read as one family. */
 .sp-modal-overlay {
-  position: fixed; inset: 0; background: rgba(23,24,26,0.4); z-index: 50;
-  display: flex; align-items: center; justify-content: center; padding: var(--space-5);
+  position: fixed; inset: 0; background: rgba(27, 31, 36, 0.5); z-index: 50;
+  display: flex; align-items: center; justify-content: center; padding: var(--space-4);
   animation: sp-fade-in var(--ease-base);
 }
 @keyframes sp-fade-in { from { opacity: 0; } to { opacity: 1; } }
 .sp-modal {
-  /* Uniform on all sides — 24px top/bottom against only 14px left/right
-     made the box read as an odd, uneven rectangle ("boxy") rather than a
-     balanced card. One consistent inset all around is what actually
-     reads as deliberate. */
-  background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-4); width: 100%; max-width: 300px;
-  box-shadow: var(--shadow-overlay); animation: sp-modal-in var(--ease-base);
+  background: var(--color-surface);
+  border-radius: 12px;
+  padding: 0;
+  width: 100%;
+  max-width: 340px;
+  border: 1px solid rgba(31, 35, 40, 0.15);
+  box-shadow: 0 1px 3px rgba(140, 149, 159, 0.15), 0 8px 24px rgba(27, 31, 36, 0.24);
+  overflow: hidden;
+  animation: sp-modal-in var(--ease-base);
 }
 @keyframes sp-modal-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-/* 13px per direct spec — smaller than the type scale's own caption size,
-   an explicit value rather than a token. margin-bottom stays space-4
-   (16px) so the title still clearly separates from the field below it. */
-.sp-modal-title { font-size: 13px; font-weight: 700; margin-bottom: var(--space-4); }
-.sp-modal-body { font-size: var(--text-caption); color: var(--color-text-muted); line-height: 1.5; margin-bottom: var(--space-4); }
-.sp-modal-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
-/* white-space:nowrap + flex:none on every button in this row — without
-   it, a flex item's default shrink behavior squeezes each button below
-   its own label's natural width once the row is tight (a two-word label
-   like "Save note" or "Remove note" next to a bordered/filled pair in a
-   300px-wide modal), wrapping the label to two lines instead of the row
-   just being as wide as it actually needs. */
-.sp-modal-cancel {
-  border: 1px solid var(--color-border-strong); background: var(--color-surface); border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-4); font-size: var(--text-caption); font-weight: 600; color: var(--color-text); cursor: pointer;
-  transition: background var(--ease-fast); white-space: nowrap; flex: none;
+
+.sp-modal-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-4);
+  background: #F6F8FA;
+  border-bottom: 1px solid rgba(31, 35, 40, 0.15);
 }
-.sp-modal-cancel:hover { background: var(--color-bg); }
+.sp-modal-title {
+  font-size: 14px; font-weight: 600; line-height: 20px; color: var(--color-text);
+  margin: 0; flex: 1; min-width: 0; padding-top: var(--space-1);
+}
+.sp-modal-close {
+  flex: none; width: 32px; height: 32px; border: none; border-radius: 6px; background: none;
+  color: var(--color-text-muted); display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; margin: -4px -8px 0 0; transition: background var(--ease-fast), color var(--ease-fast);
+}
+.sp-modal-close:hover { background: rgba(208, 215, 222, 0.48); color: var(--color-text); }
+.sp-modal-close svg { pointer-events: none; }
+
+.sp-modal-main { padding: var(--space-4); }
+.sp-modal-body {
+  font-size: 14px; line-height: 20px; color: var(--color-text); margin: 0;
+}
+.sp-modal-body.is-muted { color: var(--color-text-muted); }
+
+.sp-modal-footer {
+  display: flex; justify-content: flex-end; gap: var(--space-2);
+  padding: var(--space-4);
+  border-top: 1px solid rgba(31, 35, 40, 0.15);
+  background: #F6F8FA;
+}
+.sp-modal-actions {
+  display: flex; justify-content: flex-end; align-items: center; gap: var(--space-2); width: 100%;
+}
+/* white-space:nowrap + flex:none — keep two-word labels ("Delete folder",
+   "Save note") on one line inside the narrow side panel. */
+.sp-modal-cancel {
+  border: 1px solid rgba(31, 35, 40, 0.15); background: var(--color-surface);
+  border-radius: 6px; padding: 5px 16px; font-size: 14px; font-weight: 500; line-height: 20px;
+  color: var(--color-text); cursor: pointer; box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+  transition: background var(--ease-fast), border-color var(--ease-fast); white-space: nowrap; flex: none;
+}
+.sp-modal-cancel:hover { background: #F3F4F6; border-color: rgba(31, 35, 40, 0.15); }
 .sp-modal-confirm {
-  border: none; background: var(--color-danger); color: var(--color-surface); border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-4); font-size: var(--text-caption); font-weight: 600; cursor: pointer;
+  border: 1px solid rgba(27, 31, 36, 0.15); background: var(--color-danger); color: #fff;
+  border-radius: 6px; padding: 5px 16px; font-size: 14px; font-weight: 500; line-height: 20px;
+  cursor: pointer; box-shadow: 0 1px 0 rgba(31, 35, 40, 0.1);
   transition: filter var(--ease-fast); white-space: nowrap; flex: none;
 }
-.sp-modal-confirm:hover { filter: brightness(1.08); }
-.sp-modal-confirm-accent { background: var(--color-accent); }
+.sp-modal-confirm:hover { filter: brightness(1.06); }
+.sp-modal-confirm-accent {
+  background: var(--color-accent); border-color: rgba(27, 31, 36, 0.15);
+}
 
 .note-editor-textarea {
-  width: 100%; min-height: 72px; resize: none; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3); font-size: var(--text-caption); font-family: inherit; color: var(--color-text);
-  transition: border-color var(--ease-fast);
+  width: 100%; min-height: 80px; resize: vertical; border: 1px solid rgba(31, 35, 40, 0.15);
+  border-radius: 6px; padding: 8px 12px; font-size: 14px; line-height: 20px;
+  font-family: inherit; color: var(--color-text); background: var(--color-surface);
+  transition: border-color var(--ease-fast), box-shadow var(--ease-fast);
 }
-.note-editor-textarea:focus { border-color: var(--color-accent); outline: none; }
-/* An icon-only tertiary control, not a third bordered pill (or text
-   label) fighting Cancel/Save for the same visual weight — Pattern 9's
-   primary/secondary/tertiary hierarchy (design-tokens.md): Remove is a
-   rare, destructive tertiary action, not a peer of the two buttons
-   actually deciding this dialog's outcome. A quiet trash icon on the left
-   and one evenly-matched Cancel/Save pair on the right reads as one
-   deliberate row instead of competing controls. */
+.note-editor-textarea::placeholder { color: var(--color-text-muted); }
+.note-editor-textarea:focus {
+  outline: none; border-color: #0969DA; box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
+}
+/* Pattern 9 — Remove is a quiet tertiary, not a peer of Cancel/Save. */
 .note-editor-remove {
   margin-right: auto; border: none; background: none; padding: 0;
-  width: 34px; height: 34px; border-radius: var(--radius-sm);
+  width: 32px; height: 32px; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
   color: var(--color-danger); cursor: pointer; flex: none;
 }
 .note-editor-remove:hover, .note-editor-remove:focus-visible { background: var(--color-danger-wash); }
 
-/* Note editor popover — matched to GitHub's small anchored dialogs
-   (e.g. the comment/label editors): 12px corner radius (not the generic
-   20px --radius-lg), 16px padding on all sides, 8px between the title and
-   the field below it, 16px before the action row, GitHub's own two-layer
-   floating shadow (tight contact shadow + soft ambient one), and Primer's
-   exact button/field metrics (14px/20px line-height text, 6px control
-   radius, 5px/16px button padding, 8px/12px field padding). Scoped to this
-   one popup only — the shared .sp-modal shell (delete-confirm, hero,
-   collection picker) is untouched. */
-.sp-modal-note {
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid var(--color-border-strong);
-  box-shadow: 0 1px 3px rgba(140,149,159,0.15), 0 8px 24px rgba(27,31,36,0.24);
-}
-.sp-modal-note .sp-modal-title {
-  font-size: 14px; font-weight: 600; line-height: 20px; margin-bottom: 8px;
-}
-.sp-modal-note .note-editor-textarea {
-  padding: 8px 12px; font-size: 14px; line-height: 20px; border-radius: 6px;
-}
-.sp-modal-note .note-editor-textarea::placeholder { color: var(--color-text-muted); }
-.sp-modal-note .note-editor-textarea:focus {
-  border-color: #0969DA; box-shadow: 0 0 0 3px rgba(9,105,218,0.3);
-}
-.sp-modal-note .sp-modal-cancel,
-.sp-modal-note .sp-modal-confirm {
-  padding: 5px 16px; font-size: 14px; font-weight: 500; line-height: 20px; border-radius: 6px;
-}
-
-/* Pattern 12 — gradient hero band with a nested preview card, used only
-   for the pairing-save confirmation (design-tokens.md v2: the one
-   deliberate confirmation moment that earns this, not every modal). */
-.sp-modal-hero { padding: 0; overflow: hidden; }
+/* Pattern 12 — gradient hero band only for pairing-saved confirmation. */
 .sp-modal-hero-band {
   background: linear-gradient(160deg, var(--color-accent), #3a5a9e);
   padding: var(--space-5) var(--space-4);
@@ -710,81 +757,40 @@ body { display: flex; flex-direction: column; }
 }
 .sp-modal-hero-heading { font-size: 17px; font-weight: 700; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-modal-hero-body { font-size: var(--text-caption); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sp-modal-hero-content { padding: var(--space-4); }
-.sp-modal-hero-content .sp-modal-title { margin-top: 0; }
 
-/* "Add to Collection" picker — reuses the same modal shell. Row shape
-   (icon swatch + stacked name/count + trailing action affordance,
-   hover-highlighted) follows the moodboard's account-switcher list
-   pattern rather than a bare text row. */
-.collection-picker-list { max-height: 220px; overflow-y: auto; margin-bottom: var(--space-3); }
+/* Collection / Notion picker list — ActionList-style rows inside .sp-modal-main. */
+.collection-picker-list { max-height: 220px; overflow-y: auto; margin: 0; }
 .collection-picker-row {
-  display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2);
-  border-radius: var(--radius-sm); cursor: pointer; transition: background var(--ease-fast);
+  display: flex; align-items: center; gap: var(--space-2); padding: 8px 12px;
+  border-radius: 6px; cursor: pointer; transition: background var(--ease-fast);
 }
-.collection-picker-row:hover { background: var(--color-bg); }
+.collection-picker-row:hover { background: #F3F4F6; }
 .collection-picker-row:hover .collection-picker-add { color: var(--color-accent); }
 .collection-picker-icon {
-  width: 32px; height: 32px; border-radius: var(--radius-sm); flex: none;
+  width: 32px; height: 32px; border-radius: 6px; flex: none;
   background: var(--color-accent-wash); color: var(--color-accent);
   display: flex; align-items: center; justify-content: center;
 }
 .collection-picker-text { min-width: 0; flex: 1; }
-.collection-picker-name { font-size: var(--text-caption); font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.collection-picker-count { font-size: 11px; color: var(--color-text-muted); margin-top: 1px; }
+.collection-picker-name { font-size: 14px; font-weight: 600; line-height: 20px; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.collection-picker-count { font-size: 12px; line-height: 16px; color: var(--color-text-muted); margin-top: 1px; }
 .collection-picker-add { color: var(--color-text-muted); display: flex; flex: none; transition: color var(--ease-fast); }
-.collection-picker-new { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.collection-picker-new {
+  display: flex; gap: var(--space-2); margin-top: var(--space-3); align-items: stretch;
+}
 .collection-picker-new input {
-  flex: 1; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); padding: var(--space-2);
-  font-size: var(--text-caption); font-family: inherit; color: var(--color-text);
+  flex: 1; min-width: 0; border: 1px solid rgba(31, 35, 40, 0.15); border-radius: 6px;
+  padding: 8px 12px; font-size: 14px; line-height: 20px; font-family: inherit; color: var(--color-text);
 }
-.collection-picker-new input:focus { border-color: var(--color-accent); }
+.collection-picker-new input:focus {
+  outline: none; border-color: #0969DA; box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
+}
 .collection-picker-new button {
-  border: none; background: var(--color-accent); color: var(--color-surface); border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3); font-size: var(--text-caption); font-weight: 600; cursor: pointer;
-  transition: filter var(--ease-fast);
+  border: 1px solid rgba(27, 31, 36, 0.15); background: var(--color-accent); color: #fff;
+  border-radius: 6px; padding: 5px 16px; font-size: 14px; font-weight: 500; line-height: 20px;
+  cursor: pointer; flex: none; transition: filter var(--ease-fast);
 }
-.collection-picker-new button:hover { filter: brightness(1.1); }
-
-/* GitHub-matched spacing for this modal shell too — same metrics as
-   .sp-modal-note (12px radius, 16px padding, GitHub's two-layer floating
-   shadow, 14px/20px text), plus GitHub's own ActionList row spacing
-   (8px/12px item padding, 6px item radius, 8px icon-to-text gap) applied
-   to the Collection rows and the "new Collection" field/button. Scoped
-   here only — the shared .sp-modal base (delete-confirm, hero) is
-   untouched. */
-.sp-modal-picker {
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid var(--color-border-strong);
-  box-shadow: 0 1px 3px rgba(140,149,159,0.15), 0 8px 24px rgba(27,31,36,0.24);
-}
-.sp-modal-picker-header {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); margin-bottom: 8px;
-}
-.sp-modal-picker-header .sp-modal-title { margin-bottom: 0; flex: 1; min-width: 0; }
-.sp-modal-close {
-  flex: none; width: 32px; height: 32px; border: none; border-radius: 6px; background: none;
-  color: var(--color-text-muted); display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; margin: -4px -8px 0 0; transition: background var(--ease-fast), color var(--ease-fast);
-}
-.sp-modal-close:hover { background: var(--color-bg); color: var(--color-text); }
-.sp-modal-close svg { pointer-events: none; }
-.sp-modal-picker .sp-modal-title {
-  font-size: 14px; font-weight: 600; line-height: 20px; margin-bottom: 8px;
-}
-.sp-modal-picker .collection-picker-list { margin-bottom: 12px; }
-.sp-modal-picker .collection-picker-row { padding: 8px 12px; border-radius: 6px; gap: 8px; }
-.sp-modal-picker .collection-picker-name { font-size: 14px; line-height: 20px; }
-.sp-modal-picker .collection-picker-count { font-size: 12px; }
-.sp-modal-picker .collection-picker-new { gap: 8px; margin-top: 8px; align-items: stretch; }
-.sp-modal-picker .collection-picker-new input { padding: 8px 12px; font-size: 14px; line-height: 20px; border-radius: 6px; min-width: 0; }
-.sp-modal-picker .collection-picker-new input:focus {
-  outline: none; border-color: #0969DA; box-shadow: 0 0 0 3px rgba(9,105,218,0.3);
-}
-.sp-modal-picker .collection-picker-new button {
-  padding: 5px 16px; font-size: 14px; font-weight: 500; line-height: 20px; border-radius: 6px; flex: none;
-}
+.collection-picker-new button:hover { filter: brightness(1.06); }
 
 /* Undo toast */
 .sp-toast {
@@ -1495,30 +1501,57 @@ button.tile-note-badge:hover, button.tile-note-badge:focus-visible { background:
 .et-skel-photo { width: 100%; height: 60px; border-radius: var(--radius-sm); background: var(--color-border); }
 .et-skel-footer { margin-top: var(--space-3); display: flex; align-items: center; gap: var(--space-2); }
 .et-skel-pill { width: 56px; height: 20px; border-radius: var(--radius-full); background: var(--color-accent); opacity: 0.85; flex: none; }
-/* Folder-card skeleton — deliberately its own shape, not the same
-   icon+lines template the center/notes cards use, since the whole point
-   raised was that the folder card and the tooltip card had ended up
-   looking identical. Evokes the REAL folder card's own two-part
-   silhouette (a tinted band with a fan of item thumbnails peeking out of
-   it, a flap below with a name/meta row and a corner badge) using plain
-   shapes and the same tokens as everywhere else in this file — not the
-   real .folder-cover/.folder-fan components themselves, which already
-   broke once when forced into this flow container (see the folder-card
-   comment in sidepanel.html). */
-.et-skel-folder-tint { position: relative; height: 72px; border-radius: var(--radius-sm); background: var(--color-accent-wash); }
-.et-skel-folder-fan { position: absolute; right: var(--space-2); bottom: -10px; display: flex; }
-.et-skel-folder-thumb {
-  width: 30px; height: 30px; border-radius: var(--radius-xs); background: var(--color-surface);
-  border: 1px solid var(--color-border); box-shadow: var(--shadow-raised);
+/* Folder-card skeleton — Option C: soft wash cover with a neat 2×2 grid
+   of cells fully inside the tint (no floating thumbs, no corner badge). */
+.et-skel-folder-tint {
+  position: relative; height: 96px; border-radius: var(--radius-sm);
+  background: var(--color-accent-wash); padding: var(--space-2); box-sizing: border-box;
+  display: flex; align-items: stretch;
 }
-.et-skel-folder-thumb:nth-child(1) { transform: rotate(-6deg); margin-right: -14px; z-index: 1; }
-.et-skel-folder-thumb:nth-child(2) { transform: rotate(4deg); z-index: 2; }
-.et-skel-folder-flap { margin-top: var(--space-3); display: flex; flex-direction: column; gap: 6px; }
-.et-skel-folder-badge { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; border-radius: var(--radius-full); background: var(--color-accent); opacity: 0.85; }
-/* Notes card embeds the real .note-date-group/.note-tile timeline
-   markup directly inside the shared .et-card-frame — same classes as
-   the actual Notes tab, just a couple of tiles instead of a whole
-   scrolling list, and no outer .grid-section-items-notes card since
-   .et-card-frame is already that card here. */
+.et-skel-folder-grid {
+  flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  gap: var(--space-1);
+}
+.et-skel-folder-cell {
+  border-radius: var(--radius-xs); background: rgba(23, 24, 26, 0.08); min-height: 0;
+}
+.et-skel-folder-flap { margin-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-1); }
+
+/* Notes-card skeleton — abstract Today/tag/actions (no real chrome text),
+   with grouped spacing so each note reads as one unit. Scoped to the
+   empty composite so live Notes tiles are untouched. */
+.empty-composite .et-skel-notes {
+  display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3);
+}
+.et-skel-notes-header { display: flex; align-items: center; gap: var(--space-1); flex: none; }
+.et-skel-today {
+  width: 64px; height: 18px; border-radius: var(--radius-full); background: var(--color-border); flex: none;
+}
+.et-skel-chevron {
+  width: 16px; height: 16px; border-radius: var(--radius-xs); background: var(--color-border); flex: none;
+}
+.et-skel-notes-list {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-4);
+  padding-left: var(--space-3); border-left: 1px dashed var(--color-border);
+}
+.et-skel-note {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding-bottom: var(--space-3); border-bottom: 1px solid var(--color-border);
+}
+.et-skel-note:last-child { padding-bottom: 0; border-bottom: none; }
+.et-skel-note-top { display: flex; align-items: flex-start; gap: var(--space-2); }
+.et-skel-note-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.et-skel-tag {
+  width: 28px; height: 14px; border-radius: var(--radius-full); background: var(--color-border); flex: none; margin-top: 2px;
+}
+.et-skel-note-body { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.et-skel-note-actions {
+  display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3);
+}
+.et-skel-action {
+  width: 18px; height: 18px; border-radius: var(--radius-xs); background: var(--color-border); flex: none;
+}
+/* Notes card embeds were previously real .note-date-group/.note-tile
+   chrome inside the empty composite — kept for any leftover markup. */
 .et-card-frame .note-date-group { padding-left: 0; margin-left: 0; }
 .et-card-frame .note-tile { padding-left: 0; }

@@ -145,7 +145,7 @@
   // (Acopio's own preview, or worse, a permanently saved item) never
   // loads anything — not a lazy-load or permission gap, a one-time-use
   // handle by design. A real, stable frame is usually sitting right there
-  // anyway as the video's own `poster` attribute, so this returns THAT
+  // anyway as the video's own poster attribute, so this returns THAT
   // instead when the real src turns out to be unusable outside its
   // originating element — as a plain static image, honestly reflecting
   // what can actually be captured, rather than a video reference that's
@@ -328,7 +328,7 @@
   // Same extraction as parseGradientStops above, but keeps each stop's
   // alpha instead of throwing it away — a real, confirmed bug (not the
   // hypothetical kind): a fade-to-transparent scrim over a photo (e.g.
-  // `linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0.85))`, an extremely
+  // linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0.85)), an extremely
   // common "darken the bottom of an image for text legibility" pattern)
   // lost its transparent stop's alpha entirely, so the Figma plugin's
   // hexStopsToGradientPaint rendered BOTH ends fully opaque — a
@@ -381,11 +381,11 @@
   Acopio.PII_PATTERN =
     /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|\b\d{6,}\b/;
 
-  // A component's `data.layoutTree` (content.js's extractComponentLayers)
+  // A component's data.layoutTree (content.js's extractComponentLayers)
   // is a nested tree of frame/text/rect/image/icon-placeholder nodes, not
   // a flat list — anything that only needs "what kinds of content are in
   // here" (the sidepanel's copy-description, previously read the old flat
-  // `data.layers` directly) needs a flattened leaf list instead of the
+  // data.layers directly) needs a flattened leaf list instead of the
   // tree shape. Shared here (not just in content.js) since both the
   // content-script world and the sidepanel load shared.js and both need
   // this same flattening.
@@ -442,7 +442,7 @@
     chevronUp: `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.5 8 5.5l4.5 5"/></svg>`,
     chevronDown: `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5 8 10.5l4.5-5"/></svg>`,
     // "All sites" library view toggle, in the side panel's topbar.
-    folder: `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M2 4.2c0-.66.54-1.2 1.2-1.2h3l1.3 1.6h5.3c.66 0 1.2.54 1.2 1.2v6c0 .66-.54 1.2-1.2 1.2H3.2c-.66 0-1.2-.54-1.2-1.2V4.2Z"/></svg>`,
+    folder: `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"><path d="M2 4.4c0-.77.63-1.4 1.4-1.4h2.7l1.35 1.55h5.15c.77 0 1.4.63 1.4 1.4v5.65c0 .77-.63 1.4-1.4 1.4H3.4c-.77 0-1.4-.63-1.4-1.4V4.4Z"/></svg>`,
     plus: `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg>`,
     close: `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>`,
     // Compare/Pairing view toggle — two stacked type samples.
@@ -509,6 +509,193 @@
     // several hosts) still shows at a glance where each one came from,
     // with a click straight back to it.
     externalLink: `<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 3H3.6A1.1 1.1 0 0 0 2.5 4.1v8.3a1.1 1.1 0 0 0 1.1 1.1h8.3a1.1 1.1 0 0 0 1.1-1.1V9.4"/><path d="M9 2.5h4.5V7"/><line x1="13.2" y1="2.8" x2="7.3" y2="8.7"/></svg>`,
+  };
+
+  // GitHub-style folder-menu portal CSS — shared by Sites tooltip (overlay.js)
+  // and Notes capture (notes.js) so both pickers stay visually identical.
+  Acopio.ensureFolderMenuPortalStyles = function ensureFolderMenuPortalStyles() {
+    const existing = document.getElementById("acopio-folder-menu-styles");
+    if (existing) existing.remove();
+    const el = document.createElement("style");
+    el.id = "acopio-folder-menu-styles";
+    el.textContent = `
+      .acopio-folder-menu {
+        position: fixed; z-index: 2147483647; width: 280px; max-height: 320px;
+        overflow-y: auto; background: #ffffff; border: 1px solid #d0d7de;
+        border-radius: 12px; box-shadow: 0 1px 3px rgba(140,149,159,0.15), 0 8px 24px rgba(140,149,159,0.2);
+        padding: 8px; display: flex; flex-direction: column; gap: 0; pointer-events: auto;
+        box-sizing: border-box;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+        color: #1f2328; font-size: 14px; line-height: 20px;
+      }
+      .acopio-folder-menu .folder-menu-heading {
+        padding: 6px 8px 4px; font-size: 12px; font-weight: 600; line-height: 16px; color: #656d76;
+      }
+      .acopio-folder-menu .folder-menu-empty {
+        padding: 6px 8px 8px; font-size: 12px; line-height: 16px; color: #656d76;
+      }
+      .acopio-folder-menu .folder-menu-item {
+        display: flex; align-items: center; gap: 8px; width: 100%;
+        border: none; background: transparent; text-align: left; cursor: pointer;
+        padding: 6px 8px; border-radius: 6px; font: inherit; font-size: 14px; line-height: 20px;
+        color: #1f2328; box-sizing: border-box;
+      }
+      .acopio-folder-menu .folder-menu-item:hover { background: #f3f4f6; }
+      .acopio-folder-menu .folder-menu-item[aria-checked="true"] {
+        background: #ddf4ff; color: #0969da; font-weight: 600;
+      }
+      .acopio-folder-menu .folder-menu-item-label {
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1;
+      }
+      .acopio-folder-menu .folder-menu-item-icon {
+        width: 16px; height: 16px; flex: none; display: flex; align-items: center; justify-content: center;
+        color: #656d76; overflow: hidden; border-radius: 3px;
+      }
+      .acopio-folder-menu .folder-menu-item[aria-checked="true"] .folder-menu-item-icon { color: #0969da; }
+      .acopio-folder-menu .folder-menu-item-icon svg { width: 14px; height: 14px; }
+      .acopio-folder-menu .folder-menu-item-icon img { width: 14px; height: 14px; object-fit: contain; display: block; }
+      .acopio-folder-menu .folder-menu-item-check { margin-left: auto; flex: none; display: none; color: #0969da; }
+      .acopio-folder-menu .folder-menu-item[aria-checked="true"] .folder-menu-item-check { display: flex; }
+      .acopio-folder-menu .folder-menu-item-check svg { width: 12px; height: 12px; }
+      .acopio-folder-menu .folder-menu-divider { height: 1px; background: #d0d7de; margin: 8px 0; border: 0; }
+      .acopio-folder-menu .folder-menu-new-form {
+        display: flex; gap: 8px; padding: 4px 0 0; align-items: stretch;
+      }
+      .acopio-folder-menu .folder-menu-new-input {
+        flex: 1; min-width: 0; height: 32px; box-sizing: border-box;
+        border: 1px solid #d0d7de; border-radius: 6px;
+        padding: 5px 12px; font: inherit; font-size: 14px; line-height: 20px;
+        color: #1f2328; background: #ffffff; outline: none;
+        box-shadow: inset 0 1px 0 rgba(208,215,222,0.2);
+      }
+      .acopio-folder-menu .folder-menu-new-input::placeholder { color: #656d76; }
+      .acopio-folder-menu .folder-menu-new-input:focus {
+        border-color: #0969da; outline: none;
+        box-shadow: inset 0 1px 0 rgba(208,215,222,0.2), 0 0 0 3px rgba(9,105,218,0.3);
+      }
+      .acopio-folder-menu .folder-menu-new-confirm {
+        width: 32px; height: 32px; box-sizing: border-box; border: 1px solid rgba(27,31,36,0.15);
+        border-radius: 6px; flex: none; background: #1f2328; color: #ffffff;
+        display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+      }
+      .acopio-folder-menu .folder-menu-new-confirm:hover { background: #2f363d; }
+      .acopio-folder-menu .folder-menu-new-confirm svg { width: 12px; height: 12px; }
+      .acopio-folder-menu .folder-menu-new-confirm:disabled { opacity: 0.5; cursor: default; }
+    `;
+    document.documentElement.appendChild(el);
+  };
+
+  // Host → favicon data URL from background (_favicon → data URL). Data URLs
+  // are CSP-safe in content-script UI; chrome-extension://_favicon/ imgs are not.
+  const siteFaviconByHost = new Map();
+
+  Acopio.rememberSiteFavicons = function rememberSiteFavicons(folders) {
+    (folders || []).forEach((f) => {
+      if (f && f.hostname && f.faviconDataUrl) {
+        siteFaviconByHost.set(f.hostname, f.faviconDataUrl);
+      }
+    });
+  };
+
+  Acopio.pageFaviconHref = function pageFaviconHref() {
+    try {
+      const selectors = [
+        'link[rel="icon"]',
+        'link[rel="shortcut icon"]',
+        'link[rel="apple-touch-icon"]',
+        'link[rel="apple-touch-icon-precomposed"]',
+        'link[rel*="icon"]',
+      ];
+      for (const sel of selectors) {
+        const link = document.querySelector(sel);
+        if (link && link.href) return link.href;
+      }
+      return new URL("/favicon.ico", location.origin).href;
+    } catch (_) {
+      return "";
+    }
+  };
+
+  Acopio.requestSiteFavicon = function requestSiteFavicon(hostname) {
+    return new Promise((resolve) => {
+      if (!hostname) {
+        resolve("");
+        return;
+      }
+      const cached = siteFaviconByHost.get(hostname);
+      if (cached) {
+        resolve(cached);
+        return;
+      }
+      try {
+        chrome.runtime.sendMessage(
+          { type: "GET_SITE_FAVICON", payload: { hostname } },
+          (response) => {
+            if (chrome.runtime.lastError || !response || !response.ok || !response.faviconDataUrl) {
+              resolve("");
+              return;
+            }
+            siteFaviconByHost.set(hostname, response.faviconDataUrl);
+            resolve(response.faviconDataUrl);
+          }
+        );
+      } catch (_) {
+        resolve("");
+      }
+    });
+  };
+
+  Acopio.fillSiteFavicon = function fillSiteFavicon(containerEl, hostname) {
+    if (!containerEl) return;
+    if (typeof containerEl._acopioFaviconCancel === "function") {
+      containerEl._acopioFaviconCancel();
+    }
+    containerEl.classList.add("is-site");
+    containerEl.innerHTML = Acopio.ICONS.globe || Acopio.ICONS.folder;
+
+    const host = hostname || Acopio.hostname();
+    const candidates = [];
+    const cached = siteFaviconByHost.get(host);
+    if (cached) candidates.push(cached);
+    // Live page icon only matches the current tab's host.
+    if (!hostname || host === Acopio.hostname()) {
+      const pageIcon = Acopio.pageFaviconHref();
+      if (pageIcon && !candidates.includes(pageIcon)) candidates.push(pageIcon);
+    }
+
+    let attempt = 0;
+    let cancelled = false;
+    let askedBackground = false;
+    const applySrc = (src) => {
+      if (cancelled || !src) return;
+      const img = document.createElement("img");
+      img.alt = "";
+      img.decoding = "async";
+      img.addEventListener("error", () => tryNext());
+      img.addEventListener("load", () => {
+        if (cancelled) return;
+        containerEl.innerHTML = "";
+        containerEl.appendChild(img);
+      });
+      img.src = src;
+    };
+    const tryNext = () => {
+      if (cancelled) return;
+      if (attempt < candidates.length) {
+        applySrc(candidates[attempt++]);
+        return;
+      }
+      if (!askedBackground && host) {
+        askedBackground = true;
+        Acopio.requestSiteFavicon(host).then((dataUrl) => {
+          if (dataUrl && dataUrl !== cached) applySrc(dataUrl);
+        });
+      }
+    };
+    containerEl._acopioFaviconCancel = () => {
+      cancelled = true;
+    };
+    tryNext();
   };
 
   window.Acopio = Acopio;

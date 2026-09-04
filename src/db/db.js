@@ -35,7 +35,7 @@
           db.createObjectStore(META_STORE, { keyPath: "key" });
         }
 
-        // Future migrations: `if (oldVersion < 2) { ... }` — never assume
+        // Future migrations: if (oldVersion < 2) { ... } — never assume
         // old records match the new shape; each block here is responsible
         // for bringing existing rows forward, not just changing new writes.
       };
@@ -108,7 +108,7 @@
 
   const AcopioDB = {
     /**
-     * Adds one item. `item` must already be capture-time sanitized; this
+     * Adds one item. item must already be capture-time sanitized; this
      * function performs the second sanitization pass (Section 9 layer 2)
      * before the write, using the same sanitize.js rules re-applied to the
      * plain-object html field (belt-and-suspenders: even if the content
@@ -366,6 +366,21 @@
     async getAllCollections() {
       const t = await tx([COLLECTIONS_STORE], "readonly");
       return promisifyRequest(t.objectStore(COLLECTIONS_STORE).getAll());
+    },
+
+    // Distinct site folders for the tooltip "Save to" picker — same grouping
+    // the Library Sites tab builds (non-note items by hostname).
+    async listSiteFolders() {
+      const items = await this.getAllItems();
+      const byHost = new Map();
+      for (const item of items) {
+        if (!item || item.type === "note" || !item.hostname) continue;
+        if (!byHost.has(item.hostname)) byHost.set(item.hostname, 0);
+        byHost.set(item.hostname, byHost.get(item.hostname) + 1);
+      }
+      return Array.from(byHost.entries())
+        .map(([hostname, count]) => ({ hostname, count }))
+        .sort((a, b) => a.hostname.localeCompare(b.hostname));
     },
 
     async getCollection(id) {

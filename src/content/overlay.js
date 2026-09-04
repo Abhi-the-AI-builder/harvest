@@ -37,6 +37,7 @@
       --type-color-bg: #FDE8E1; --type-color-fg: #C1552F;
       --type-font-bg: #EDEAFB; --type-font-fg: #5B4FC4;
       --type-image-bg: #DFF3EC; --type-image-fg: #1E8F72;
+      --type-folder-bg: #E8EEF7; --type-folder-fg: #1D3461;
       --type-component-bg: #FBF0DC; --type-component-fg: #B07D1F;
       --shadow-raised: 0 2px 6px rgba(23,24,26,0.08), 0 8px 20px rgba(23,24,26,0.10);
       --shadow-overlay: 0 8px 24px rgba(23,24,26,0.14), 0 24px 48px rgba(23,24,26,0.16);
@@ -59,7 +60,7 @@
       color: var(--color-text);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-overlay);
-      padding: var(--space-4);
+      padding: var(--space-4) var(--space-4) var(--space-3) var(--space-4);
       width: 280px;
       pointer-events: auto;
       font-size: var(--text-body);
@@ -69,20 +70,113 @@
     }
     .card.card--no-entrance { animation: none; }
     @keyframes acopio-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
-    /* A real divider under the selector — not just a margin gap — so the
-       technical "what element is this" line reads as visually separate
-       from the actual capture content below it, the same clean-tag
-       treatment the sibling Design System Extractor project uses. */
-    .selector-row {
-      display: flex; align-items: center; gap: var(--space-2); justify-content: space-between;
+    /* Folder destination — compact chip (icon + name + chevron), not a
+       full-width field. Hairline under the row separates destination from type. */
+    .folder-header {
+      display: flex; align-items: center; gap: var(--space-2); justify-content: flex-start;
       padding-bottom: var(--space-3); margin-bottom: var(--space-3);
       border-bottom: 1px solid var(--color-border);
+      cursor: grab; touch-action: none;
     }
-    /* Draggable header — see the pointerdown/move/up wiring right after
-       this row is built. cursor on the row itself, not its buttons (which
-       already show their own pointer cursor from the base button rule),
-       and touch-action:none so a touch-drag doesn't also try to scroll
-       the underlying page at the same time. */
+    .folder-header.is-dragging { cursor: grabbing; }
+    .folder-btn {
+      display: inline-flex; align-items: center; gap: var(--space-2);
+      flex: 0 1 auto; max-width: 100%; width: max-content; min-width: 0;
+      border: none; background: transparent; color: var(--color-text);
+      border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2);
+      font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; text-align: left;
+      transition: background var(--ease-fast), color var(--ease-fast);
+    }
+    /* Wash only — no accent outline box on hover/open. */
+    .folder-btn:hover, .folder-btn[aria-expanded="true"] {
+      background: var(--color-accent-wash); color: var(--color-accent);
+    }
+    .folder-btn:focus { outline: none; }
+    .folder-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+    .folder-btn-icon {
+      width: 22px; height: 22px; border-radius: var(--radius-xs); flex: none;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--type-folder-bg); color: var(--type-folder-fg);
+      overflow: hidden;
+    }
+    .folder-btn-icon.is-site {
+      background: var(--color-surface); border: 1px solid var(--color-border);
+      color: var(--color-text-muted);
+    }
+    .folder-btn-icon svg { width: 14px; height: 14px; }
+    .folder-btn-icon img { width: 14px; height: 14px; object-fit: contain; display: block; }
+    .folder-btn-label {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      flex: 0 1 auto; max-width: 160px; min-width: 0;
+    }
+    .folder-btn-chevron { flex: none; display: flex; color: var(--color-text-muted); transition: transform var(--ease-fast); }
+    .folder-btn-chevron svg { width: 11px; height: 11px; }
+    .folder-btn[aria-expanded="true"] .folder-btn-chevron { transform: rotate(180deg); color: var(--color-accent); }
+    .folder-btn:hover .folder-btn-chevron { color: var(--color-accent); }
+
+    /* Folder menu is portaled to documentElement (sibling of host) so it
+       isn't trapped by the host's fixed containing block / pointer-events.
+       Styles for that portal live on the element via a dedicated class
+       sheet injected once — keep a twin here for any in-shadow fallback. */
+    .folder-menu {
+      position: fixed; z-index: 2147483646; min-width: 200px; max-width: 280px; max-height: 260px;
+      overflow-y: auto; background: var(--color-surface); border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-sm); box-shadow: var(--shadow-overlay); padding: var(--space-1);
+      display: flex; flex-direction: column; gap: 2px; pointer-events: auto;
+      box-sizing: border-box;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .folder-menu-item {
+      display: flex; align-items: center; gap: var(--space-2); width: 100%;
+      border: none; background: none; text-align: left; cursor: pointer;
+      padding: var(--space-2) var(--space-3); border-radius: var(--radius-xs);
+      font: inherit; font-size: 12px; color: var(--color-text);
+      transition: background var(--ease-fast);
+    }
+    .folder-menu-item > .folder-menu-item-label {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1;
+    }
+    .folder-menu-item-icon {
+      width: 16px; height: 16px; flex: none; display: flex; align-items: center; justify-content: center;
+      color: var(--color-text-muted); overflow: hidden;
+    }
+    .folder-menu-item-icon svg { width: 13px; height: 13px; }
+    .folder-menu-item-icon img { width: 14px; height: 14px; object-fit: contain; display: block; }
+    .folder-menu-item:hover { background: var(--color-accent-wash); }
+    .folder-menu-item[aria-checked="true"] { color: var(--color-accent); font-weight: 600; }
+    .folder-menu-item-check { margin-left: auto; flex: none; display: none; color: var(--color-accent); }
+    .folder-menu-item[aria-checked="true"] .folder-menu-item-check { display: flex; }
+    .folder-menu-item-check svg { width: 11px; height: 11px; }
+    .folder-menu-divider { height: 1px; background: var(--color-border); margin: var(--space-1) 0; }
+    .folder-menu-new-form { display: flex; gap: var(--space-1); padding: var(--space-1); align-items: center; }
+    .folder-menu-new-input {
+      flex: 1; min-width: 0; border: 1px solid var(--color-border-strong); border-radius: var(--radius-xs);
+      padding: var(--space-2); font: inherit; font-size: 12px; color: var(--color-text); background: var(--color-bg);
+      outline: none;
+    }
+    .folder-menu-new-input:focus { border-color: var(--color-accent); }
+    .folder-menu-new-confirm {
+      width: 28px; height: 28px; border: none; border-radius: var(--radius-xs); flex: none;
+      background: var(--color-accent); color: var(--color-surface); display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .folder-menu-new-confirm svg { width: 11px; height: 11px; }
+    .folder-menu-new-confirm:disabled { opacity: 0.5; cursor: default; }
+
+    /* Type + dimensions + copy — sits just above the preview, no divider. */
+    .type-meta-row {
+      display: flex; align-items: center; gap: var(--space-2); justify-content: space-between;
+      padding-bottom: var(--space-2); margin-bottom: var(--space-2);
+    }
+    .type-meta-row > .row { min-width: 0; flex: none; }
+    .type-meta-row .copy-btn { width: 26px; height: 26px; border-radius: var(--radius-sm); }
+    .type-meta-row .copy-btn svg { width: 13px; height: 13px; }
+
+    /* Kept for rare iframe fallback header. */
+    .selector-row {
+      display: flex; align-items: center; gap: var(--space-2); justify-content: space-between;
+      padding-bottom: var(--space-2); margin-bottom: var(--space-2);
+    }
     .selector-row-draggable { cursor: grab; touch-action: none; }
     .selector-row-draggable.is-dragging { cursor: grabbing; }
     .selector {
@@ -94,18 +188,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    /* buildTypeBody's own leading .row (type icon + label + dimensions),
-       reused as the header's primary content. Natural width, not flex:1 —
-       .headline-meta no longer has margin-left:auto pushing it to this
-       row's own far edge (it sits right next to the label now, per
-       explicit feedback), so a stretched .row would just drag .headline's
-       own flex:1 text along with it, stretching the label across empty
-       space instead of leaving it exactly where its content ends.
-       justify-content:space-between on .selector-row (below) is what
-       pushes the nav/copy buttons to the right edge instead. .row's base
-       rule (used all over the rest of the tooltip body) stays untouched —
-       this only applies when it's sitting directly in the header. */
-    .selector-row > .row { min-width: 0; flex: none; }
     /* Up = select the parent element at this same hover point, down =
        back to where you were. This is the actual answer to "there are two
        fonts/elements stacked right here, I can only see one" — a heading
@@ -139,6 +221,8 @@
       font-size: 11px; color: var(--color-text-muted);
     }
     .already-collected svg { color: var(--color-accent); flex: none; width: 12px; height: 12px; }
+    /* Match card bottom padding (--space-3): note→divider, divider→stack, and
+       stack→card bottom all read as the same 12px gap. */
     .divider { height: 1px; background: var(--color-border); margin: var(--space-3) 0; }
     .row { display: flex; align-items: center; gap: var(--space-2); }
     /* Small inline icon directly in the headline row — not a floating
@@ -204,15 +288,20 @@
        clickable to jump straight to that specific child (so you can
        collect exactly that nested piece, not just the group as a whole),
        and they wrap cleanly at any count instead of breaking. */
-    /* Label above, chips below — not inline side by side. Cross-aligning
-       the label against the chips only worked when they fit on exactly
-       one line; once they wrapped to two+ rows, centering the label
-       against the whole wrapped block's height put it floating between
-       rows instead of level with the first one. Stacking sidesteps the
-       problem entirely regardless of how many rows the chips wrap to. */
-    .contains-row { margin-top: var(--space-3); }
-    .contains-row .child-label { margin-bottom: var(--space-1); }
-    .contains-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+    /* Label + chips on one flex-wrap row: chips sit inline after
+       "Contains:" when they fit, and wrap onto the next line when they
+       don't. display:contents on .contains-chips lets each chip join
+       the parent wrap so the label stays on the first line with whatever
+       chips fit, rather than the whole chip group dropping as a block. */
+    .contains-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      margin-top: var(--space-3);
+    }
+    .contains-row .child-label { margin-bottom: 0; flex: none; }
+    .contains-chips { display: contents; }
     .contains-chip {
       border: 1px solid transparent; background: var(--color-bg); border-radius: var(--radius-full);
       padding: 2px var(--space-2); font-size: 11px; font-weight: 600; color: var(--color-text); cursor: pointer;
@@ -289,8 +378,6 @@
        above. Same class, same borderless/flat chrome either way — only
        the size differs by context, exactly like the solo/default split
        already established for color chips. */
-    .selector-row .copy-btn { width: 26px; height: 26px; border-radius: var(--radius-sm); }
-    .selector-row .copy-btn svg { width: 13px; height: 13px; }
     /* Side by side, each stop its own small bordered chip — not a stacked
        column of full-width rows, which read as heavier/bulkier than the
        actual amount of information (a swatch, a hex, a copy button)
@@ -583,26 +670,394 @@
   // capping with no sign anything was left out (Pattern 5 — an overflow
   // count, not a mystery truncation).
   let sessionCaptureTotal = 0;
-  // A returning visit to a site with existing collected items should read
-  // as "you've already been here," not reset to the plain first-time
-  // "+ Collect" button on every fresh page load — fetched once, right after
-  // all content scripts finish loading (setTimeout defers past this file's
-  // own synchronous evaluation, so Acopio.fetchRecentItems — defined in
-  // content.js, which loads after this one — is guaranteed to exist by the
-  // time this runs).
-  setTimeout(() => {
-    Acopio.fetchRecentItems(Acopio.hostname(), MAX_STACK_SLOTS, (items, total) => {
-      // Guard against a real capture (or a second copy of this timer, in
-      // the unlikely case of a double-injection) having already populated
-      // this first — never clobber real session activity with history.
-      if (items && items.length && sessionCaptures.length === 0) {
-        // Oldest-first, matching the order a real session accumulates in
-        // (buildStackPreview always renders left-to-right, oldest-to-
-        // newest) — GET_RECENT_ITEMS itself returns newest-first.
-        sessionCaptures = items.slice().reverse();
-        sessionCaptureTotal = total || items.length;
+  // Folder destination for Collect — null = this site's automatic folder;
+  // a collection id = file into that Collection (and show its stack).
+  // Same storage key as notes.js so picks stay consistent across capture modes.
+  const LAST_FOLDER_KEY = "acopioLastFolderByHost";
+  let selectedCollectionId = null;
+  // When filing into another site's folder (Library Sites card), override
+  // the item hostname. Null = current page hostname. Ignored while a
+  // Collection is selected (Collections link items that still live in
+  // their capture-site folder).
+  let selectedDestinationHostname = null;
+  let selectedFolderName = Acopio.hostname();
+  let collectionsCache = [];
+  let siteFoldersCache = [];
+  let folderMenuEl = null;
+  let folderMenuOpen = false;
+  let folderMenuLoadId = 0;
+  let stackLoadGeneration = 0;
+
+  function siteFolderLabel() {
+    return Acopio.hostname() || "This site";
+  }
+
+  function effectiveHostname() {
+    if (selectedCollectionId) return Acopio.hostname();
+    return selectedDestinationHostname || Acopio.hostname();
+  }
+
+  // Prefer the live page's own <link rel="icon"> (works in content-script
+  // UI). Chrome's _favicon endpoint is a fallback. Never leave the badge
+  // empty — show a globe immediately, then swap when an image loads.
+  function fillSiteFavicon(containerEl, hostname) {
+    Acopio.fillSiteFavicon(containerEl, hostname);
+  }
+
+  function updateFolderBtnChrome(btn) {
+    const folderBtn = btn || (cardEl && cardEl.querySelector(".folder-btn"));
+    if (!folderBtn) return;
+    const labelEl = folderBtn.querySelector(".folder-btn-label");
+    const iconEl = folderBtn.querySelector(".folder-btn-icon");
+    const name = folderDisplayName(selectedFolderName || siteFolderLabel());
+    if (labelEl) labelEl.textContent = name;
+    folderBtn.setAttribute("aria-label", `Collect to ${name}`);
+    folderBtn.title = `Collect to ${name} — click to change`;
+    if (!iconEl) return;
+    if (selectedCollectionId) {
+      iconEl.classList.remove("is-site");
+      iconEl.innerHTML = Acopio.ICONS.folder;
+    } else {
+      fillSiteFavicon(iconEl, effectiveHostname());
+    }
+  }
+
+  // Icon already says "folder" — label is only the chosen name (never
+  // "Folder:" / "After switching to:" prefixes).
+  function folderDisplayName(name) {
+    let s = String(name || "").trim();
+    s = s.replace(/^Folder:\s*/i, "");
+    s = s.replace(/^After switching to:\s*/i, "");
+    s = s.replace(/^Collecting to:\s*/i, "");
+    return s || siteFolderLabel();
+  }
+
+  function getCollections() {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: "GET_COLLECTIONS" }, (response) => {
+          if (chrome.runtime.lastError || !response || !response.ok) {
+            resolve([]);
+            return;
+          }
+          resolve(response.collections || []);
+        });
+      } catch (_) {
+        resolve([]);
       }
     });
+  }
+
+  function getSiteFolders() {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: "GET_SITE_FOLDERS" }, (response) => {
+          if (chrome.runtime.lastError || !response || !response.ok) {
+            resolve([]);
+            return;
+          }
+          const folders = response.folders || [];
+          Acopio.rememberSiteFavicons(folders);
+          resolve(folders);
+        });
+      } catch (_) {
+        resolve([]);
+      }
+    });
+  }
+
+  function getLastFolder(hostname) {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([LAST_FOLDER_KEY], (res) => {
+          const map = (res && res[LAST_FOLDER_KEY]) || {};
+          resolve(map[hostname] || null);
+        });
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  }
+
+  function setLastFolder(hostname, collectionId) {
+    try {
+      chrome.storage.local.get([LAST_FOLDER_KEY], (res) => {
+        const map = (res && res[LAST_FOLDER_KEY]) || {};
+        map[hostname] = collectionId;
+        chrome.storage.local.set({ [LAST_FOLDER_KEY]: map });
+      });
+    } catch (_) {
+      // best-effort
+    }
+  }
+
+  function closeFolderMenu() {
+    folderMenuLoadId += 1; // invalidate any in-flight open fetch
+    if (folderMenuEl) {
+      folderMenuEl.remove();
+      folderMenuEl = null;
+    }
+    folderMenuOpen = false;
+    const btn = cardEl && cardEl.querySelector(".folder-btn");
+    if (btn) btn.setAttribute("aria-expanded", "false");
+  }
+
+  function applyStackItems(items, total) {
+    sessionCaptures = (items || []).slice().reverse();
+    sessionCaptureTotal = total || sessionCaptures.length;
+  }
+
+  function loadStackForCurrentFolder(callback) {
+    const myLoad = ++stackLoadGeneration;
+    const done = (items, total) => {
+      if (myLoad !== stackLoadGeneration) return;
+      applyStackItems(items, total);
+      if (callback) callback();
+    };
+    if (selectedCollectionId) {
+      Acopio.fetchCollectionRecentItems(selectedCollectionId, MAX_STACK_SLOTS, (items, total, name) => {
+        if (name) selectedFolderName = folderDisplayName(name);
+        done(items, total);
+      });
+    } else {
+      Acopio.fetchRecentItems(effectiveHostname(), MAX_STACK_SLOTS, (items, total) => {
+        done(items, total);
+      });
+    }
+  }
+
+  function refreshActionsInPlace() {
+    const actionsEl = cardEl && cardEl.querySelector(".actions");
+    if (!actionsEl || !currentTarget) return;
+    populateActions(actionsEl);
+    positionCard(currentTarget.getBoundingClientRect());
+  }
+
+  function selectCollectFolder(collectionId, collectionName, siteHostname) {
+    selectedCollectionId = collectionId;
+    if (collectionId) {
+      selectedDestinationHostname = null;
+      selectedFolderName = folderDisplayName(collectionName || "Folder");
+    } else {
+      selectedDestinationHostname = siteHostname || Acopio.hostname();
+      selectedFolderName = folderDisplayName(collectionName || selectedDestinationHostname || siteFolderLabel());
+    }
+    setLastFolder(Acopio.hostname(), collectionId);
+    updateFolderBtnChrome();
+    loadStackForCurrentFolder(() => refreshActionsInPlace());
+  }
+
+  function ensureFolderMenuPortalStyles() {
+    Acopio.ensureFolderMenuPortalStyles();
+  }
+
+  function positionFolderMenu(anchorBtn) {
+    if (!folderMenuEl || !anchorBtn) return;
+    const margin = 8;
+    const r = anchorBtn.getBoundingClientRect();
+    folderMenuEl.style.visibility = "hidden";
+    folderMenuEl.style.display = "flex";
+    const menuWidth = Math.max(280, folderMenuEl.offsetWidth || 280);
+    const menuHeight = folderMenuEl.offsetHeight || 160;
+    let left = r.left;
+    left = Math.max(margin, Math.min(left, window.innerWidth - menuWidth - margin));
+    let top = r.bottom + 4;
+    if (top + menuHeight > window.innerHeight - margin) {
+      top = Math.max(margin, r.top - menuHeight - 4);
+    }
+    folderMenuEl.style.left = `${left}px`;
+    folderMenuEl.style.top = `${top}px`;
+    folderMenuEl.style.visibility = "visible";
+  }
+
+  function openFolderMenu(folderBtn) {
+    // Always re-query Sites + Folders before painting — never rely on a
+    // stale cache from page load / a previous open (user may have created
+    // or deleted folders in the side panel since then).
+    if (folderMenuEl) {
+      folderMenuEl.remove();
+      folderMenuEl = null;
+    }
+    const loadId = ++folderMenuLoadId;
+    folderBtn.setAttribute("aria-expanded", "true");
+    folderMenuOpen = true;
+    Promise.all([getCollections(), getSiteFolders()]).then(([collections, siteFolders]) => {
+      if (loadId !== folderMenuLoadId) return;
+      if (!folderMenuOpen || !cardEl || !cardEl.contains(folderBtn)) return;
+      collectionsCache = collections || [];
+      siteFoldersCache = siteFolders || [];
+      renderFolderMenu(folderBtn);
+    });
+  }
+
+  function renderFolderMenu(folderBtn) {
+    if (folderMenuEl) {
+      folderMenuEl.remove();
+      folderMenuEl = null;
+    }
+    ensureFolderMenuPortalStyles();
+    folderMenuEl = document.createElement("div");
+    folderMenuEl.className = "acopio-folder-menu";
+    folderMenuEl.setAttribute("role", "menu");
+    folderMenuEl.setAttribute("data-acopio-folder-menu", "true");
+
+    function buildFolderMenuItem(label, checked, onClick, iconKind, hostnameForIcon) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "folder-menu-item";
+      btn.setAttribute("role", "menuitemradio");
+      btn.setAttribute("aria-checked", String(checked));
+      const iconWrap = document.createElement("span");
+      iconWrap.className = "folder-menu-item-icon";
+      if (iconKind === "site") fillSiteFavicon(iconWrap, hostnameForIcon || label);
+      else iconWrap.innerHTML = Acopio.ICONS.folder;
+      btn.appendChild(iconWrap);
+      const labelSpan = document.createElement("span");
+      labelSpan.className = "folder-menu-item-label";
+      labelSpan.textContent = label;
+      btn.appendChild(labelSpan);
+      const check = document.createElement("span");
+      check.className = "folder-menu-item-check";
+      check.innerHTML = Acopio.ICONS.check;
+      btn.appendChild(check);
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        onClick();
+      });
+      return btn;
+    }
+
+    function addHeading(text) {
+      const h = document.createElement("div");
+      h.className = "folder-menu-heading";
+      h.textContent = text;
+      folderMenuEl.appendChild(h);
+    }
+
+    const currentHost = Acopio.hostname();
+    const sites = siteFoldersCache.slice();
+    if (currentHost && !sites.some((f) => f.hostname === currentHost)) {
+      sites.unshift({ hostname: currentHost, count: 0 });
+    }
+    sites.sort((a, b) => {
+      if (a.hostname === currentHost) return -1;
+      if (b.hostname === currentHost) return 1;
+      return a.hostname.localeCompare(b.hostname);
+    });
+
+    addHeading("Sites");
+    sites.forEach((folder) => {
+      const host = folder.hostname;
+      const isCurrentDest = !selectedCollectionId && effectiveHostname() === host;
+      folderMenuEl.appendChild(
+        buildFolderMenuItem(host, isCurrentDest, () => {
+          selectCollectFolder(null, host, host);
+          closeFolderMenu();
+        }, "site", host)
+      );
+    });
+
+    folderMenuEl.appendChild(Object.assign(document.createElement("div"), { className: "folder-menu-divider" }));
+
+    addHeading("Folders");
+    collectionsCache.forEach((c) => {
+      folderMenuEl.appendChild(
+        buildFolderMenuItem(c.name, selectedCollectionId === c.id, () => {
+          selectCollectFolder(c.id, c.name, null);
+          closeFolderMenu();
+        }, "collection")
+      );
+    });
+
+    folderMenuEl.appendChild(Object.assign(document.createElement("div"), { className: "folder-menu-divider" }));
+
+    const form = document.createElement("div");
+    form.className = "folder-menu-new-form";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "folder-menu-new-input";
+    input.placeholder = "New folder name";
+    input.maxLength = 60;
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { e.preventDefault(); confirm(); }
+      if (e.key === "Escape") { e.preventDefault(); closeFolderMenu(); }
+    });
+    input.addEventListener("click", (e) => e.stopPropagation());
+    form.appendChild(input);
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "folder-menu-new-confirm";
+    confirmBtn.innerHTML = Acopio.ICONS.plus;
+    confirmBtn.title = "Create folder";
+    confirmBtn.setAttribute("aria-label", "Create folder");
+    const confirm = () => {
+      const name = input.value.trim();
+      if (!name) { input.focus(); return; }
+      confirmBtn.disabled = true;
+      let settled = false;
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        confirmBtn.disabled = false;
+        showInlineError("Acopio didn't hear back — try again in a moment.");
+      }, 8000);
+      try {
+        chrome.runtime.sendMessage({ type: "CREATE_COLLECTION", payload: { name } }, (response) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          if (chrome.runtime.lastError || !response || !response.ok) {
+            confirmBtn.disabled = false;
+            showInlineError((response && response.error) || "Couldn't create that folder — try again.");
+            return;
+          }
+          collectionsCache = [{ id: response.collection.id, name: response.collection.name }, ...collectionsCache.filter((c) => c.id !== response.collection.id)];
+          selectCollectFolder(response.collection.id, response.collection.name, null);
+          closeFolderMenu();
+          showToast(`Created "${response.collection.name}" — collecting goes here`);
+        });
+      } catch (_) {
+        settled = true;
+        clearTimeout(timeoutId);
+        confirmBtn.disabled = false;
+        showInlineError("Acopio was reloaded — refresh this page to keep collecting.");
+      }
+    };
+    confirmBtn.addEventListener("click", (e) => { e.stopPropagation(); confirm(); });
+    form.appendChild(confirmBtn);
+    folderMenuEl.appendChild(form);
+
+    document.documentElement.appendChild(folderMenuEl);
+    Acopio.registerOwnRoot(folderMenuEl);
+    positionFolderMenu(folderBtn);
+  }
+
+  // Seed stack + remembered folder once content.js helpers are available.
+  setTimeout(() => {
+    Promise.all([getCollections(), getSiteFolders(), getLastFolder(Acopio.hostname())]).then(
+      ([collections, siteFolders, lastId]) => {
+        collectionsCache = collections || [];
+        siteFoldersCache = siteFolders || [];
+        if (lastId && collectionsCache.some((c) => c.id === lastId)) {
+          selectedCollectionId = lastId;
+          selectedDestinationHostname = null;
+          const found = collectionsCache.find((c) => c.id === lastId);
+          selectedFolderName = folderDisplayName((found && found.name) || siteFolderLabel());
+        } else {
+          selectedCollectionId = null;
+          selectedDestinationHostname = Acopio.hostname();
+          selectedFolderName = folderDisplayName(siteFolderLabel());
+        }
+        updateFolderBtnChrome();
+        if (sessionCaptures.length === 0) {
+          loadStackForCurrentFolder(() => {
+            if (cardEl && currentTarget) refreshActionsInPlace();
+          });
+        }
+      }
+    );
   }, 0);
   // Set right after a successful collect, consumed the next time
   // buildStackPreview() runs (see there) so the newly-added card plays its
@@ -999,16 +1454,17 @@
               restoreVisibility(); // as soon as we have any response — don't wait on image decode below
               if (chrome.runtime.lastError || !response || !response.ok) {
                 // Silent to the UI on purpose (a nice-to-have upgrade over
-                // the best-effort fallback, not a required feature) but NOT
-                // silent to the console — the most common real cause is
-                // host_permissions not actually being picked up yet (a
-                // reload in chrome://extensions doesn't always fully apply
-                // a new permissions grant for an unpacked extension;
-                // removing and re-adding it via "Load unpacked" does).
-                console.error(
-                  "[Acopio] screenshot failed:",
-                  (chrome.runtime.lastError && chrome.runtime.lastError.message) || (response && response.error) || "unknown error"
-                );
+                // the best-effort fallback, not a required feature).
+                // "superseded by a newer hover" is an expected race when the
+                // pointer moves on before captureVisibleTab returns — not a
+                // real failure, so don't noise the console with it.
+                const errMsg =
+                  (chrome.runtime.lastError && chrome.runtime.lastError.message) ||
+                  (response && response.error) ||
+                  "unknown error";
+                if (!String(errMsg).includes("superseded")) {
+                  console.error("[Acopio] screenshot failed:", errMsg);
+                }
                 finish(null);
                 return;
               }
@@ -1699,7 +2155,9 @@
     // not only things captured during the current page load.
     stack.setAttribute(
       "aria-label",
-      `${sessionCaptureTotal || sessionCaptures.length} items collected from this site — open the Acopio panel`
+      selectedCollectionId
+        ? `${sessionCaptureTotal || sessionCaptures.length} items in ${selectedFolderName} — open the Acopio panel`
+        : `${sessionCaptureTotal || sessionCaptures.length} items collected from this site — open the Acopio panel`
     );
     // A nice free tie-together rather than a dead end: clicking the stack
     // itself (not the + button next to it) jumps straight to the side
@@ -1977,8 +2435,10 @@
   function render(options = {}) {
     ensureHost();
     generation++;
+    closeFolderMenu();
     if (cardEl) cardEl.remove();
     isSaving = false;
+    if (!selectedCollectionId) selectedFolderName = folderDisplayName(siteFolderLabel());
     cardEl = document.createElement("div");
     cardEl.className = options.skipEntrance ? "card card--no-entrance" : "card";
     cardEl.setAttribute("role", "region");
@@ -1998,41 +2458,100 @@
       return;
     }
 
-    // Built before the header row now, not after — its own first ".row"
-    // (type icon + "Image"/"Component"/etc + dimensions) moves up into the
-    // header itself below, replacing the plain CSS-selector text that used
-    // to sit there ("div.ADXRXN.NYgy1O" said what the element's tag/class
-    // happened to be, not what Acopio actually detected it as — the
-    // second row already right underneath said the useful thing).
+    // Built before the header rows — its leading ".row" (type icon + label
+    // + dimensions) moves into the type-meta row just above the preview.
     const bodyFrag = buildTypeBody(el, currentTagInfo, style);
     const typeHeaderRow = bodyFrag.querySelector(".row");
-    if (typeHeaderRow) typeHeaderRow.remove(); // detach — reused below instead of duplicated
+    if (typeHeaderRow) typeHeaderRow.remove();
 
-    const selectorRow = document.createElement("div");
-    selectorRow.className = "selector-row";
+    // Folder destination — where Collect will file this item. Drag handle
+    // for the card lives on this row (not on the type/copy row below).
+    const folderHeader = document.createElement("div");
+    folderHeader.className = "folder-header";
+    const folderBtn = document.createElement("button");
+    folderBtn.type = "button";
+    folderBtn.className = "folder-btn";
+    folderBtn.setAttribute("aria-haspopup", "true");
+    folderBtn.setAttribute("aria-expanded", "false");
+    folderBtn.title = "Choose where to collect";
+    const folderIcon = document.createElement("span");
+    folderIcon.className = "folder-btn-icon";
+    folderBtn.appendChild(folderIcon);
+    const folderLabel = document.createElement("span");
+    folderLabel.className = "folder-btn-label";
+    folderBtn.appendChild(folderLabel);
+    const folderChevron = document.createElement("span");
+    folderChevron.className = "folder-btn-chevron";
+    folderChevron.innerHTML = Acopio.ICONS.chevronDown;
+    folderBtn.appendChild(folderChevron);
+    folderBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (folderMenuOpen) {
+        closeFolderMenu();
+        return;
+      }
+      // Defer one frame so this same click's capture-phase window listener
+      // has finished. Always fetch fresh Sites + Folders inside openFolderMenu.
+      const btn = folderBtn;
+      requestAnimationFrame(() => {
+        if (!cardEl || !cardEl.contains(btn)) return;
+        openFolderMenu(btn);
+      });
+    });
+    folderHeader.appendChild(folderBtn);
+    cardEl.appendChild(folderHeader);
+    // Must run after the button is built (and preferably mounted) — earlier
+    // this ran before append and queried cardEl, so icon + name stayed blank.
+    updateFolderBtnChrome(folderBtn);
+
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragBaseOffset = { dx: 0, dy: 0 };
+    let dragging = false;
+    folderHeader.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("button")) return;
+      dragging = true;
+      folderHeader.setPointerCapture(e.pointerId);
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      dragBaseOffset = cardDragOffset ? { ...cardDragOffset } : { dx: 0, dy: 0 };
+      folderHeader.classList.add("is-dragging");
+    });
+    folderHeader.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      cardDragOffset = {
+        dx: dragBaseOffset.dx + (e.clientX - dragStartX),
+        dy: dragBaseOffset.dy + (e.clientY - dragStartY),
+      };
+      positionCard(el.getBoundingClientRect());
+    });
+    const endDrag = () => {
+      dragging = false;
+      folderHeader.classList.remove("is-dragging");
+    };
+    folderHeader.addEventListener("pointerup", endDrag);
+    folderHeader.addEventListener("pointercancel", endDrag);
+
+    // Type + size + copy — just above the preview (was previously the top header).
+    const typeMetaRow = document.createElement("div");
+    typeMetaRow.className = "type-meta-row";
     if (typeHeaderRow) {
-      selectorRow.appendChild(typeHeaderRow);
+      typeMetaRow.appendChild(typeHeaderRow);
     } else {
-      // Fallback for the rare case buildTypeBody didn't produce a leading
-      // .row (shouldn't happen for any real type, but better a technical
-      // selector than an empty header).
       const selectorLine = document.createElement("div");
       selectorLine.className = "selector";
       selectorLine.textContent = selectorFor(el);
-      selectorRow.appendChild(selectorLine);
+      typeMetaRow.appendChild(selectorLine);
     }
 
     const navBtns = document.createElement("div");
     navBtns.className = "selector-nav-btns";
 
-    // Reuses whatever buildCaptureData already worked out for this element
-    // (the same snapshot Collect itself uses — see lastKnownCapture above)
-    // instead of a separate computation, so the copied description matches
-    // what actually gets saved.
     const copyData = (lastKnownCapture && lastKnownCapture.el === el ? lastKnownCapture.data : null) || Acopio.buildCaptureData(el, currentTagInfo).data;
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
-    copyBtn.className = "copy-btn"; // exact same class as the hex-code copy buttons — same icon AND same borderless/flat button chrome, not just the same glyph
+    copyBtn.className = "copy-btn";
     copyBtn.innerHTML = Acopio.ICONS.copy;
     copyBtn.title = "Copy — image for Figma/docs, description for Claude/text";
     copyBtn.setAttribute("aria-label", "Copy this capture");
@@ -2042,10 +2561,6 @@
     });
     navBtns.appendChild(copyBtn);
     if (currentTagInfo.type === "image" && el.tagName.toLowerCase() === "svg") {
-      // Figma parses pasted SVG text into real, editable vector/group
-      // layers — genuinely more useful than the flat PNG above for content
-      // that's vector to begin with, so it's worth its own explicit option
-      // rather than folding into the general Copy button.
       const copySvgBtn = document.createElement("button");
       copySvgBtn.type = "button";
       copySvgBtn.className = "copy-btn";
@@ -2059,48 +2574,8 @@
       navBtns.appendChild(copySvgBtn);
     }
 
-    selectorRow.appendChild(navBtns);
-
-    cardEl.appendChild(selectorRow);
-
-    // Draggable by its header row — user-reported: the tooltip could land
-    // directly over page chrome (a site's own back button, nav) with no
-    // way to see/reach it short of dismissing the tooltip outright. Same
-    // pointerdown/move/up technique toolbar.js's own drag handle already
-    // uses, just producing a {dx,dy} nudge (cardDragOffset, applied in
-    // positionCard) instead of an absolute position, since this tooltip's
-    // position is normally computed fresh relative to the hovered element
-    // rather than remembered like the toolbar's is. Ignores a pointerdown
-    // that landed on one of this row's own buttons (copy, ↑/↓ nav) so
-    // dragging can never swallow those clicks.
-    selectorRow.classList.add("selector-row-draggable");
-    let dragStartX = 0;
-    let dragStartY = 0;
-    let dragBaseOffset = { dx: 0, dy: 0 };
-    let dragging = false;
-    selectorRow.addEventListener("pointerdown", (e) => {
-      if (e.target.closest("button")) return;
-      dragging = true;
-      selectorRow.setPointerCapture(e.pointerId);
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      dragBaseOffset = cardDragOffset ? { ...cardDragOffset } : { dx: 0, dy: 0 };
-      selectorRow.classList.add("is-dragging");
-    });
-    selectorRow.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
-      cardDragOffset = {
-        dx: dragBaseOffset.dx + (e.clientX - dragStartX),
-        dy: dragBaseOffset.dy + (e.clientY - dragStartY),
-      };
-      positionCard(el.getBoundingClientRect());
-    });
-    const endDrag = () => {
-      dragging = false;
-      selectorRow.classList.remove("is-dragging");
-    };
-    selectorRow.addEventListener("pointerup", endDrag);
-    selectorRow.addEventListener("pointercancel", endDrag);
+    typeMetaRow.appendChild(navBtns);
+    cardEl.appendChild(typeMetaRow);
 
     cardEl.appendChild(bodyFrag);
 
@@ -2147,7 +2622,7 @@
           const badge = document.createElement("div");
           badge.className = "already-collected";
           badge.innerHTML = `${Acopio.ICONS.check}<span>Already in your collection</span>`;
-          selectorRow.insertAdjacentElement("afterend", badge);
+          typeMetaRow.insertAdjacentElement("afterend", badge);
           // This resolves asynchronously, after the actions row already
           // rendered — a fresh, first-ever-this-page-load hover (no session
           // captures yet) would otherwise still get the full-width "+
@@ -2446,6 +2921,9 @@
     }
     const myGeneration = generation;
     const noteToSave = noteValue.trim();
+    const captureOptions = selectedCollectionId
+      ? null
+      : { hostname: effectiveHostname() };
     Acopio.finalizeCapture(el, tagInfo, data, noteToSave, (result) => {
       isSaving = false;
       // The tooltip may have been hidden, or moved on to a different
@@ -2462,10 +2940,32 @@
       }
       sessionCaptures.push(result.item);
       if (sessionCaptures.length > MAX_STACK_SLOTS) sessionCaptures.shift();
-      // result.count is the real post-save count for this hostname straight
-      // from AcopioDB (background.js already computes it for every save) —
-      // authoritative, no separate tracking/incrementing needed.
-      if (typeof result.count === "number") sessionCaptureTotal = result.count;
+      // When collecting into this site's folder, result.count is authoritative.
+      // For a Collection destination, bump the collection stack total locally
+      // (background doesn't recompute collection totals on CAPTURE_ITEM).
+      if (selectedCollectionId) {
+        sessionCaptureTotal = (sessionCaptureTotal || 0) + 1;
+      } else if (typeof result.count === "number") {
+        sessionCaptureTotal = result.count;
+      }
+      const linkCollection = selectedCollectionId
+        ? new Promise((resolve) => {
+            try {
+              chrome.runtime.sendMessage(
+                {
+                  type: "ADD_ITEMS_TO_COLLECTION",
+                  payload: {
+                    collectionId: selectedCollectionId,
+                    itemRefs: [{ folderHostname: result.item.hostname, itemId: result.item.id }],
+                  },
+                },
+                () => resolve()
+              );
+            } catch (_) {
+              resolve();
+            }
+          })
+        : Promise.resolve();
       // Best-effort dimension correction: data.url may already be the
       // upgraded, full-resolution file (upgradeImageUrl, shared.js) even
       // though data.width/height were only ever known from whatever <img>
@@ -2495,29 +2995,32 @@
         btn.innerHTML = isFab ? Acopio.ICONS.check : `${Acopio.ICONS.check}<span>Collected</span>`;
       }
       const myFinalizeGeneration = myGeneration;
-      setTimeout(() => {
-        if (myFinalizeGeneration !== generation) return; // moved on before the beat finished
-        showToast(`Collected from ${result.hostname}`);
-        // Refresh just the action row in place instead of hide()'ing the
-        // whole tooltip — the old behavior fully tore the card down, and
-        // since the mouse was usually still sitting right over the same
-        // element, content.js's hover-settle logic would immediately
-        // reopen it a beat later, reading as an unwanted flicker rather
-        // than a confirmation. Everything else about the card (what it is,
-        // its position) is unchanged; only the collection bar needs to
-        // reflect the item that just landed.
-        const actionsEl = cardEl && cardEl.querySelector(".actions");
-        if (actionsEl) populateActions(actionsEl);
-        noteValue = "";
-        const noteFieldEl = cardEl && cardEl.querySelector(".note-field");
-        // Clearing the value alone would leave a textarea that grew to 3
-        // lines still sitting at that height with nothing in it — height
-        // is inline style now (autosizeNoteField), so it has to be reset
-        // explicitly too, not just the value.
-        if (noteFieldEl) { noteFieldEl.value = ""; noteFieldEl.style.height = "auto"; }
-        positionCard(el.getBoundingClientRect()); // action row's height likely changed
-      }, 420);
-    });
+      linkCollection.then(() => {
+        setTimeout(() => {
+          if (myFinalizeGeneration !== generation) return; // moved on before the beat finished
+          const destLabel = selectedCollectionId ? selectedFolderName : result.hostname;
+          showToast(`Collected to ${destLabel}`);
+          // Refresh just the action row in place instead of hide()'ing the
+          // whole tooltip — the old behavior fully tore the card down, and
+          // since the mouse was usually still sitting right over the same
+          // element, content.js's hover-settle logic would immediately
+          // reopen it a beat later, reading as an unwanted flicker rather
+          // than a confirmation. Everything else about the card (what it is,
+          // its position) is unchanged; only the collection bar needs to
+          // reflect the item that just landed.
+          const actionsEl = cardEl && cardEl.querySelector(".actions");
+          if (actionsEl) populateActions(actionsEl);
+          noteValue = "";
+          const noteFieldEl = cardEl && cardEl.querySelector(".note-field");
+          // Clearing the value alone would leave a textarea that grew to 3
+          // lines still sitting at that height with nothing in it — height
+          // is inline style now (autosizeNoteField), so it has to be reset
+          // explicitly too, not just the value.
+          if (noteFieldEl) { noteFieldEl.value = ""; noteFieldEl.style.height = "auto"; }
+          positionCard(el.getBoundingClientRect()); // action row's height likely changed
+        }, 420);
+      });
+    }, captureOptions);
   }
 
   function showInlineError(msg) {
@@ -2534,6 +3037,7 @@
   function hide() {
     generation++;
     clearOutline();
+    closeFolderMenu();
     if (cardEl) {
       cardEl.remove();
       cardEl = null;
@@ -2598,7 +3102,7 @@
     const initialFingerprint = captureFingerprint(recheckEl, tagInfo);
     setTimeout(() => {
       if (currentTarget !== recheckEl) return; // moved on to something else already
-      if (noteFieldHasFocus || isSaving) return; // don't yank the tooltip away mid-interaction
+      if (noteFieldHasFocus || isSaving || folderMenuOpen) return; // don't yank the tooltip away mid-interaction
       if (recheckEl.tagName.toLowerCase() === "iframe") return;
       const freshTagInfo = Acopio.detectTag(recheckEl);
       const freshFingerprint = captureFingerprint(recheckEl, freshTagInfo);
@@ -2651,6 +3155,14 @@
     "keydown",
     (e) => {
       if (e.key !== "Escape") return;
+      // Close the folder picker first — Escape shouldn't pause capture just
+      // because a destination menu was open.
+      if (folderMenuOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeFolderMenu();
+        return;
+      }
       // Deliberately NOT gated on isVisible() anymore — this used to only
       // fire while a tooltip happened to be open, so Escape was only ever
       // a "dismiss what's currently showing" key. The actual ask was a
@@ -2699,7 +3211,19 @@
     (e) => {
       if (!isVisible()) return;
       const realTarget = e.composedPath()[0];
-      if (cardEl.contains(realTarget)) return; // let the card's own buttons handle their own clicks
+      // Folder menu is portaled onto documentElement (not inside cardEl).
+      if (folderMenuEl && folderMenuEl.contains(realTarget)) return;
+      if (realTarget && realTarget.closest && realTarget.closest("[data-acopio-folder-menu]")) return;
+      if (cardEl && cardEl.contains(realTarget)) {
+        // Clicking elsewhere on the card (not the folder control) closes
+        // an open folder menu without dismissing the tooltip.
+        if (folderMenuOpen && !realTarget.closest(".folder-btn")) closeFolderMenu();
+        return;
+      }
+      if (folderMenuOpen) {
+        closeFolderMenu();
+        return;
+      }
       hide();
     },
     true
@@ -2724,6 +3248,6 @@
     // the outside that looks exactly like "clicked Collect, tooltip
     // vanished, nothing happened," even though the save may have gone
     // through. Blocking hover during the save closes that gap.
-    isBusy: () => noteFieldHasFocus || isSaving,
+    isBusy: () => noteFieldHasFocus || isSaving || folderMenuOpen,
   };
 })();

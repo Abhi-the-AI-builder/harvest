@@ -377,6 +377,26 @@ async function testClipboardMimeTypes(ctx) {
   assert(fallbackText.includes("div.hero"), "fallback text includes selector metadata");
   assert(!lastClipboardWrite.types.includes("image/png"), "fallback copy does not force image/png");
 
+  // Multi-item: one with screenshot + one without must not hard-fail or
+  // silently paste only the imaged item.
+  const withImage = {
+    type: "component",
+    data: { previewImage: PNG_1x1_DATA_URL },
+    selector: "div.card",
+    sourceUrl: "https://example.com/a",
+  };
+  const withoutImage = {
+    type: "component",
+    data: {},
+    selector: "div.missing",
+    sourceUrl: "https://example.com/b",
+  };
+  await CC.writeClipboardWithFallback([withImage, withoutImage]);
+  assert(lastClipboardWrite.types.includes("text/plain"), "mixed multi-item falls back to text");
+  assert(!lastClipboardWrite.types.includes("image/png"), "mixed multi-item does not force image/png");
+  const mixedText = await lastClipboardWrite.getType("text/plain").then((b) => b.text());
+  assert(mixedText.includes("div.missing"), "mixed fallback keeps metadata for item without screenshot");
+
   const colorItem = { type: "color", data: { hex: "#336699" } };
   CC.limits.minPngBytes = 1;
   await CC.writeClipboardWithFallback([colorItem]);

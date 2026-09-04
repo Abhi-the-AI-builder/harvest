@@ -584,6 +584,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "GET_COLLECTION_RECENT_ITEMS") {
+    // Same stack preview as GET_RECENT_ITEMS, but for a user Collection —
+    // used when the hover tooltip's folder picker targets a Collection
+    // instead of "this site."
+    const collectionId = message.payload && message.payload.collectionId;
+    const limit = (message.payload && message.payload.limit) || 4;
+    if (!collectionId) {
+      sendResponse({ ok: false, error: "No collection id." });
+      return true;
+    }
+    AcopioDB.getCollection(collectionId)
+      .then(async (col) => {
+        if (!col) {
+          sendResponse({ ok: false, error: "Collection not found." });
+          return;
+        }
+        const items = await AcopioDB.resolveCollectionItems(col);
+        const nonNoteItems = items.filter((item) => item.type !== "note");
+        const recent = nonNoteItems
+          .slice()
+          .sort((a, b) => new Date(b.capturedAt) - new Date(a.capturedAt))
+          .slice(0, limit);
+        sendResponse({ ok: true, items: recent, total: nonNoteItems.length, name: col.name });
+      })
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+
   if (message.type === "UPDATE_NOTE") {
     AcopioDB.updateItemNote(message.payload.id, message.payload.note)
       .then((item) => {
@@ -609,13 +637,76 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // Chrome's on-device favicon cache via the "favicon" permission's
+  // `_favicon` endpoint — resolved here (extension context) to a data URL
+  // so content-script UI can set img.src without host-page CSP blocking
+  // chrome-extension:// image loads.
+  async function faviconBlobToDataUrl(blob) {
+    const buf = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return `data:${blob.type || "image/png"};base64,${btoa(binary)}`;
+  }
+
+  async function faviconDataUrlForHostname(hostname) {
+    if (!hostname) return null;
+    try {
+      const url = new URL(chrome.runtime.getURL("/_favicon/"));
+      url.searchParams.set("pageUrl", `https://${hostname}`);
+      url.searchParams.set("size", "32");
+      const resp = await fetch(url.toString());
+      if (!resp.ok) return null;
+      const blob = await resp.blob();
+      if (!blob || blob.size === 0) return null;
+      return await faviconBlobToDataUrl(blob);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  if (message.type === "GET_SITE_FOLDERS") {
+    // Library Sites cards (per-hostname folders) for the hover tooltip's
+    // destination menu — so every site folder the panel shows is also
+    // selectable when collecting. Enrich each row with a CSP-safe favicon
+    // data URL from Chrome's local cache.
+    AcopioDB.listSiteFolders()
+      .then(async (folders) => {
+        const enriched = await Promise.all(
+          (folders || []).map(async (f) => {
+            const faviconDataUrl = await faviconDataUrlForHostname(f.hostname);
+            return faviconDataUrl ? { ...f, faviconDataUrl } : f;
+          })
+        );
+        sendResponse({ ok: true, folders: enriched });
+      })
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+
+  if (message.type === "GET_SITE_FAVICON") {
+    const hostname = (message.payload && message.payload.hostname) || message.hostname;
+    faviconDataUrlForHostname(hostname)
+      .then((faviconDataUrl) => sendResponse({ ok: true, faviconDataUrl: faviconDataUrl || null }))
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+
   if (message.type === "ADD_ITEMS_TO_COLLECTION") {
     // Lets a note be filed straight into a Collection at capture time
     // (notes.js's folder picker) — thin relay onto the existing
     // itemRefs-only linking method (GROUND_RULES.md: a Collection never
     // copies item data, only references it).
     AcopioDB.addItemsToCollection(message.payload.collectionId, message.payload.itemRefs)
-      .then(() => sendResponse({ ok: true }))
+      .then(() => {
+        sendResponse({ ok: true });
+        // Open side panel should refresh Collections so newly linked items
+        // appear in the folder card without a manual reload.
+        chrome.runtime.sendMessage({ type: "ITEMS_UPDATED" }).catch(() => {});
+      })
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
   }
@@ -626,7 +717,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // full privileges); content scripts need this same relay every other
     // storage write here already goes through.
     AcopioDB.createCollection(message.payload.name)
-      .then((collection) => sendResponse({ ok: true, collection: { id: collection.id, name: collection.name } }))
+      .then((collection) => {
+        sendResponse({ ok: true, collection: { id: collection.id, name: collection.name } });
+        chrome.runtime.sendMessage({ type: "ITEMS_UPDATED" }).catch(() => {});
+      })
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
   }

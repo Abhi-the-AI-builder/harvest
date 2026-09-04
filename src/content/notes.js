@@ -96,9 +96,10 @@
       margin-left: 12px;
     }
     .folder-btn:hover, .folder-btn[aria-expanded="true"] { background: var(--color-accent-wash); color: var(--color-accent); border-color: var(--color-accent); }
-    .folder-btn-icon { flex: none; display: flex; color: var(--color-text-muted); }
+    .folder-btn-icon { flex: none; display: flex; align-items: center; justify-content: center; color: var(--color-text-muted); width: 16px; height: 16px; overflow: hidden; }
     .folder-btn:hover .folder-btn-icon, .folder-btn[aria-expanded="true"] .folder-btn-icon { color: var(--color-accent); }
     .folder-btn-icon svg { width: 13px; height: 13px; }
+    .folder-btn-icon img { width: 14px; height: 14px; object-fit: contain; display: block; }
     .folder-btn-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     /* Own real chevron, not a native <select> arrow — the actual bug being
        fixed: a native select's built-in arrow renders with inconsistent,
@@ -117,79 +118,17 @@
     .add-btn:hover { filter: brightness(1.08); }
     .add-btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .add-btn svg { width: 15px; height: 15px; }
-    /* Floating dropdown menu — same shape language as sidepanel.css's own
-       .export-menu (this codebase's established pattern for a small
-       floating option list), reimplemented locally since this shadow root
-       can't share that stylesheet. */
-    .folder-menu {
-      position: fixed; z-index: 2147483647; min-width: 150px; max-width: 200px;
-      background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm);
-      box-shadow: var(--shadow-overlay); padding: var(--space-1); display: flex; flex-direction: column; gap: 1px;
-    }
-    /* Every option the same normal weight, sized down from the pill's own
-       36px-tall controls (a dropdown floating off a compact pill shouldn't
-       out-weigh the pill itself) — only the checked item and the accent
-       "New folder" row pick up any emphasis, so the eye has one clear
-       place to land instead of every row shouting at once. */
-    .folder-menu-item {
-      border: none; background: none; text-align: left; padding: 6px var(--space-2);
-      border-radius: var(--radius-xs); font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--color-text);
-      cursor: pointer; font-family: inherit;
-      display: flex; align-items: center; gap: 6px;
-    }
-    /* The label is its own span now (a sibling of the checkmark span, not
-       the button's only content), so truncation has to target it
-       specifically — the button itself no longer has a single text run
-       to ellipsize. */
-    .folder-menu-item > span:first-child {
-      flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    /* Accent-wash, not a barely-there gray — a hover state that's easy to
-       miss reads as "is this even clickable?" in a list that's otherwise
-       all plain text rows. Same tint every other hoverable control in
-       this pill already uses (folder-btn, add-btn's own :hover), so this
-       list matches the rest of the product's own hover language instead
-       of inventing a quieter one just for itself. */
-    .folder-menu-item:hover { background: var(--color-accent-wash); }
-    .folder-menu-item[aria-checked="true"] { color: var(--color-accent); font-weight: 600; }
-    /* A real checkmark on the selected row, not just its own color+weight
-       — color/weight alone read as "this is styled differently" without
-       necessarily saying WHY, which is exactly what made the selected
-       item (often "This site", sitting first in the list) look like a
-       section heading rather than "the option that's currently picked."
-       The icon makes that state legible at a glance instead of requiring
-       the reader to notice a font-weight difference. */
-    .folder-menu-item-check { margin-left: auto; flex: none; display: none; color: var(--color-accent); }
-    .folder-menu-item[aria-checked="true"] .folder-menu-item-check { display: flex; }
-    .folder-menu-item-check svg { width: 11px; height: 11px; }
-    .folder-menu-item svg { width: 11px; height: 11px; flex: none; }
-    .folder-menu-divider { height: 1px; background: var(--color-border); margin: var(--space-1) 0; }
-    .folder-menu-new-form { display: flex; gap: var(--space-1); padding: var(--space-1); }
-    /* Explicit height (was padding-derived, ~24px) — a slightly bigger,
-       more forgiving click target in a compact floating menu, matched by
-       the confirm button below so the whole row reads as one consistent
-       control height, not two mismatched ones. */
-    .folder-menu-new-input {
-      flex: 1; min-width: 0; height: 30px; box-sizing: border-box;
-      border: 1px solid var(--color-border-strong); border-radius: var(--radius-xs);
-      padding: 0 var(--space-2); font-size: var(--text-caption); font-family: inherit; outline: none; color: var(--color-text);
-    }
-    .folder-menu-new-input:focus { border-color: var(--color-accent); }
-    .folder-menu-new-confirm, .folder-menu-new-cancel {
-      width: 30px; height: 30px; border-radius: var(--radius-xs); border: none; cursor: pointer; flex: none;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .folder-menu-new-confirm { background: var(--color-accent); color: var(--color-surface); }
-    .folder-menu-new-confirm svg, .folder-menu-new-cancel svg { width: 11px; height: 11px; }
-    .folder-menu-new-cancel { background: var(--color-bg); color: var(--color-text-muted); }
     /* Color picker — opened from the type-badge itself (see openColorMenu),
-       reuses the exact same floating-menu mechanics as .folder-menu
+       reuses the same floating-menu mechanics as the folder menu
        (closeMenu/isInteracting/positionRect/escape/outside-click), just a
-       row of swatches instead of a list. */
+       row of swatches instead of a list. The folder menu itself is
+       portaled to document.documentElement with shared GitHub-style
+       styles (Acopio.ensureFolderMenuPortalStyles) — same as overlay.js. */
     .color-menu {
       position: fixed; z-index: 2147483647; display: flex; align-items: center; gap: var(--space-2);
       background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-full);
       box-shadow: var(--shadow-overlay); padding: var(--space-2) var(--space-3);
+      pointer-events: auto;
     }
     .color-swatch {
       width: 20px; height: 20px; border-radius: var(--radius-full); border: none; cursor: pointer; flex: none;
@@ -224,7 +163,11 @@
   let notesActive = false;
   let currentRange = null;
   let currentExtraction = null;
-  let selectedCollectionId = null; // null = "This site" (the auto per-hostname folder)
+  let selectedCollectionId = null; // null = site folder (see selectedDestinationHostname)
+  let selectedDestinationHostname = null; // when no collection: which site folder to save into
+  let selectedFolderName = null;
+  let siteFoldersCache = [];
+  let folderMenuLoadId = 0;
   let isSaving = false;
 
   // Weava's paid tier gates highlight color behind a subscription — this is
@@ -278,6 +221,7 @@
   // .folder-btn) correctly closes either one without each needing its own
   // close function that has to know about the other's existence.
   function closeMenu() {
+    folderMenuLoadId += 1; // invalidate any in-flight Sites+Folders fetch
     if (menuEl) {
       menuEl.remove();
       menuEl = null;
@@ -526,7 +470,25 @@
           resolve(response.collections || []);
         });
       } catch (_) {
-        resolve([]); // extension context invalidated — folder picker just shows "This site"
+        resolve([]); // extension context invalidated — folder picker just shows this site
+      }
+    });
+  }
+
+  function getSiteFolders() {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: "GET_SITE_FOLDERS" }, (response) => {
+          if (chrome.runtime.lastError || !response || !response.ok) {
+            resolve([]);
+            return;
+          }
+          const folders = response.folders || [];
+          Acopio.rememberSiteFavicons(folders);
+          resolve(folders);
+        });
+      } catch (_) {
+        resolve([]);
       }
     });
   }
@@ -581,7 +543,7 @@
         chrome.storage.local.set({ [LAST_FOLDER_KEY]: map });
       });
     } catch (_) {
-      // best-effort — worst case the next capture just re-defaults to "This site"
+      // best-effort — worst case the next capture just re-defaults to this site
     }
   }
 
@@ -611,72 +573,168 @@
     }
   }
 
-  function collectionNameFor(id, collections) {
-    if (!id) return "This site";
-    const found = collections.find((c) => c.id === id);
-    return found ? found.name : "This site";
+  function effectiveHostname() {
+    if (selectedCollectionId) return Acopio.hostname();
+    return selectedDestinationHostname || Acopio.hostname();
   }
 
-  // The folder-choose control itself — a compact pill button (name +
-  // chevron), not a native <select>. Opening it shows .folder-menu, a
-  // separate floating element (own positioning, own outside-click/Escape
-  // handling) so it can appear above the tooltip pill without fighting
-  // cardEl's own fixed size.
-  // onPick(collectionId, collectionName) — name is passed explicitly,
-  // never re-looked-up from a cached list after the fact. An earlier
-  // version had the newly-created folder's picker callback re-derive the
-  // name from render()'s own collectionsCache, which the new folder
-  // hadn't been added to yet — the label silently stayed "This site" even
-  // though the folder really was created. Passing the name straight
-  // through removes that whole class of stale-cache bug.
-  function openFolderMenu(folderBtn, collections, onPick) {
-    closeMenu();
-    folderBtn.setAttribute("aria-expanded", "true");
-    menuEl = document.createElement("div");
-    menuEl.className = "folder-menu";
+  function folderDisplayName(name) {
+    let s = String(name || "").trim();
+    s = s.replace(/^Folder:\s*/i, "");
+    s = s.replace(/^After switching to:\s*/i, "");
+    s = s.replace(/^Collecting to:\s*/i, "");
+    return s || Acopio.hostname();
+  }
 
-    // Builds one menu row with a text label AND a checkmark slot (shown
-    // only when aria-checked="true", via CSS) — a plain textContent
-    // assignment couldn't also carry the checkmark, and the checkmark is
-    // exactly what makes a selected row read as "the current pick" rather
-    // than a differently-styled heading.
-    function buildFolderMenuItem(label, checked, onClick) {
+  function collectionNameFor(id, collections) {
+    if (!id) return folderDisplayName(selectedDestinationHostname || Acopio.hostname());
+    const found = collections.find((c) => c.id === id);
+    return found ? found.name : folderDisplayName(Acopio.hostname());
+  }
+
+  function updateNotesFolderIcon(iconEl, collectionId, siteHostname) {
+    if (!iconEl) return;
+    if (collectionId) {
+      iconEl.classList.remove("is-site");
+      iconEl.innerHTML = Acopio.ICONS.folder;
+    } else {
+      Acopio.fillSiteFavicon(iconEl, siteHostname || effectiveHostname());
+    }
+  }
+
+  function selectNotesFolder(collectionId, collectionName, siteHostname) {
+    selectedCollectionId = collectionId;
+    if (collectionId) {
+      selectedDestinationHostname = null;
+      selectedFolderName = folderDisplayName(collectionName || "Folder");
+    } else {
+      selectedDestinationHostname = siteHostname || Acopio.hostname();
+      selectedFolderName = folderDisplayName(collectionName || selectedDestinationHostname);
+    }
+    setLastFolder(Acopio.hostname(), collectionId);
+  }
+
+  function positionFolderMenu(anchorBtn) {
+    if (!menuEl || !anchorBtn) return;
+    const margin = 8;
+    const r = anchorBtn.getBoundingClientRect();
+    menuEl.style.visibility = "hidden";
+    menuEl.style.display = "flex";
+    const menuWidth = Math.max(280, menuEl.offsetWidth || 280);
+    const menuHeight = menuEl.offsetHeight || 160;
+    let left = r.left;
+    left = Math.max(margin, Math.min(left, window.innerWidth - menuWidth - margin));
+    let top = r.bottom + 4;
+    if (top + menuHeight > window.innerHeight - margin) {
+      top = Math.max(margin, r.top - menuHeight - 4);
+    }
+    menuEl.style.left = `${left}px`;
+    menuEl.style.top = `${top}px`;
+    menuEl.style.visibility = "visible";
+  }
+
+  // GitHub-style Sites + Folders menu — same structure/styles as overlay.js.
+  // onPick(collectionId, collectionName, siteHostname)
+  function openFolderMenu(folderBtn, onPick) {
+    // Always re-query Sites + Folders before painting — never rely on a
+    // stale cache (user may have created/deleted folders in the side panel).
+    if (menuEl) {
+      menuEl.remove();
+      menuEl = null;
+    }
+    folderBtn.setAttribute("aria-expanded", "true");
+    const loadId = ++folderMenuLoadId;
+    Promise.all([getCollections(), getSiteFolders()]).then(([collections, siteFolders]) => {
+      if (loadId !== folderMenuLoadId) return;
+      if (!isVisible() || !cardEl || !cardEl.contains(folderBtn)) return;
+      const collectionsCache = collections || [];
+      siteFoldersCache = siteFolders || [];
+      renderFolderMenu(folderBtn, collectionsCache, onPick);
+    });
+  }
+
+  function renderFolderMenu(folderBtn, collections, onPick) {
+    if (menuEl) {
+      menuEl.remove();
+      menuEl = null;
+    }
+    Acopio.ensureFolderMenuPortalStyles();
+    menuEl = document.createElement("div");
+    menuEl.className = "acopio-folder-menu";
+    menuEl.setAttribute("role", "menu");
+    menuEl.setAttribute("data-acopio-folder-menu", "true");
+
+    function buildFolderMenuItem(label, checked, onClick, iconKind, hostnameForIcon) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "folder-menu-item";
       btn.setAttribute("role", "menuitemradio");
       btn.setAttribute("aria-checked", String(checked));
+      const iconWrap = document.createElement("span");
+      iconWrap.className = "folder-menu-item-icon";
+      if (iconKind === "site") Acopio.fillSiteFavicon(iconWrap, hostnameForIcon || label);
+      else iconWrap.innerHTML = Acopio.ICONS.folder;
+      btn.appendChild(iconWrap);
       const labelSpan = document.createElement("span");
+      labelSpan.className = "folder-menu-item-label";
       labelSpan.textContent = label;
       btn.appendChild(labelSpan);
       const check = document.createElement("span");
       check.className = "folder-menu-item-check";
       check.innerHTML = Acopio.ICONS.check;
       btn.appendChild(check);
-      btn.addEventListener("click", onClick);
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        onClick();
+      });
       return btn;
     }
 
-    menuEl.appendChild(
-      buildFolderMenuItem("This site", !selectedCollectionId, () => { onPick(null, "This site"); closeMenu(); })
-    );
-    collections.forEach((c) => {
+    function addHeading(text) {
+      const h = document.createElement("div");
+      h.className = "folder-menu-heading";
+      h.textContent = text;
+      menuEl.appendChild(h);
+    }
+
+    const currentHost = Acopio.hostname();
+    const sites = siteFoldersCache.slice();
+    if (currentHost && !sites.some((f) => f.hostname === currentHost)) {
+      sites.unshift({ hostname: currentHost, count: 0 });
+    }
+    sites.sort((a, b) => {
+      if (a.hostname === currentHost) return -1;
+      if (b.hostname === currentHost) return 1;
+      return a.hostname.localeCompare(b.hostname);
+    });
+
+    addHeading("Sites");
+    sites.forEach((folder) => {
+      const host = folder.hostname;
+      const isCurrentDest = !selectedCollectionId && effectiveHostname() === host;
       menuEl.appendChild(
-        buildFolderMenuItem(c.name, selectedCollectionId === c.id, () => { onPick(c.id, c.name); closeMenu(); })
+        buildFolderMenuItem(host, isCurrentDest, () => {
+          onPick(null, host, host);
+          closeMenu();
+        }, "site", host)
       );
     });
 
-    const divider = document.createElement("div");
-    divider.className = "folder-menu-divider";
-    menuEl.appendChild(divider);
+    menuEl.appendChild(Object.assign(document.createElement("div"), { className: "folder-menu-divider" }));
 
-    // Always-visible create row, not a second click-through step — a
-    // "New folder" button that swaps the whole menu to a separate form
-    // view used to sit here instead; collapsing that into one persistent
-    // row removes an entire extra render/interaction cycle (and the extra
-    // opportunity for a real click to land wrong along the way), and
-    // matches "type a name, hit the button at the end of the field" being
-    // available the instant the menu opens.
+    addHeading("Folders");
+    collections.forEach((c) => {
+      menuEl.appendChild(
+        buildFolderMenuItem(c.name, selectedCollectionId === c.id, () => {
+          onPick(c.id, c.name, null);
+          closeMenu();
+        }, "collection")
+      );
+    });
+
+    menuEl.appendChild(Object.assign(document.createElement("div"), { className: "folder-menu-divider" }));
+
     const form = document.createElement("div");
     form.className = "folder-menu-new-form";
     const input = document.createElement("input");
@@ -687,23 +745,20 @@
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Enter") { e.preventDefault(); confirm(); }
+      if (e.key === "Escape") { e.preventDefault(); closeMenu(); }
     });
+    input.addEventListener("click", (e) => e.stopPropagation());
     form.appendChild(input);
     const confirmBtn = document.createElement("button");
     confirmBtn.type = "button";
     confirmBtn.className = "folder-menu-new-confirm";
     confirmBtn.innerHTML = Acopio.ICONS.plus;
-    confirmBtn.title = "Add folder";
+    confirmBtn.title = "Create folder";
     confirmBtn.setAttribute("aria-label", "Create folder");
     const confirm = () => {
       const name = input.value.trim();
       if (!name) { input.focus(); return; }
       confirmBtn.disabled = true;
-      // Same guaranteed-settle pattern as onCollectClick's own message —
-      // a suspended MV3 service worker can drop the callback entirely
-      // with no error, no response, ever. Without this, "Add folder"
-      // just silently re-enabled nothing and never told you why —
-      // indistinguishable from the button being broken.
       let settled = false;
       const timeoutId = setTimeout(() => {
         if (settled) return;
@@ -721,25 +776,23 @@
             showInlineError((response && response.error) || "Couldn't create that folder — try again.");
             return;
           }
-          onPick(response.collection.id, response.collection.name);
+          onPick(response.collection.id, response.collection.name, null);
           closeMenu();
         });
       } catch (_) {
-        // Extension context invalidated (reloaded while this page was
-        // already open) — sendMessage throws synchronously, so the
-        // response callback above never runs at all.
         settled = true;
         clearTimeout(timeoutId);
         confirmBtn.disabled = false;
         showInlineError("Acopio was reloaded — refresh this page to keep collecting.");
       }
     };
-    confirmBtn.addEventListener("click", confirm);
+    confirmBtn.addEventListener("click", (e) => { e.stopPropagation(); confirm(); });
     form.appendChild(confirmBtn);
     menuEl.appendChild(form);
 
-    shadow.appendChild(menuEl);
-    positionRect(menuEl, folderBtn.getBoundingClientRect(), 200, 96);
+    document.documentElement.appendChild(menuEl);
+    Acopio.registerOwnRoot(menuEl);
+    positionFolderMenu(folderBtn);
   }
 
   // The color picker — opened from the type-badge itself. Same floating-
@@ -820,11 +873,11 @@
     folderBtn.setAttribute("aria-expanded", "false");
     const folderIcon = document.createElement("span");
     folderIcon.className = "folder-btn-icon";
-    folderIcon.innerHTML = Acopio.ICONS.folder;
+    updateNotesFolderIcon(folderIcon, selectedCollectionId, effectiveHostname());
     folderBtn.appendChild(folderIcon);
     const folderLabel = document.createElement("span");
     folderLabel.className = "folder-btn-label";
-    folderLabel.textContent = "This site";
+    folderLabel.textContent = folderDisplayName(selectedFolderName || Acopio.hostname());
     folderBtn.appendChild(folderLabel);
     const chevron = document.createElement("span");
     chevron.innerHTML = `<svg viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1.5 6 6.5 11 1.5"/></svg>`;
@@ -851,40 +904,48 @@
       refreshTypeBadgeTitle();
     }
 
-    // Resolve collections + this site's remembered folder + the globally
-    // remembered color in parallel, then apply all three once known —
-    // avoids a flash of defaults immediately swapping to remembered values
-    // a beat later.
+    function applyFolderChrome() {
+      folderLabel.textContent = folderDisplayName(selectedFolderName || collectionNameFor(selectedCollectionId, collectionsCache));
+      updateNotesFolderIcon(folderIcon, selectedCollectionId, effectiveHostname());
+      const name = folderLabel.textContent;
+      folderBtn.setAttribute("aria-label", `Collect to ${name}`);
+      folderBtn.title = `Collect to ${name} — click to change`;
+    }
+
+    // Resolve collections + site folders + remembered folder + color in
+    // parallel, then apply once known — avoids a flash of defaults.
     let collectionsCache = [];
-    Promise.all([getCollections(), getLastFolder(Acopio.hostname()), getLastColor()]).then(
-      ([collections, lastFolderId, lastColorKey]) => {
-        if (!isVisible()) return; // dismissed before this resolved
-        collectionsCache = collections;
-        // A remembered id whose Collection was since deleted falls back to
-        // "This site" rather than silently pointing at nothing.
-        selectedCollectionId = lastFolderId && collections.some((c) => c.id === lastFolderId) ? lastFolderId : null;
-        folderLabel.textContent = collectionNameFor(selectedCollectionId, collections);
-        applyColor(lastColorKey);
+    Promise.all([
+      getCollections(),
+      getSiteFolders(),
+      getLastFolder(Acopio.hostname()),
+      getLastColor(),
+    ]).then(([collections, siteFolders, lastFolderId, lastColorKey]) => {
+      if (!isVisible()) return;
+      collectionsCache = collections || [];
+      siteFoldersCache = siteFolders || [];
+      selectedCollectionId = lastFolderId && collectionsCache.some((c) => c.id === lastFolderId) ? lastFolderId : null;
+      if (selectedCollectionId) {
+        selectedDestinationHostname = null;
+        const found = collectionsCache.find((c) => c.id === selectedCollectionId);
+        selectedFolderName = folderDisplayName((found && found.name) || "Folder");
+      } else {
+        selectedDestinationHostname = Acopio.hostname();
+        selectedFolderName = folderDisplayName(Acopio.hostname());
       }
-    );
+      applyFolderChrome();
+      applyColor(lastColorKey);
+    });
 
     folderBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       toggleMenu(folderBtn, () =>
-        // collectionName comes straight from openFolderMenu now (the id
-        // it was just created with, or the id+name of an existing pick) —
-        // no re-lookup against collectionsCache, which is exactly the
-        // stale-cache bug this used to have: a folder created THIS click
-        // isn't in collectionsCache yet, so collectionNameFor(id,
-        // collectionsCache) couldn't find it and silently fell back to
-        // "This site" even though the folder really was created.
-        openFolderMenu(folderBtn, collectionsCache, (collectionId, collectionName) => {
-          selectedCollectionId = collectionId;
-          folderLabel.textContent = collectionName;
-          setLastFolder(Acopio.hostname(), collectionId);
+        openFolderMenu(folderBtn, (collectionId, collectionName, siteHostname) => {
+          selectNotesFolder(collectionId, collectionName, siteHostname);
           if (collectionId && !collectionsCache.some((c) => c.id === collectionId)) {
             collectionsCache = collectionsCache.concat([{ id: collectionId, name: collectionName }]);
           }
+          applyFolderChrome();
         })
       );
     });
@@ -952,7 +1013,9 @@
       id: Acopio.uuid(),
       type: "note",
       family: "note",
-      hostname: Acopio.hostname(),
+      // Collection destination stays on the current page host (then linked);
+      // site-folder destination can be another hostname from the picker.
+      hostname: collectionId ? Acopio.hostname() : effectiveHostname(),
       capturedAt: new Date().toISOString(),
       sourceUrl: window.location.href,
       sourcePageTitle: document.title,
@@ -1095,6 +1158,7 @@
   // regardless of what has keyboard focus — a menu being open at all only
   // ever happens because the user is mid-interaction with it.
   function tooltipHasFocus() {
+    if (menuEl && document.activeElement && menuEl.contains(document.activeElement)) return true;
     if (!shadow || !shadow.activeElement) return false;
     if (cardEl && cardEl.contains(shadow.activeElement)) return true;
     if (menuEl && menuEl.contains(shadow.activeElement)) return true;
