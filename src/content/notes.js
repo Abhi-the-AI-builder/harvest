@@ -459,36 +459,24 @@
     return { text, truncated, images, links, range, headingRanges };
   }
 
-  function getCollections() {
+  function getNoteFolders() {
     return new Promise((resolve) => {
       try {
-        chrome.runtime.sendMessage({ type: "GET_COLLECTIONS" }, (response) => {
+        chrome.runtime.sendMessage({ type: "GET_NOTE_FOLDERS" }, (response) => {
           if (chrome.runtime.lastError || !response || !response.ok) {
-            resolve([]);
+            resolve({ siteFolders: [], collections: [] });
             return;
           }
-          resolve(response.collections || []);
+          const siteFolders = response.siteFolders || [];
+          Acopio.rememberSiteFavicons(siteFolders);
+          resolve({
+            siteFolders,
+            collections: response.collections || [],
+          });
         });
       } catch (_) {
-        resolve([]); // extension context invalidated — folder picker just shows this site
-      }
-    });
-  }
-
-  function getSiteFolders() {
-    return new Promise((resolve) => {
-      try {
-        chrome.runtime.sendMessage({ type: "GET_SITE_FOLDERS" }, (response) => {
-          if (chrome.runtime.lastError || !response || !response.ok) {
-            resolve([]);
-            return;
-          }
-          const folders = response.folders || [];
-          Acopio.rememberSiteFavicons(folders);
-          resolve(folders);
-        });
-      } catch (_) {
-        resolve([]);
+        // extension context invalidated — folder picker just shows this site
+        resolve({ siteFolders: [], collections: [] });
       }
     });
   }
@@ -635,6 +623,8 @@
 
   // GitHub-style Sites + Folders menu — same structure/styles as overlay.js.
   // onPick(collectionId, collectionName, siteHostname)
+  // Sites / Folders lists match Library Notes (note hosts + note collections),
+  // not the hover-tooltip Sites list of non-note captures.
   function openFolderMenu(folderBtn, onPick) {
     // Always re-query Sites + Folders before painting — never rely on a
     // stale cache (user may have created/deleted folders in the side panel).
@@ -644,7 +634,7 @@
     }
     folderBtn.setAttribute("aria-expanded", "true");
     const loadId = ++folderMenuLoadId;
-    Promise.all([getCollections(), getSiteFolders()]).then(([collections, siteFolders]) => {
+    getNoteFolders().then(({ collections, siteFolders }) => {
       if (loadId !== folderMenuLoadId) return;
       if (!isVisible() || !cardEl || !cardEl.contains(folderBtn)) return;
       const collectionsCache = collections || [];
@@ -912,15 +902,15 @@
       folderBtn.title = `Collect to ${name} — click to change`;
     }
 
-    // Resolve collections + site folders + remembered folder + color in
-    // parallel, then apply once known — avoids a flash of defaults.
+    // Resolve note folders + remembered folder + color in parallel, then
+    // apply once known — avoids a flash of defaults. Folders match Library
+    // Notes (not Sites-tab hosts / all collections).
     let collectionsCache = [];
     Promise.all([
-      getCollections(),
-      getSiteFolders(),
+      getNoteFolders(),
       getLastFolder(Acopio.hostname()),
       getLastColor(),
-    ]).then(([collections, siteFolders, lastFolderId, lastColorKey]) => {
+    ]).then(([{ collections, siteFolders }, lastFolderId, lastColorKey]) => {
       if (!isVisible()) return;
       collectionsCache = collections || [];
       siteFoldersCache = siteFolders || [];

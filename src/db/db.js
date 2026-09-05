@@ -383,6 +383,35 @@
         .sort((a, b) => a.hostname.localeCompare(b.hostname));
     },
 
+    // Site folders that exist under Library Notes — hosts with at least one
+    // type === "note" item. Used by the notes collector picker so Sites
+    // matches the Notes tab, not the Sites tab (which excludes notes).
+    async listNoteSiteFolders() {
+      const items = await this.getAllItems();
+      const byHost = new Map();
+      for (const item of items) {
+        if (!item || item.type !== "note" || !item.hostname) continue;
+        if (!byHost.has(item.hostname)) byHost.set(item.hostname, 0);
+        byHost.set(item.hostname, byHost.get(item.hostname) + 1);
+      }
+      return Array.from(byHost.entries())
+        .map(([hostname, count]) => ({ hostname, count }))
+        .sort((a, b) => a.hostname.localeCompare(b.hostname));
+    },
+
+    // Collections that contain at least one note — same filter as
+    // showLibraryNotes → noteCollections ("My folders" under Notes).
+    async listNoteCollections() {
+      const collections = await this.getAllCollections();
+      const withItems = await Promise.all(
+        collections.map(async (col) => ({ col, items: await this.resolveCollectionItems(col) }))
+      );
+      return withItems
+        .filter(({ items: colItems }) => colItems.some((it) => it && it.type === "note"))
+        .sort((a, b) => new Date(b.col.lastUpdatedAt) - new Date(a.col.lastUpdatedAt))
+        .map(({ col }) => ({ id: col.id, name: col.name }));
+    },
+
     async getCollection(id) {
       const t = await tx([COLLECTIONS_STORE], "readonly");
       return promisifyRequest(t.objectStore(COLLECTIONS_STORE).get(id));

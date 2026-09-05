@@ -673,7 +673,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // destination menu — so every site folder the panel shows is also
     // selectable when collecting. Enrich each row with a CSP-safe favicon
     // data URL from Chrome's local cache.
-    AcopioDB.listSiteFolders()
+    // payload.scope: "notes" → hosts with notes only (Notes collector);
+    // default / "sites" → non-note captures (hover tooltip). Overlay must
+    // keep the default; notes.js uses GET_NOTE_FOLDERS instead.
+    const scope = (message.payload && message.payload.scope) || "sites";
+    const listPromise =
+      scope === "notes" ? AcopioDB.listNoteSiteFolders() : AcopioDB.listSiteFolders();
+    listPromise
       .then(async (folders) => {
         const enriched = await Promise.all(
           (folders || []).map(async (f) => {
@@ -682,6 +688,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           })
         );
         sendResponse({ ok: true, folders: enriched });
+      })
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+
+  if (message.type === "GET_NOTE_FOLDERS") {
+    // Notes collector Sites + Folders in one shot — matches Library Notes
+    // grouping (note site hosts + collections that contain ≥1 note).
+    Promise.all([AcopioDB.listNoteSiteFolders(), AcopioDB.listNoteCollections()])
+      .then(async ([folders, collections]) => {
+        const enriched = await Promise.all(
+          (folders || []).map(async (f) => {
+            const faviconDataUrl = await faviconDataUrlForHostname(f.hostname);
+            return faviconDataUrl ? { ...f, faviconDataUrl } : f;
+          })
+        );
+        sendResponse({ ok: true, siteFolders: enriched, collections: collections || [] });
       })
       .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
