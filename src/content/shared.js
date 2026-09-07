@@ -1464,6 +1464,43 @@
     return String(data.colorHex).toUpperCase();
   };
 
+  // Figma's own paste rendering silently substitutes any font it doesn't
+  // have installed — that happens entirely inside Figma after the paste
+  // completes, with no hook this extension (or any clipboard-based tool)
+  // can reach to stop it. The only thing achievable from here is warning
+  // BEFORE that happens: a family declared via a real @font-face rule
+  // (the site bundled its own font file, e.g. a Framer/Webflow custom
+  // brand typeface) is a font almost certainly absent anywhere else,
+  // unlike a plain system-stack name (Arial, Georgia, "Segoe UI"...)
+  // that's near-universally available. Checked by scanning actual
+  // stylesheet rules rather than guessing from the name — cross-origin
+  // stylesheets throw reading .cssRules without CORS, so those are
+  // silently skipped rather than treated as a false "not custom".
+  Acopio.isCustomWebFont = function isCustomWebFont(family) {
+    const target = String(family || "").trim().toLowerCase().replace(/^["']|["']$/g, "");
+    if (!target) return false;
+    try {
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules;
+        try {
+          rules = sheet.cssRules;
+        } catch (_) {
+          continue; // cross-origin stylesheet — can't inspect, don't guess
+        }
+        if (!rules) continue;
+        for (const rule of Array.from(rules)) {
+          if (rule.type !== CSSRule.FONT_FACE_RULE) continue;
+          const declared = (rule.style.getPropertyValue("font-family") || "")
+            .trim()
+            .toLowerCase()
+            .replace(/^["']|["']$/g, "");
+          if (declared === target) return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  };
+
   Acopio.fontSamplePlainText = function fontSamplePlainText(data) {
     const sample = (data && data.sampleText && String(data.sampleText).trim()) || (data && data.family) || "Aa";
     const metrics = Acopio.fontMetricsLine(data);
