@@ -1,6 +1,6 @@
 {
   "name": "acopio",
-  "version": "1.0.0",
+  "version": "0.1.1",
   "description": "",
   "main": "index.js",
   "directories": {
@@ -8,8 +8,12 @@
   },
   "scripts": {
     "build:store": "bash scripts/build-store-zip.sh",
+    "bundle:dom-to-figma": "bash scripts/bundle-dom-to-figma.sh",
+    "sync:figma-plugin": "bash scripts/sync-figma-plugin.sh",
+    "test:figma-payload": "node scripts/validate-figma-payload.js",
+    "test:zip-copy-image-only": "node scripts/verify-zip-copy-image-only.js",
     "supabase:deploy-notion": "supabase functions deploy notion-oauth-exchange",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run test:figma-payload && npm run test:zip-copy-image-only"
   },
   "repository": {
     "type": "git",
@@ -24,10 +28,12 @@
   },
   "homepage": "https://github.com/Abhi-the-AI-builder/harvest#readme",
   "dependencies": {
+    "@figit/dom-to-figma": "^0.2.4",
     "@supabase/supabase-js": "^2.112.4"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
+    "playwright": "^1.49.1",
     "supabase": "^2.116.0"
   }
 }

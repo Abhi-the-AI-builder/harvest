@@ -1,0 +1,118 @@
+{
+  "version": 2,
+  "scopeLabel": "golden-fixtures",
+  "exportedAt": "2026-09-06T00:00:00.000Z",
+  "autoImport": false,
+  "openedFromExtension": true,
+  "items": [
+    {
+      "id": "fix-card-ok",
+      "type": "component",
+      "family": "Component",
+      "hostname": "example.com",
+      "sourceUrl": "https://example.com/",
+      "note": "",
+      "data": {
+        "boundingBoxWidth": 320,
+        "boundingBoxHeight": 160,
+        "preferScreenshot": false,
+        "layoutTree": {
+          "kind": "frame",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "fill": "#FFFFFF",
+          "fillOpacity": 1,
+          "opacity": 1,
+          "layout": {
+            "mode": "VERTICAL",
+            "gap": 8,
+            "primaryAlign": "MIN",
+            "counterAlign": "MIN",
+            "paddingTop": 16,
+            "paddingRight": 16,
+            "paddingBottom": 16,
+            "paddingLeft": 16
+          },
+          "children": [
+            {
+              "kind": "text",
+              "x": 16,
+              "y": 16,
+              "width": 288,
+              "height": 24,
+              "text": "Feature card",
+              "fontSize": 18,
+              "fontWeight": 600,
+              "color": "#17181A"
+            },
+            {
+              "kind": "text",
+              "x": 16,
+              "y": 48,
+              "width": 288,
+              "height": 40,
+              "text": "Editable Auto Layout expected.",
+              "fontSize": 14,
+              "fontWeight": 400,
+              "color": "#6B6E76"
+            }
+          ]
+        },
+        "previewImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+      }
+    },
+    {
+      "id": "fix-sparse-screenshot",
+      "type": "component",
+      "family": "Component",
+      "hostname": "example.com",
+      "sourceUrl": "https://example.com/sparse",
+      "note": "",
+      "data": {
+        "boundingBoxWidth": 200,
+        "boundingBoxHeight": 100,
+        "preferScreenshot": true,
+        "layoutTree": {
+          "kind": "frame",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 100,
+          "preferScreenshot": true,
+          "children": []
+        },
+        "previewImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+      }
+    },
+    {
+      "id": "fix-irregular-grid",
+      "type": "component",
+      "family": "Component",
+      "hostname": "example.com",
+      "sourceUrl": "https://example.com/grid",
+      "note": "",
+      "data": {
+        "boundingBoxWidth": 400,
+        "boundingBoxHeight": 240,
+        "preferScreenshot": true,
+        "layoutTree": {
+          "kind": "frame",
+          "x": 0,
+          "y": 0,
+          "width": 400,
+          "height": 240,
+          "preferScreenshot": true,
+          "preferScreenshotHint": true,
+          "layout": null,
+          "children": [
+            { "kind": "frame", "x": 0, "y": 0, "width": 180, "height": 100, "children": [] },
+            { "kind": "frame", "x": 200, "y": 20, "width": 80, "height": 200, "children": [] }
+          ]
+        },
+        "previewImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+      }
+    }
+  ]
+}

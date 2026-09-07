@@ -491,6 +491,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // async sendResponse — keep the message channel open
   }
 
+  if (message.type === "ENSURE_DOM_TO_FIGMA") {
+    // Lazy-load the ~800KB Figma clipboard encoder into this tab's isolated
+    // world (shared with content scripts) only when the user copies a
+    // component for editable ⌘V paste.
+    const tabId = sender.tab && sender.tab.id;
+    if (tabId == null) {
+      sendResponse({ ok: false, error: "No tab to inject into." });
+      return undefined;
+    }
+    chrome.scripting
+      .executeScript({
+        target: { tabId },
+        files: ["vendor/dom-to-figma.js"],
+        world: "ISOLATED",
+      })
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    return true;
+  }
+
   if (message.type === "FETCH_IMAGE_BYTES") {
     const url = message.payload && message.payload.url;
     if (!url) {
@@ -504,9 +524,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
         const buf = await resp.arrayBuffer();
+        // A Uint8Array survives chrome.runtime.sendMessage's structured-
+        // clone transport directly — every caller already does
+        // `new Uint8Array(response.bytes)` (or checks `.bytes.length`,
+        // which a Uint8Array also has, unlike a raw ArrayBuffer) to read
+        // it, so this is a drop-in wire-format change. The previous
+        // `Array.from(...)` turned every single byte into its own plain-
+        // array element (a multi-MB hero/CDN image → millions of array
+        // slots) purely to cross the message boundary — real, measurable
+        // latency on exactly the large real-world images this path exists
+        // for, for no correctness benefit.
         sendResponse({
           ok: true,
-          bytes: Array.from(new Uint8Array(buf)),
+          bytes: new Uint8Array(buf),
           contentType: resp.headers.get("content-type") || "",
         });
       })
@@ -759,6 +789,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return undefined; // fire-and-forget, no response expected
   }
 
+  // Merge fields into an existing item's data (e.g. async Figma clipboard bake
+  // after Collect returns — same quality, Collect stays instant).
+  if (message.type === "MERGE_ITEM_DATA") {
+    const id = message.payload && message.payload.id;
+    const patch = message.payload && message.payload.patch;
+    if (!id || !patch || typeof patch !== "object") {
+      sendResponse({ ok: false, error: "Missing id or patch." });
+      return undefined;
+    }
+    (async () => {
+      try {
+        const existing = await AcopioDB.getItem(id);
+        if (!existing) {
+          sendResponse({ ok: false, error: "Item not found." });
+          return;
+        }
+        const nextData = Object.assign({}, existing.data || {}, patch);
+        const saved = await AcopioDB.updateItemData(id, nextData);
+        if (saved) {
+          chrome.runtime.sendMessage({ type: "ITEMS_UPDATED", hostname: saved.hostname }).catch(() => {});
+        }
+        sendResponse({ ok: true, item: saved });
+      } catch (err) {
+        sendResponse({ ok: false, error: String((err && err.message) || err) });
+      }
+    })();
+    return true;
+  }
+
   if (message.type !== "CAPTURE_ITEM") return undefined;
 
   async function blobToDataUrl(blob) {
@@ -818,14 +877,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           );
         }
       }
+      if (item.type === "component" && item.data && item.data.figmaHtml) {
+        const { html } = reSanitizeHtml(item.data.figmaHtml);
+        item.data.figmaHtml = html;
+      }
 
-      await AcopioDB.addItem(item);
+      // Fonts collected before the sampleText cap was raised (80 → 500) or
+      // before mixed-weight `ranges` still match as duplicates — Collect
+      // again upgrades the stored item instead of leaving a truncated copy
+      // (and instead of stacking a near-identical second card).
+      let saved = item;
+      let updated = false;
+      if (item.type === "font" && item.data) {
+        const similar = await AcopioDB.findSimilarItem(
+          item.hostname,
+          "font",
+          item.data,
+          item.selector || null
+        );
+        if (similar && similar.id) {
+          const oldText = String((similar.data && similar.data.sampleText) || "");
+          const newText = String(item.data.sampleText || "");
+          const oldRanges = Array.isArray(similar.data && similar.data.ranges)
+            ? similar.data.ranges.length
+            : 0;
+          const newRanges = Array.isArray(item.data.ranges) ? item.data.ranges.length : 0;
+          const richer =
+            newText.length > oldText.length ||
+            newRanges > oldRanges ||
+            (newRanges >= 2 && oldRanges < 2);
+          if (richer) {
+            saved = await AcopioDB.updateItemData(similar.id, item.data);
+            updated = Boolean(saved);
+          }
+        }
+      }
+
+      if (!updated) {
+        await AcopioDB.addItem(item);
+        saved = item;
+      }
+
       const count = await AcopioDB.countByHostname(item.hostname);
-      sendResponse({ ok: true, count });
+      sendResponse({ ok: true, count, updated, item: saved });
 
-      // Best-effort broadcast so an already-open side panel updates live.
-      // If nothing is listening (panel closed), sendMessage just rejects
-      // quietly — that's expected, not an error worth surfacing.
       chrome.runtime.sendMessage({ type: "ITEMS_UPDATED", hostname: item.hostname }).catch(() => {});
     } catch (err) {
       console.error("[Acopio] failed to save item", err);

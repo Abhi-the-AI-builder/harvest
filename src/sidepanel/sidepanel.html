@@ -167,7 +167,7 @@
             <div class="stack-card" style="background:#1E8F72"></div>
             <div class="stack-card"><span class="mini-icon"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><rect x="2" y="2" width="7.5" height="7.5" rx="1.3"/><rect x="6.5" y="6.5" width="7.5" height="7.5" rx="1.3"/></svg></span></div>
           </div>
-          <div class="collect-fab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div>
+          <button type="button" class="collect-fab empty-start-capture" aria-label="Turn on hover-capture to collect"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></button>
         </div>
       </div>
 
@@ -283,7 +283,7 @@
             <div class="stack-card" style="background:#1E8F72"></div>
             <div class="stack-card"><span class="mini-icon"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><rect x="2" y="2" width="7.5" height="7.5" rx="1.3"/><rect x="6.5" y="6.5" width="7.5" height="7.5" rx="1.3"/></svg></span></div>
           </div>
-          <div class="collect-fab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div>
+          <button type="button" class="collect-fab empty-start-capture" aria-label="Turn on hover-capture to collect"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></button>
         </div>
       </div>
 
@@ -402,7 +402,7 @@
             <div class="stack-card" style="background:#1E8F72"></div>
             <div class="stack-card"><span class="mini-icon"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><rect x="2" y="2" width="7.5" height="7.5" rx="1.3"/><rect x="6.5" y="6.5" width="7.5" height="7.5" rx="1.3"/></svg></span></div>
           </div>
-          <div class="collect-fab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div>
+          <button type="button" class="collect-fab empty-start-capture" aria-label="Turn on hover-capture to collect"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></button>
         </div>
       </div>
 
@@ -522,7 +522,7 @@
             <div class="stack-card"><span class="mini-icon"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 1.8h6.2L12.5 5v9.2a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1V2.8a1 1 0 0 1 1-1Z"/><path d="M9.5 1.8V5h3"/><line x1="4.8" y1="8" x2="10.2" y2="8"/><line x1="4.8" y1="10.6" x2="8.6" y2="10.6"/></svg></span></div>
             <div class="stack-card"><span class="mini-icon"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"><rect x="1.8" y="2.6" width="12.4" height="10.8" rx="1.6"/><circle cx="5.4" cy="6" r="1.15"/><path d="M2.4 11.4l3.4-3.4c.4-.4 1-.4 1.4 0l1.5 1.5m2.9-1.5l-1-1c-.4-.4-1-.4-1.4 0l-1 1"/></svg></span></div>
           </div>
-          <div class="collect-fab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></div>
+          <button type="button" class="collect-fab empty-start-capture" aria-label="Turn on hover-capture to collect"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><line x1="8" y1="2.5" x2="8" y2="13.5"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg></button>
         </div>
       </div>
 
@@ -537,17 +537,21 @@
       <div class="select-bar-actions">
         <span id="library-select-summary" class="select-bar-spacer"></span>
         <div class="export-split">
-          <button id="library-export-zip-btn" class="export-primary-btn" type="button">Export as ZIP</button>
+          <button id="library-export-primary-btn" class="export-primary-btn" type="button">Export to Figma</button>
           <button id="library-export-toggle-btn" class="export-chevron-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More export options">
             <svg viewBox="0 0 12 8" width="10" height="7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1.5 6 6.5 11 1.5"/></svg>
           </button>
           <div id="library-export-menu" class="export-menu" hidden role="menu" aria-labelledby="library-export-menu-heading">
             <p id="library-export-menu-heading" class="export-menu-heading">More export options</p>
+            <button id="library-export-zip-btn" class="export-menu-item" type="button" role="menuitem">Export as ZIP</button>
             <button id="library-export-notion-btn" class="export-menu-item" type="button" role="menuitem">Export to Notion</button>
-            <button id="library-export-figma-btn" class="export-menu-item" type="button" role="menuitem">Export to Figma</button>
+            <button id="library-export-figma-btn" class="export-menu-item" type="button" role="menuitem" hidden>Export to Figma</button>
             <button id="library-export-plugin-copy-btn" class="export-menu-item" type="button" role="menuitem">Download JSON for plugin</button>
           </div>
         </div>
+        <button id="library-select-remove-btn" class="select-bar-btn select-bar-btn-icon-only select-bar-btn-danger" type="button" aria-label="Delete selected sites" title="Delete">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12"/><path d="M12.5 4v9.2a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1V4"/><path d="M5.5 4V3a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/><line x1="6.5" y1="7.5" x2="6.5" y2="11"/><line x1="9.5" y1="7.5" x2="9.5" y2="11"/></svg>
+        </button>
       </div>
     </div>
 
@@ -557,14 +561,15 @@
       <div id="select-chips" class="select-chips"></div>
       <div class="select-bar-actions">
         <div class="export-split">
-          <button id="select-export-zip-btn" class="export-primary-btn" type="button">Export as ZIP</button>
+          <button id="select-export-primary-btn" class="export-primary-btn" type="button">Export to Figma</button>
           <button id="select-export-toggle-btn" class="export-chevron-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More export options">
             <svg viewBox="0 0 12 8" width="10" height="7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1.5 6 6.5 11 1.5"/></svg>
           </button>
           <div id="select-export-menu" class="export-menu" hidden role="menu" aria-labelledby="select-export-menu-heading">
             <p id="select-export-menu-heading" class="export-menu-heading">More export options</p>
+            <button id="select-export-zip-btn" class="export-menu-item" type="button" role="menuitem">Export as ZIP</button>
             <button id="select-export-notion-btn" class="export-menu-item" type="button" role="menuitem">Export to Notion</button>
-            <button id="select-export-figma-btn" class="export-menu-item" type="button" role="menuitem">Export to Figma</button>
+            <button id="select-export-figma-btn" class="export-menu-item" type="button" role="menuitem" hidden>Export to Figma</button>
             <button id="select-export-plugin-copy-btn" class="export-menu-item" type="button" role="menuitem">Download JSON for plugin</button>
           </div>
         </div>
@@ -606,11 +611,49 @@
     <div id="modal-root"></div>
     <div id="toast-root"></div>
 
+    <!-- First-run walkthrough (matches finalized mockup). One-shot via
+         acopioWalkthroughSeen. Step 1 also asks the page content script
+         to show a ghost collect tooltip so cause → effect is visible. -->
+    <div id="walkthrough" class="walkthrough" hidden>
+      <div class="walkthrough-scrim" id="walkthrough-scrim" aria-hidden="true"></div>
+      <div class="walkthrough-ring" id="walkthrough-ring" aria-hidden="true"></div>
+      <div
+        class="walkthrough-card"
+        id="walkthrough-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="walkthrough-title"
+        aria-describedby="walkthrough-body"
+      >
+        <p class="walkthrough-eyebrow" id="walkthrough-step-label">Step 1 of 3</p>
+        <h2 class="walkthrough-title" id="walkthrough-title">Turn on hover-capture</h2>
+        <p class="walkthrough-body" id="walkthrough-body">
+          Click this. Then hover anything on the page — the collect tooltip appears.
+        </p>
+        <div class="walkthrough-progress" id="walkthrough-progress" aria-hidden="true">
+          <span class="walkthrough-dot is-current" data-tick="0">1</span>
+          <span class="walkthrough-progress-line" aria-hidden="true"></span>
+          <span class="walkthrough-dot" data-tick="1">2</span>
+          <span class="walkthrough-progress-line" aria-hidden="true"></span>
+          <span class="walkthrough-dot" data-tick="2">3</span>
+        </div>
+        <div class="walkthrough-actions">
+          <button type="button" id="walkthrough-skip" class="walkthrough-btn-text">Skip</button>
+          <div class="walkthrough-actions-end">
+            <button type="button" id="walkthrough-back" class="walkthrough-btn-text" hidden>Back</button>
+            <button type="button" id="walkthrough-next" class="walkthrough-btn-primary">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="../config.js"></script>
     <script src="../config.local.js"></script>
     <script src="../content/shared.js"></script>
     <script src="../db/db.js"></script>
     <script src="../../vendor/jszip.min.js"></script>
+    <script src="../../vendor/dom-to-figma.js"></script>
+    <script src="../content/figma-clipboard.js"></script>
     <script src="export/export-helpers.js"></script>
     <script src="export/zip-export.js"></script>
     <script src="export/notion-export.js"></script>

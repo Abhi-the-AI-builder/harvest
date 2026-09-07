@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Acopio tough Copy→Figma fixture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #14121a;
+      --muted: #5c5668;
+      --accent: #e85d4c;
+      --surface: #f7f4ef;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 12% 20%, #ffe8d6 0%, transparent 42%),
+        linear-gradient(160deg, #1a1625 0%, #2a2438 55%, #121018 100%);
+      font-family: "IBM Plex Sans", system-ui, sans-serif;
+      color: var(--ink);
+      padding: 48px 24px;
+      box-sizing: border-box;
+    }
+    #status {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      right: 16px;
+      max-width: 520px;
+      background: rgba(20, 18, 26, 0.92);
+      color: #f4efe8;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font: 12px/1.45 ui-monospace, Menlo, monospace;
+      white-space: pre-wrap;
+      z-index: 9;
+      max-height: 42vh;
+      overflow: auto;
+    }
+    #status.pass { outline: 2px solid #3dba7a; }
+    #status.fail { outline: 2px solid #e85d4c; }
+
+    /* ── The stress target: pricing + promo card ── */
+    .promo-card {
+      position: relative;
+      width: 360px;
+      padding: 28px 24px 24px 28px;
+      border-radius: 16px;
+      background:
+        radial-gradient(ellipse 80% 60% at 100% 0%, rgba(232, 93, 76, 0.28) 0%, transparent 55%),
+        linear-gradient(145deg, #fffdf9 0%, #f3eee6 48%, #ebe4da 100%);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.7) inset,
+        0 18px 40px rgba(10, 8, 16, 0.35),
+        0 4px 12px rgba(232, 93, 76, 0.18);
+      border-top: 3px solid var(--accent);
+      border-right: 1px solid rgba(20, 18, 26, 0.08);
+      border-bottom: 1px solid rgba(20, 18, 26, 0.12);
+      border-left: 1px solid rgba(20, 18, 26, 0.08);
+      overflow: visible;
+      isolation: isolate;
+    }
+
+    /* Pseudo: left accent rail (figit never sees ::before without materialize) */
+    .promo-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 20px;
+      bottom: 20px;
+      width: 4px;
+      border-radius: 0 4px 4px 0;
+      background: linear-gradient(180deg, #e85d4c 0%, #f0a05a 55%, #7b6cff 100%);
+      box-shadow: 2px 0 8px rgba(232, 93, 76, 0.35);
+    }
+
+    /* Pseudo: NEW badge text */
+    .promo-card::after {
+      content: "NEW";
+      position: absolute;
+      top: -10px;
+      right: 18px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: #14121a;
+      color: #f7f4ef;
+      font-family: "IBM Plex Sans", sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.28);
+      transform: rotate(3deg);
+    }
+
+    .card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .icon-badge {
+      flex: 0 0 auto;
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: conic-gradient(from 210deg, #e85d4c, #f0a05a, #7b6cff, #e85d4c);
+      transform: rotate(-8deg) skewX(-2deg);
+      box-shadow: 0 10px 20px rgba(123, 108, 255, 0.28);
+    }
+    .icon-badge svg {
+      width: 24px;
+      height: 24px;
+      transform: rotate(8deg);
+      filter: drop-shadow(0 1px 1px rgba(0,0,0,0.25));
+    }
+
+    .eyebrow {
+      margin: 0 0 4px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .title {
+      margin: 0;
+      font-family: "Fraunces", Georgia, serif;
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.15;
+      color: var(--ink);
+      text-shadow: 0 1px 0 rgba(255,255,255,0.8), 0 8px 24px rgba(232, 93, 76, 0.18);
+    }
+
+    .body {
+      margin: 0 0 20px;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    .body strong {
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .body em {
+      font-style: italic;
+      color: #7b6cff;
+    }
+    .body .price {
+      font-family: "Fraunces", Georgia, serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+    }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      margin-bottom: 20px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: rgba(123, 108, 255, 0.12);
+      color: #4b3fb8;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .chip::before {
+      content: "✦";
+      font-size: 10px;
+      color: #7b6cff;
+    }
+    .chip.warn {
+      background: rgba(232, 93, 76, 0.12);
+      color: #b33d30;
+    }
+    .chip.warn::before {
+      content: "!";
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      display: inline-grid;
+      place-items: center;
+      line-height: 1;
+    }
+
+    .cta-row {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+    }
+    .cta-primary {
+      flex: 1;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #e85d4c 0%, #c94436 100%);
+      color: #fffdf9;
+      font: 600 14px/1 "IBM Plex Sans", sans-serif;
+      text-transform: none;
+      box-shadow: 0 8px 16px rgba(232, 93, 76, 0.35);
+      cursor: default;
+    }
+    .cta-ghost {
+      flex: 0 0 auto;
+      border: 1px solid rgba(20, 18, 26, 0.14);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.55);
+      color: var(--ink);
+      font: 600 14px/1 "IBM Plex Sans", sans-serif;
+      backdrop-filter: blur(6px);
+    }
+
+    .footnote {
+      margin: 16px 0 0;
+      font-size: 11px;
+      line-height: 1.4;
+      color: #8a8494;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+  </style>
+</head>
+<body>
+  <pre id="status">Loading converter…</pre>
+
+  <article class="promo-card" id="target" aria-label="Acopio Pro promo card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Limited release</p>
+        <h1 class="title">Export that keeps every layer honest</h1>
+      </div>
+      <div class="icon-badge" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 16.5L12 5l8 11.5H4z" fill="#fffdf9"/>
+          <circle cx="12" cy="15" r="2.2" fill="#14121a"/>
+        </svg>
+      </div>
+    </div>
+
+    <p class="body">
+      Capture <strong>pseudos, radial fills,</strong> and
+      <em>mixed italic runs</em> — then paste at
+      <span class="price">exact 360×</span> size with
+      gap, shadow, and type intact.
+    </p>
+
+    <div class="meta-row">
+      <span class="chip">Auto layout</span>
+      <span class="chip warn">Hard path</span>
+    </div>
+
+    <div class="cta-row">
+      <button type="button" class="cta-primary">Start free trial</button>
+      <button type="button" class="cta-ghost">Details</button>
+    </div>
+
+    <p class="footnote">Cancel anytime · Fonts: Fraunces + IBM Plex</p>
+  </article>
+
+  <script src="../../vendor/dom-to-figma.js"></script>
+  <script>
+    // Minimal Acopio stubs + materializePseudos (mirrors shared.js capture path).
+    window.Acopio = window.Acopio || {};
+    Acopio.isOwnNode = () => false;
+
+    const PSEUDO_STYLE_PROPS = [
+      "content", "display", "position", "top", "right", "bottom", "left", "inset",
+      "width", "height", "min-width", "min-height", "max-width", "max-height",
+      "margin-top", "margin-right", "margin-bottom", "margin-left",
+      "padding-top", "padding-right", "padding-bottom", "padding-left",
+      "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
+      "border-top-style", "border-right-style", "border-bottom-style", "border-left-style",
+      "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+      "border-top-left-radius", "border-top-right-radius",
+      "border-bottom-right-radius", "border-bottom-left-radius",
+      "background-color", "background-image", "background-size", "background-position",
+      "background-repeat", "background-clip", "box-shadow", "transform", "transform-origin",
+      "opacity", "z-index", "color", "font-family", "font-size", "font-weight", "font-style",
+      "letter-spacing", "line-height", "text-align", "text-transform", "white-space",
+      "overflow", "pointer-events", "flex-shrink", "align-self",
+    ];
+
+    Acopio.materializePseudosForCapture = function materializePseudosForCapture(root) {
+      const inserted = [];
+      function stylePseudoOnto(span, ps) {
+        const parts = [];
+        for (const prop of PSEUDO_STYLE_PROPS) {
+          try {
+            const val = ps.getPropertyValue(prop);
+            if (val != null && val !== "") parts.push(`${prop}:${val}`);
+          } catch (_) {}
+        }
+        parts.push("box-sizing:border-box", "pointer-events:none");
+        span.setAttribute("style", parts.join(";"));
+      }
+      function materializeOne(el, which) {
+        let ps;
+        try { ps = getComputedStyle(el, which); } catch (_) { return; }
+        const content = (ps.content || "").trim();
+        if (!content || content === "none" || content === "normal") return;
+        if (ps.display === "none" || ps.visibility === "hidden") return;
+        if (parseFloat(ps.opacity) === 0) return;
+        const span = document.createElement("span");
+        span.setAttribute("data-acopio-pseudo", which === "::before" ? "before" : "after");
+        span.setAttribute("aria-hidden", "true");
+        stylePseudoOnto(span, ps);
+        const urlMatch = content.match(/^url\(\s*["']?([^"')]+)["']?\s*\)$/i);
+        const quoted = content.match(/^["']([\s\S]*)["']$/);
+        if (urlMatch) {
+          const img = document.createElement("img");
+          img.src = urlMatch[1];
+          img.alt = "";
+          img.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;";
+          span.appendChild(img);
+        } else if (quoted && quoted[1]) {
+          span.textContent = quoted[1].replace(/\\A/gi, "\n").replace(/\\/g, "");
+        }
+        if (which === "::before") el.insertBefore(span, el.firstChild);
+        else el.appendChild(span);
+        inserted.push(span);
+      }
+      const hosts = [];
+      const collect = (el) => {
+        if (!el || el.nodeType !== 1) return;
+        if (el.hasAttribute && el.hasAttribute("data-acopio-pseudo")) return;
+        hosts.push(el);
+        for (const child of Array.from(el.children || [])) collect(child);
+      };
+      collect(root);
+      for (const el of hosts) {
+        materializeOne(el, "::before");
+        materializeOne(el, "::after");
+      }
+      return () => { for (const n of inserted) try { n.remove(); } catch (_) {} };
+    };
+
+    Acopio.normalizeDisplayWhitespaceForCapture = function normalizeDisplayWhitespaceForCapture(root) {
+      const restores = [];
+      if (!root || root.nodeType !== 1) return () => {};
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+      let node = walker.nextNode();
+      while (node) {
+        const parent = node.parentElement;
+        const raw = node.nodeValue;
+        if (!parent || raw == null || !/\s/.test(raw)) { node = walker.nextNode(); continue; }
+        const tag = parent.tagName;
+        if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEXTAREA" || tag === "PRE" || tag === "CODE") {
+          node = walker.nextNode(); continue;
+        }
+        let ws = "normal";
+        try { ws = getComputedStyle(parent).whiteSpace || "normal"; } catch (_) {}
+        let next = raw;
+        if (ws === "pre" || ws === "pre-wrap") { node = walker.nextNode(); continue; }
+        if (ws === "pre-line") next = raw.replace(/[^\S\n]+/g, " ");
+        else next = raw.replace(/\s+/g, " ");
+        if (next !== raw) {
+          restores.push({ node, value: raw });
+          node.nodeValue = next;
+        }
+        node = walker.nextNode();
+      }
+      return () => {
+        for (let i = restores.length - 1; i >= 0; i--) {
+          try { restores[i].node.nodeValue = restores[i].value; } catch (_) {}
+        }
+      };
+    };
+
+    function setStatus(text, cls) {
+      const el = document.getElementById("status");
+      el.textContent = text;
+      el.className = cls || "";
+    }
+
+    function inspectClipboardHtml(html) {
+      const checks = {
+        nonEmpty: Boolean(html && html.length > 200),
+        length: html ? html.length : 0,
+        hasHtmlTag: /<html[\s>]/i.test(html || ""),
+        // figit / Figma paste markers (Kiwi envelope variants)
+        hasFigmaMarker:
+          /figma|kiwi|meta\.json|application\/x-figma|clipboard\/html/i.test(html || ""),
+        hasSpanOrDiv: /<(span|div|p|text)/i.test(html || ""),
+        sample: (html || "").slice(0, 280),
+      };
+      return checks;
+    }
+
+    async function runConvert() {
+      const target = document.getElementById("target");
+      const api = window.AcopioDomToFigma;
+      if (!api || typeof api.createFigmaConverter !== "function") {
+        throw new Error("AcopioDomToFigma.createFigmaConverter missing");
+      }
+
+      await document.fonts.ready.catch(() => {});
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      // Count live computed pseudos before materialize (ground truth).
+      const pseudoHosts = [];
+      (function walk(el) {
+        if (!el || el.nodeType !== 1) return;
+        for (const which of ["::before", "::after"]) {
+          const ps = getComputedStyle(el, which);
+          const c = (ps.content || "").trim();
+          if (c && c !== "none" && c !== "normal") {
+            pseudoHosts.push({ tag: el.className || el.tagName, which, content: c.slice(0, 40) });
+          }
+        }
+        for (const child of el.children) walk(child);
+      })(target);
+
+      const cleanupWs = Acopio.normalizeDisplayWhitespaceForCapture(target);
+      const cleanup = Acopio.materializePseudosForCapture(target);
+      const materialized = target.querySelectorAll("[data-acopio-pseudo]").length;
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const rect = target.getBoundingClientRect();
+      const width = Math.max(1, Math.round(rect.width));
+      const height = Math.max(1, Math.round(rect.height));
+
+      const imageLoader =
+        typeof api.createDirectImageLoader === "function"
+          ? api.createDirectImageLoader()
+          : async () => { throw new Error("no image loader"); };
+      const fontLoader =
+        typeof api.createFontsourceLoader === "function"
+          ? api.createFontsourceLoader()
+          : async () => { throw new Error("no font loader"); };
+
+      const figma = api.createFigmaConverter({
+        layout: "auto",
+        imageLoader,
+        fontLoader,
+      });
+
+      const result = await figma.convert({
+        element: target,
+        width,
+        height,
+        name: "Acopio Pro promo card",
+      });
+      if (!result || typeof result.toClipboardHtml !== "function") {
+        cleanup();
+        cleanupWs();
+        throw new Error("convert returned no toClipboardHtml");
+      }
+      const html = await result.toClipboardHtml();
+      cleanup();
+      cleanupWs();
+
+      // Dual clipboard write (same contract as extension Copy)
+      let clipboard = { wroteHtml: false, wrotePng: false, error: null };
+      try {
+        const types = {};
+        types["text/html"] = new Blob([html], { type: "text/html" });
+        types["text/plain"] = new Blob(["Acopio Pro promo card"], { type: "text/plain" });
+        // Tiny PNG so dual write path is exercised
+        const pngB64 =
+          "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk+M9Qz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC";
+        const bin = atob(pngB64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        types["image/png"] = new Blob([bytes], { type: "image/png" });
+        await navigator.clipboard.write([new ClipboardItem(types)]);
+        clipboard = { wroteHtml: true, wrotePng: true, error: null };
+      } catch (err) {
+        clipboard.error = String(err && err.message ? err.message : err);
+        try {
+          await navigator.clipboard.writeText(html.slice(0, 50000));
+          clipboard.wroteHtml = true;
+        } catch (e2) {
+          clipboard.error = clipboard.error + " | " + String(e2 && e2.message ? e2.message : e2);
+        }
+      }
+
+      const inspect = inspectClipboardHtml(html);
+      const report = {
+        ok: inspect.nonEmpty && inspect.hasFigmaMarker && materialized >= 3,
+        box: { width, height },
+        pseudoHostsFound: pseudoHosts.length,
+        pseudoHosts,
+        materializedSpans: materialized,
+        clipboard,
+        inspect,
+      };
+      window.__ACOPIO_TOUGH_COPY_RESULT__ = report;
+      const lines = [
+        report.ok ? "PASS — tough Copy→Figma convert" : "FAIL — convert or markers weak",
+        `box: ${width}×${height}`,
+        `pseudos found: ${pseudoHosts.length} → materialized: ${materialized}`,
+        `html bytes: ${inspect.length}`,
+        `figma marker: ${inspect.hasFigmaMarker}`,
+        `clipboard html/png: ${clipboard.wroteHtml}/${clipboard.wrotePng}` +
+          (clipboard.error ? ` (${clipboard.error})` : ""),
+        "",
+        "pseudo hosts:",
+        ...pseudoHosts.map((p) => `  ${p.which} on .${String(p.tag).slice(0, 40)} → ${p.content}`),
+        "",
+        "html head:",
+        inspect.sample,
+      ];
+      setStatus(lines.join("\n"), report.ok ? "pass" : "fail");
+      return report;
+    }
+
+    window.__runToughCopyTest = runConvert;
+    document.fonts.ready.then(() => runConvert()).catch((err) => {
+      setStatus("FAIL: " + (err && err.stack ? err.stack : err), "fail");
+      window.__ACOPIO_TOUGH_COPY_RESULT__ = { ok: false, error: String(err) };
+    });
+  </script>
+</body>
+</html>

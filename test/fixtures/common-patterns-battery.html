@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  body { margin: 0; font-family: sans-serif; }
+  .case { width: 320px; margin-bottom: 24px; border: 1px solid #ccc; }
+
+  #ellipsis-title {
+    width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 18px; font-weight: 700;
+  }
+
+  #clamp1 {
+    width: 240px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+    font-size: 16px;
+  }
+  #short-clamp {
+    width: 240px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+    font-size: 16px;
+  }
+
+  #tag-list { display: flex; flex-wrap: wrap; gap: 8px; width: 260px; }
+  #tag-list .tag { background: #eee; border-radius: 999px; padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+
+  #badge-card { position: relative; width: 200px; height: 120px; background: #333; border-radius: 12px; }
+  #badge-card .badge {
+    position: absolute; top: -8px; right: -8px; background: #e74c3c; color: #fff;
+    font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px;
+  }
+
+  #avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(45deg, #333, #999); }
+</style></head>
+<body>
+  <div class="case" id="case-ellipsis"><h4>ellipsis-title</h4><div id="ellipsis-title">This is a very long title that should truncate with an ellipsis at the end</div></div>
+  <div class="case" id="case-clamp1"><h4>clamp1 (1 line)</h4><p id="clamp1">This text is long enough to wrap onto multiple lines but should be clamped to exactly one visible line only.</p></div>
+  <div class="case" id="case-shortclamp"><h4>short-clamp (clamp:4, real content 2 lines)</h4><p id="short-clamp">This text only wraps to two real lines so the clamp of four should never actually trigger truncation.</p></div>
+  <div class="case" id="case-tags"><h4>tag-list (wraps to 2 rows)</h4><div id="tag-list">
+    <span class="tag">Design</span><span class="tag">Product</span><span class="tag">Engineering</span>
+    <span class="tag">Marketing</span><span class="tag">Research</span><span class="tag">Growth</span>
+  </div></div>
+  <div class="case" id="case-badge"><h4>badge-card</h4><div id="badge-card"><span class="badge">NEW</span></div></div>
+  <div class="case" id="case-avatar"><h4>avatar (circle)</h4><div id="avatar"></div></div>
+</body></html>

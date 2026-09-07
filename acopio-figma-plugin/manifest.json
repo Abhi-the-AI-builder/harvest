@@ -1,12 +1,14 @@
 {
   "name": "Acopio Import",
-  "id": "acopio-import-local-dev",
+  "id": "1678488223248979610",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "ui.html",
   "editorType": ["figma"],
   "documentAccess": "dynamic-page",
   "networkAccess": {
-    "allowedDomains": ["none"]
+    "allowedDomains": [
+      "https://cpzqpmjyshxxpmxsqfni.supabase.co"
+    ]
   }
 }

@@ -4,6 +4,11 @@
   // (false for store builds; config.local.js sets true for local testing).
   const ENABLE_FIGMA_EXPORT = self.ACOPIO_ENABLE_FIGMA_EXPORT === true;
   const ENABLE_FIGMA_PLUGIN_COPY = self.ACOPIO_ENABLE_FIGMA_EXPORT === true;
+  // Off for this deploy, per direct instruction — flip to true only when
+  // asked. Code/markup untouched; this just hides the entry point (the
+  // "Aa" compare-fonts toggle in the topbar) the same way the Figma flags
+  // above hide theirs.
+  const ENABLE_COMPARE_FONTS = false;
   const gridEl = document.getElementById("grid");
   const emptyEl = document.getElementById("empty");
   const siteLineEl = document.getElementById("site-line");
@@ -25,6 +30,7 @@
   const notesEmptyEl = document.getElementById("notes-empty");
   const selectBarEl = document.getElementById("select-bar");
   const selectChipsEl = document.getElementById("select-chips");
+  const selectExportPrimaryBtn = document.getElementById("select-export-primary-btn");
   const selectExportZipBtn = document.getElementById("select-export-zip-btn");
   const selectExportToggleBtn = document.getElementById("select-export-toggle-btn");
   const selectExportMenu = document.getElementById("select-export-menu");
@@ -39,12 +45,14 @@
   const libraryTabsSelectToggle = document.getElementById("library-select-toggle");
   const librarySelectBarEl = document.getElementById("library-select-bar");
   const librarySelectSummaryEl = document.getElementById("library-select-summary");
+  const libraryExportPrimaryBtn = document.getElementById("library-export-primary-btn");
   const libraryExportZipBtn = document.getElementById("library-export-zip-btn");
   const libraryExportToggleBtn = document.getElementById("library-export-toggle-btn");
   const libraryExportMenu = document.getElementById("library-export-menu");
   const libraryExportNotionBtn = document.getElementById("library-export-notion-btn");
   const libraryExportFigmaBtn = document.getElementById("library-export-figma-btn");
   const libraryExportPluginCopyBtn = document.getElementById("library-export-plugin-copy-btn");
+  const librarySelectRemoveBtn = document.getElementById("library-select-remove-btn");
   const compareViewEl = document.getElementById("compare-view");
   const compareHeadingSelect = document.getElementById("compare-heading-select");
   const compareBodySelect = document.getElementById("compare-body-select");
@@ -57,14 +65,26 @@
   notesToggle.innerHTML = Acopio.ICONS.note;
   compareToggle.innerHTML = Acopio.ICONS.compare;
   collapseBtn.innerHTML = Acopio.ICONS.panel;
+  if (!ENABLE_COMPARE_FONTS) compareToggle.hidden = true;
 
-  // With Figma export off, only its own 3 menu items hide — the chevron
-  // and dropdown themselves stay (Export to Notion is a real, independent
-  // destination now, not gated by this flag). Only fall back to the
-  // full-pill "nothing to open" treatment if Notion ever gets flagged off
-  // too and truly leaves the menu empty.
-  if (!ENABLE_FIGMA_EXPORT) {
-    document.querySelectorAll("#library-export-figma-btn, #select-export-figma-btn").forEach((btn) => { btn.hidden = true; });
+  // Figma is the product heart when enabled: primary CTA = Export to Figma;
+  // ZIP/Notion/JSON live in the chevron. Store builds keep the flag false
+  // (figma-deploy-gate) — then primary falls back to Export as ZIP and the
+  // duplicate Figma menu row stays hidden.
+  if (libraryExportPrimaryBtn && selectExportPrimaryBtn) {
+    if (ENABLE_FIGMA_EXPORT) {
+      libraryExportPrimaryBtn.textContent = "Export to Figma";
+      selectExportPrimaryBtn.textContent = "Export to Figma";
+      if (libraryExportFigmaBtn) libraryExportFigmaBtn.hidden = true;
+      if (selectExportFigmaBtn) selectExportFigmaBtn.hidden = true;
+    } else {
+      libraryExportPrimaryBtn.textContent = "Export as ZIP";
+      selectExportPrimaryBtn.textContent = "Export as ZIP";
+      if (libraryExportZipBtn) libraryExportZipBtn.hidden = true;
+      if (selectExportZipBtn) selectExportZipBtn.hidden = true;
+      if (libraryExportFigmaBtn) libraryExportFigmaBtn.hidden = true;
+      if (selectExportFigmaBtn) selectExportFigmaBtn.hidden = true;
+    }
   }
   if (!ENABLE_FIGMA_PLUGIN_COPY) {
     document.querySelectorAll("#library-export-plugin-copy-btn, #select-export-plugin-copy-btn").forEach((btn) => { btn.hidden = true; });
@@ -491,6 +511,86 @@
     actions.appendChild(confirmBtn);
     appendModalFooter(modal, actions);
     confirmBtn.focus();
+  }
+
+  // Honest Figma handoff: clipboard ≠ layers. Only the plugin can create nodes.
+  // Today Acopio Import is a local Development plugin (Desktop only). When it's
+  // published to Community, the same export works in Figma web and Desktop —
+  // copy below states both so this modal isn't forever "Desktop or nothing."
+  function showFigmaHandoff({ itemCount, siteNote, fidelityNotes, delivery, pairKey }) {
+    const { modal, dismiss } = openModalShell();
+    appendModalHeader(modal, "Finish in Figma", dismiss);
+    const main = appendModalMain(modal);
+
+    const lead = document.createElement("div");
+    lead.className = "sp-modal-body";
+    if (delivery === "handoff") {
+      lead.textContent = `${itemCount} item${itemCount === 1 ? "" : "s"}${siteNote || ""} are ready for Import — not on the canvas yet. Click Import from Acopio in the plugin (no paste needed after linking once).`;
+    } else if (delivery === "download") {
+      lead.textContent = `${itemCount} item${itemCount === 1 ? "" : "s"}${siteNote || ""} were downloaded as JSON — not on the canvas yet.`;
+    } else {
+      lead.textContent = `${itemCount} item${itemCount === 1 ? "" : "s"}${siteNote || ""} are ready — run Acopio Import. Paste is only a backup if Import can't fetch.`;
+    }
+    main.appendChild(lead);
+
+    if (pairKey) {
+      const link = document.createElement("div");
+      link.className = "sp-modal-body";
+      link.style.marginTop = "12px";
+      link.innerHTML = `<strong>Link code</strong> (one-time in the plugin if asked): <code style="font-size:14px;font-weight:700;letter-spacing:0.04em">${pairKey}</code>`;
+      main.appendChild(link);
+    }
+
+    const steps = document.createElement("ol");
+    steps.className = "sp-modal-body";
+    steps.style.margin = "12px 0 0";
+    steps.style.paddingLeft = "20px";
+    steps.style.display = "flex";
+    steps.style.flexDirection = "column";
+    steps.style.gap = "8px";
+    const stepTexts =
+      delivery === "handoff"
+        ? [
+            "Open any Figma design file (Desktop while the plugin is Development-only).",
+            "Run Acopio Import.",
+            "Click Import from Acopio — it fetches this export. Paste JSON only if Import says it isn't linked yet.",
+          ]
+        : delivery === "download"
+          ? [
+              "Open any Figma design file.",
+              "Run Acopio Import.",
+              "Paste export instead with the downloaded JSON (cloud handoff wasn't available).",
+            ]
+          : [
+              "Open any Figma design file.",
+              "Run Acopio Import.",
+              "Click Import from Acopio. Use Paste only as backup.",
+            ];
+    stepTexts.forEach((text) => {
+      const li = document.createElement("li");
+      li.textContent = text;
+      steps.appendChild(li);
+    });
+    main.appendChild(steps);
+
+    if (Array.isArray(fidelityNotes) && fidelityNotes.length > 0) {
+      const note = document.createElement("div");
+      note.className = "sp-modal-body is-muted";
+      note.style.marginTop = "12px";
+      note.textContent = fidelityNotes.join(". ") + ".";
+      main.appendChild(note);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "sp-modal-actions";
+    const okBtn = document.createElement("button");
+    okBtn.type = "button";
+    okBtn.className = "sp-modal-confirm";
+    okBtn.textContent = "Got it";
+    okBtn.addEventListener("click", dismiss);
+    actions.appendChild(okBtn);
+    appendModalFooter(modal, actions);
+    okBtn.focus();
   }
 
   // --- Note editor (add/edit a note after capture) -------------------
@@ -977,6 +1077,37 @@
   // unconnected to the curve, matching the reference's "⋮" button exactly:
   // a separate round pill with its own shadow sitting on the photo, not
   // built into the card's silhouette.
+  function fontCardMetaLine(data) {
+    const d = data || {};
+    const parts = [];
+    parts.push(d.weight || "400");
+    if (d.sizePx) parts.push(`${Math.round(d.sizePx)}px`);
+    if (d.lineHeightPx) parts.push(`${Math.round(d.lineHeightPx)} LH`);
+    if (d.letterSpacingPx != null && Number(d.letterSpacingPx) !== 0) {
+      parts.push(`${d.letterSpacingPx} tracking`);
+    }
+    return parts.join(" · ");
+  }
+
+  function fontRoleCaption(item) {
+    const role = String(item.family || "").toLowerCase();
+    if (role === "heading") return "Heading";
+    if (role === "body") return "Body";
+    if (role === "button") return "Button";
+    return "Font";
+  }
+
+  function fontGlyphSample(data) {
+    const raw = (data && data.sampleText && String(data.sampleText).trim()) || "";
+    if (!raw) return "Aa";
+    // Prefer a short live sample so the card reads as typography, not a
+    // generic "Aa" stamp — still compact enough for the tile glyph.
+    const compact = raw.replace(/\s+/g, " ");
+    if (compact.length <= 4) return compact;
+    const word = compact.split(" ")[0];
+    return (word.length >= 2 ? word.slice(0, 4) : compact.slice(0, 2)) || "Aa";
+  }
+
   function buildRichTile(item, reserveNoteSpace) {
     const tile = document.createElement("div");
     tile.className = `tile tile-rich tile-rich-${item.type}`;
@@ -987,12 +1118,17 @@
     if (item.type === "color") {
       top.style.background = item.data.hex || "#ccc";
     } else {
+      // Typography preview — never an image thumb. Live color + sample.
       top.style.background = "var(--type-font-bg)";
       const glyph = document.createElement("div");
       glyph.className = "tile-rich-glyph";
-      glyph.textContent = "Aa";
-      glyph.style.fontFamily = item.data.fallbackStack || "sans-serif";
+      glyph.textContent = fontGlyphSample(item.data);
+      glyph.style.fontFamily = item.data.fallbackStack || item.data.family || "sans-serif";
       glyph.style.fontWeight = item.data.weight || "600";
+      if (item.data.letterSpacingPx != null) {
+        glyph.style.letterSpacing = `${item.data.letterSpacingPx}px`;
+      }
+      glyph.style.color = item.data.colorHex || "var(--type-font-fg)";
       top.appendChild(glyph);
     }
     // Ported from design-extractor's own color-card — the notch is a
@@ -1004,14 +1140,13 @@
     const body = document.createElement("div");
     body.className = "tile-rich-body";
 
-    // Small muted caption above the bold value — the reference's own
-    // "5 days ago · Active" sitting above "Personal Email Assistant", not
-    // a bare value with nothing over it. Reuses real data we actually
-    // have (when this was captured) rather than inventing a field like
-    // "Active" that has no Acopio equivalent.
+    // Label-above-value: role (Heading/Body/Font) or relative time for color.
     const caption = document.createElement("div");
     caption.className = "tile-rich-caption";
-    caption.textContent = relativeTime(item.capturedAt);
+    caption.textContent =
+      item.type === "font"
+        ? `${fontRoleCaption(item)} · ${relativeTime(item.capturedAt)}`
+        : relativeTime(item.capturedAt);
     body.appendChild(caption);
 
     const value = document.createElement("div");
@@ -1024,10 +1159,22 @@
       body.appendChild(value);
       const meta = document.createElement("div");
       meta.className = "tile-rich-meta";
-      const weight = item.data.weight || "400";
-      const size = item.data.sizePx ? `${Math.round(item.data.sizePx)}px` : null;
-      meta.textContent = [weight, size].filter(Boolean).join(" · ");
+      meta.textContent = fontCardMetaLine(item.data);
       body.appendChild(meta);
+      if (item.data.colorHex) {
+        const swatchRow = document.createElement("div");
+        swatchRow.className = "tile-rich-color-row";
+        const swatch = document.createElement("span");
+        swatch.className = "tile-rich-color-swatch";
+        swatch.style.background = item.data.colorHex;
+        swatch.title = item.data.colorHex;
+        const hex = document.createElement("span");
+        hex.className = "tile-rich-color-hex";
+        hex.textContent = String(item.data.colorHex).toUpperCase();
+        swatchRow.appendChild(swatch);
+        swatchRow.appendChild(hex);
+        body.appendChild(swatchRow);
+      }
     }
     // The note's actual text, not just a badge you have to hover/click to
     // read — same "say what it actually is" treatment the expanded card
@@ -1162,9 +1309,13 @@
       top.style.background = "var(--type-font-bg)";
       const glyph = document.createElement("div");
       glyph.className = "card-rich-glyph";
-      glyph.textContent = "Aa";
-      glyph.style.fontFamily = item.data.fallbackStack || "sans-serif";
+      glyph.textContent = fontGlyphSample(item.data);
+      glyph.style.fontFamily = item.data.fallbackStack || item.data.family || "sans-serif";
       glyph.style.fontWeight = item.data.weight || "600";
+      if (item.data.letterSpacingPx != null) {
+        glyph.style.letterSpacing = `${item.data.letterSpacingPx}px`;
+      }
+      glyph.style.color = item.data.colorHex || "var(--type-font-fg)";
       top.appendChild(glyph);
     } else {
       // image / component — the same real photo/video, or the accent-wash
@@ -1188,16 +1339,20 @@
     row.appendChild(value);
     const typeLabel = document.createElement("div");
     typeLabel.className = `type-label type-label-${item.type}`;
-    typeLabel.textContent = item.family || item.type;
+    // Font cards: Heading/Body/Button pill when tagged; else "Font".
+    typeLabel.textContent =
+      item.type === "font" ? fontRoleCaption(item) : item.family || item.type;
     row.appendChild(typeLabel);
     body.appendChild(row);
 
     const meta = document.createElement("div");
     meta.className = "card-rich-meta";
     if (item.type === "font") {
-      const weight = item.data.weight || "400";
-      const size = item.data.sizePx ? `${Math.round(item.data.sizePx)}px` : null;
-      meta.textContent = [weight, size].filter(Boolean).join(" · ") + " · " + relativeTime(item.capturedAt);
+      // weight · size · LH · tracking · #HEX · when — never an image path.
+      const metaParts = [fontCardMetaLine(item.data)];
+      if (item.data.colorHex) metaParts.push(String(item.data.colorHex).toUpperCase());
+      metaParts.push(relativeTime(item.capturedAt));
+      meta.textContent = metaParts.filter(Boolean).join(" · ");
     } else if (item.type === "component" && item.data.boundingBoxWidth && item.data.boundingBoxHeight) {
       meta.textContent = `${Math.round(item.data.boundingBoxWidth)}×${Math.round(item.data.boundingBoxHeight)} · ${relativeTime(item.capturedAt)}`;
     } else {
@@ -2210,6 +2365,38 @@
     refreshCurrentView();
   });
 
+  librarySelectRemoveBtn && librarySelectRemoveBtn.addEventListener("click", () => {
+    const hosts = Array.from(selectedFolderHostnames);
+    if (hosts.length === 0) return;
+    const items = hosts.flatMap((h) => selectedFolderItemsMap.get(h) || []);
+    if (items.length === 0) return;
+    const siteLabel =
+      hosts.length === 1
+        ? hosts[0]
+        : `${hosts.length} sites`;
+    showConfirm({
+      title: `Delete ${siteLabel}?`,
+      body: `This permanently deletes ${items.length} item${items.length === 1 ? "" : "s"} from the selected site${hosts.length === 1 ? "" : "s"}. Notes for these sites are kept.`,
+      confirmLabel: hosts.length === 1 ? "Delete folder" : "Delete folders",
+      onConfirm: async () => {
+        const results = [];
+        for (const item of items) {
+          const r = await AcopioDB.deleteItem(item.id);
+          if (r) results.push(r);
+        }
+        exitFolderSelectMode();
+        showToast(
+          `Deleted ${results.length} item${results.length === 1 ? "" : "s"} from ${siteLabel}`,
+          async () => {
+            await AcopioDB.restoreFolder(results);
+            refreshCurrentView();
+          }
+        );
+        refreshCurrentView();
+      },
+    });
+  });
+
   // The choice (ZIP vs Figma) now happens right here in the bar — this
   // used to be one "Export…" button that navigated to a separate screen
   // just to show the same two options as a split button. Sets exportContext
@@ -2284,29 +2471,26 @@
     }
   });
 
-  libraryExportZipBtn.addEventListener("click", () => {
+  function runLibraryFolderExport(action) {
     if (selectedFolderHostnames.size === 0) return;
     exportContext = folderSelectionExportContext();
     exitFolderSelectMode();
-    performZipExport();
+    action();
+  }
+  libraryExportPrimaryBtn && libraryExportPrimaryBtn.addEventListener("click", () => {
+    runLibraryFolderExport(ENABLE_FIGMA_EXPORT ? performExportToFigma : performZipExport);
   });
-  libraryExportNotionBtn.addEventListener("click", () => {
-    if (selectedFolderHostnames.size === 0) return;
-    exportContext = folderSelectionExportContext();
-    exitFolderSelectMode();
-    performNotionExport();
+  libraryExportZipBtn && libraryExportZipBtn.addEventListener("click", () => {
+    runLibraryFolderExport(performZipExport);
   });
-  libraryExportFigmaBtn.addEventListener("click", () => {
-    if (selectedFolderHostnames.size === 0) return;
-    exportContext = folderSelectionExportContext();
-    exitFolderSelectMode();
-    performExportToFigma();
+  libraryExportNotionBtn && libraryExportNotionBtn.addEventListener("click", () => {
+    runLibraryFolderExport(performNotionExport);
   });
-  libraryExportPluginCopyBtn.addEventListener("click", () => {
-    if (selectedFolderHostnames.size === 0) return;
-    exportContext = folderSelectionExportContext();
-    exitFolderSelectMode();
-    performPluginJsonExport();
+  libraryExportFigmaBtn && libraryExportFigmaBtn.addEventListener("click", () => {
+    runLibraryFolderExport(performExportToFigma);
+  });
+  libraryExportPluginCopyBtn && libraryExportPluginCopyBtn.addEventListener("click", () => {
+    runLibraryFolderExport(performPluginJsonExport);
   });
 
   function buildCollectionCard(collection, resolvedItems, mode) {
@@ -2415,28 +2599,52 @@
     });
     main.appendChild(list);
 
-    const newRow = document.createElement("div");
+    const newRow = document.createElement("form");
     newRow.className = "collection-picker-new";
+    newRow.setAttribute("autocomplete", "off");
     const input = document.createElement("input");
     input.type = "text";
     input.placeholder = "New Collection name…";
     input.maxLength = 60;
+    input.name = "acopio-new-collection";
     const createBtn = document.createElement("button");
-    createBtn.type = "button";
-    createBtn.textContent = "Create";
-    createBtn.addEventListener("click", async () => {
+    createBtn.type = "submit";
+    createBtn.innerHTML = Acopio.ICONS.plus;
+    createBtn.title = "Create Collection";
+    createBtn.setAttribute("aria-label", "Create Collection");
+    const createCollection = async () => {
       const name = input.value.trim();
-      if (!name) return;
-      // Section 8: duplicate collection names are allowed (distinguished by
-      // id internally) — a hard block would break the legitimate
-      // "iterate on a moodboard" use case, so this deliberately doesn't
-      // check for an existing name.
-      const col = await AcopioDB.createCollection(name);
-      const refs = items.map((it) => ({ folderHostname: it.hostname, itemId: it.id }));
-      await AcopioDB.addItemsToCollection(col.id, refs);
-      close();
-      exitSelectMode();
-      showToast(`Created "${name}" with ${items.length} item${items.length === 1 ? "" : "s"}`, null);
+      if (!name) {
+        input.focus();
+        return;
+      }
+      if (createBtn.disabled) return;
+      createBtn.disabled = true;
+      try {
+        // Section 8: duplicate collection names are allowed (distinguished by
+        // id internally) — a hard block would break the legitimate
+        // "iterate on a moodboard" use case, so this deliberately doesn't
+        // check for an existing name.
+        const col = await AcopioDB.createCollection(name);
+        const refs = items.map((it) => ({ folderHostname: it.hostname, itemId: it.id }));
+        await AcopioDB.addItemsToCollection(col.id, refs);
+        close();
+        exitSelectMode();
+        showToast(`Created "${name}" with ${items.length} item${items.length === 1 ? "" : "s"}`, null);
+      } catch (err) {
+        createBtn.disabled = false;
+        showToast(`Couldn't create Collection — ${String((err && err.message) || err)}`, null);
+      }
+    };
+    newRow.addEventListener("submit", (e) => {
+      e.preventDefault();
+      createCollection();
+    });
+    createBtn.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      createCollection();
     });
     newRow.appendChild(input);
     newRow.appendChild(createBtn);
@@ -2527,29 +2735,26 @@
     selectExportToggleBtn.setAttribute("aria-expanded", "false");
     clearExportMenuPosition(selectExportMenu);
   }
-  selectExportZipBtn.addEventListener("click", () => {
+  function runItemSelectionExport(action) {
     if (selectedItems.size === 0) return;
     exportContext = itemSelectionExportContext();
     exitSelectModeAfterExport();
-    performZipExport();
+    action();
+  }
+  selectExportPrimaryBtn && selectExportPrimaryBtn.addEventListener("click", () => {
+    runItemSelectionExport(ENABLE_FIGMA_EXPORT ? performExportToFigma : performZipExport);
   });
-  selectExportNotionBtn.addEventListener("click", () => {
-    if (selectedItems.size === 0) return;
-    exportContext = itemSelectionExportContext();
-    exitSelectModeAfterExport();
-    performNotionExport();
+  selectExportZipBtn && selectExportZipBtn.addEventListener("click", () => {
+    runItemSelectionExport(performZipExport);
   });
-  selectExportFigmaBtn.addEventListener("click", () => {
-    if (selectedItems.size === 0) return;
-    exportContext = itemSelectionExportContext();
-    exitSelectModeAfterExport();
-    performExportToFigma();
+  selectExportNotionBtn && selectExportNotionBtn.addEventListener("click", () => {
+    runItemSelectionExport(performNotionExport);
   });
-  selectExportPluginCopyBtn.addEventListener("click", () => {
-    if (selectedItems.size === 0) return;
-    exportContext = itemSelectionExportContext();
-    exitSelectModeAfterExport();
-    performPluginJsonExport();
+  selectExportFigmaBtn && selectExportFigmaBtn.addEventListener("click", () => {
+    runItemSelectionExport(performExportToFigma);
+  });
+  selectExportPluginCopyBtn && selectExportPluginCopyBtn.addEventListener("click", () => {
+    runItemSelectionExport(performPluginJsonExport);
   });
 
   selectRemoveBtn.addEventListener("click", () => {
@@ -2936,6 +3141,20 @@
         bodyItemId: body.id,
         headingFamily: heading.data.family,
         bodyFamily: body.data.family,
+        headingFallbackStack: heading.data.fallbackStack,
+        bodyFallbackStack: body.data.fallbackStack,
+        headingWeight: heading.data.weight,
+        bodyWeight: body.data.weight,
+        headingSizePx: heading.data.sizePx,
+        bodySizePx: body.data.sizePx,
+        headingLineHeightPx: heading.data.lineHeightPx,
+        bodyLineHeightPx: body.data.lineHeightPx,
+        headingLetterSpacingPx: heading.data.letterSpacingPx,
+        bodyLetterSpacingPx: body.data.letterSpacingPx,
+        headingColorHex: heading.data.colorHex,
+        bodyColorHex: body.data.colorHex,
+        headingSampleText: heading.data.sampleText,
+        bodySampleText: body.data.sampleText,
       },
     });
     showPairingSavedConfirm(heading, body);
@@ -3006,7 +3225,8 @@
       if (pages.length === 0) {
         const empty = document.createElement("div");
         empty.className = "sp-modal-body is-muted";
-        empty.textContent = `No pages are shared with Acopio yet — open Notion, share a page with the "Acopio" integration, then try again.`;
+        empty.textContent =
+          'No pages are shared with Acopio yet — open Notion, share a page with the "Acopio" integration, then try again.';
         list.appendChild(empty);
       }
       pages.forEach((p) => {
@@ -3048,6 +3268,7 @@
   function performExportToFigma() {
     return AcopioFigmaExport.performExportToFigma(exportContext, {
       showFeedback: showExportFeedback,
+      showHandoff: showFigmaHandoff,
     });
   }
 
@@ -3367,6 +3588,7 @@
   function setAcopioActive(next) {
     chrome.storage.local.set(next ? { acopioActive: true, acopioNotesActive: false } : { acopioActive: false });
     applyActiveState(next); // instant feedback, don't wait for the storage round-trip
+    if (next) applyNotesActiveState(false);
   }
 
   chrome.storage.local.get(["acopioActive"], (res) => {
@@ -3374,6 +3596,29 @@
   });
   activeToggle.addEventListener("click", () => {
     setAcopioActive(activeToggle.getAttribute("aria-pressed") !== "true");
+  });
+
+  // Empty-state stack "+" — turns capture on so the page tooltip appears.
+  // Notes empty enables notes capture; every other empty enables hover-capture.
+  document.querySelectorAll(".empty-start-capture").forEach((btn) => {
+    const notesEmpty = Boolean(btn.closest("#notes-empty"));
+    if (notesEmpty) {
+      btn.setAttribute("aria-label", "Turn on notes capture");
+      btn.title = "Turn on notes capture";
+    } else {
+      btn.title = "Turn on hover-capture";
+    }
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (notesEmpty) {
+        setNotesActive(true);
+        showToast("Notes capture is on — select text on the page to collect it.", null);
+        return;
+      }
+      setAcopioActive(true);
+      showToast("Hover-capture is on — hover anything on the page to collect.", null);
+    });
   });
 
   // Independent second toggle — text-selection notes capture
@@ -3389,6 +3634,7 @@
   function setNotesActive(next) {
     chrome.storage.local.set(next ? { acopioNotesActive: true, acopioActive: false } : { acopioNotesActive: false });
     applyNotesActiveState(next);
+    if (next) applyActiveState(false);
   }
 
   chrome.storage.local.get(["acopioNotesActive"], (res) => {
@@ -3424,14 +3670,320 @@
     if (changeInfo.status === "complete" && tab.active) syncActiveTab();
   });
   chrome.runtime.onMessage.addListener((message) => {
-    if (!message || message.type !== "ITEMS_UPDATED") return;
-    // Refresh whatever is actually on screen, not just the auto-tab view —
-    // otherwise a capture while manually browsing a different folder (or
-    // the library grid) either silently fails to show up, or worse, would
-    // yank the view back to the active tab if this just called
-    // syncActiveTab() unconditionally.
-    refreshCurrentView();
+    if (!message) return;
+    if (message.type === "ITEMS_UPDATED") {
+      // Refresh whatever is actually on screen, not just the auto-tab view —
+      // otherwise a capture while manually browsing a different folder (or
+      // the library grid) either silently fails to show up, or worse, would
+      // yank the view back to the active tab if this just called
+      // syncActiveTab() unconditionally.
+      refreshCurrentView();
+      return;
+    }
+    if (message.type === "WALKTHROUGH_PREVIEW_ACTIVATE") {
+      if (!isWalkthroughOpen() || walkthroughIndex !== 0) return;
+      applyActiveState(true);
+      advanceWalkthroughFromStep1();
+    }
   });
 
-  syncActiveTab();
+  // --- First-run walkthrough ---------------------------------------------
+  // Teaches: (1) hover-capture toggle + on-page tooltip preview,
+  // (2) collapse to floating toolbar, (3) where collected items land.
+  // One-shot via acopioWalkthroughSeen. Copy matches the finalized mockup.
+  const walkthroughEl = document.getElementById("walkthrough");
+  const walkthroughCard = document.getElementById("walkthrough-card");
+  const walkthroughStepLabel = document.getElementById("walkthrough-step-label");
+  const walkthroughTitle = document.getElementById("walkthrough-title");
+  const walkthroughBody = document.getElementById("walkthrough-body");
+  const walkthroughProgress = document.getElementById("walkthrough-progress");
+  const walkthroughSkip = document.getElementById("walkthrough-skip");
+  const walkthroughBack = document.getElementById("walkthrough-back");
+  const walkthroughNext = document.getElementById("walkthrough-next");
+  const walkthroughRing = document.getElementById("walkthrough-ring");
+  const WALKTHROUGH_STEPS = [
+    {
+      title: "Turn on hover-capture",
+      body: "Click this. Then hover anything on the page — the collect tooltip appears.",
+      targetId: "active-toggle",
+      block: false,
+      pagePreview: false,
+      activateCapture: true,
+      anchorToTarget: true,
+    },
+    {
+      title: "Collapse or expand anytime",
+      body: "Click this Collapse icon to hide the panel. Open it again from the floating toolbar's matching panel button on the page.",
+      targetId: "collapse-btn",
+      block: false,
+      pagePreview: "toolbar",
+      anchorToTarget: true,
+    },
+    {
+      title: "Start collecting",
+      body: "Hover anything on the page, then click + Collect. Saved items appear in this library.",
+      targetId: null,
+      // Prefer the fan + title, not the whole empty region (that pulled the
+      // tip over the illustration and under zoom/transform layers).
+      targetSelector: "#empty .empty-fan, #library-empty .empty-fan, #empty .empty-title",
+      block: true,
+      pagePreview: false,
+      activateCapture: true,
+      dockCardTop: true,
+    },
+  ];
+  let walkthroughIndex = 0;
+  let walkthroughOpen = false;
+  let walkthroughHitTarget = null;
+
+  function isWalkthroughOpen() {
+    return walkthroughOpen && walkthroughEl && !walkthroughEl.hidden;
+  }
+
+  function clearWalkthroughHitTarget() {
+    if (walkthroughHitTarget) {
+      walkthroughHitTarget.classList.remove("walkthrough-hit-target");
+      walkthroughHitTarget = null;
+    }
+    document.body.classList.remove("walkthrough-open", "walkthrough-open-icons");
+  }
+
+  async function sendWalkthroughPreview(mode) {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || tab.id == null) return;
+      const show = mode === true || mode === "tooltip" || mode === "toolbar";
+      const kind = mode === "toolbar" ? "toolbar" : "tooltip";
+      await chrome.tabs.sendMessage(tab.id, {
+        type: "ACOPIO_WALKTHROUGH_PREVIEW",
+        show,
+        kind: show ? kind : undefined,
+      });
+    } catch (_) {
+      // Restricted pages (chrome://, Web Store, etc.) have no content script.
+    }
+  }
+
+  function resolveWalkthroughTarget(step) {
+    if (step.targetId) return document.getElementById(step.targetId);
+    if (step.targetSelector) {
+      const found = document.querySelector(step.targetSelector);
+      if (found && !found.closest("[hidden]")) return found;
+    }
+    if (emptyEl && !emptyEl.hidden) {
+      return emptyEl.querySelector(".empty-fan") || emptyEl.querySelector(".empty-title") || emptyEl;
+    }
+    if (libraryEmptyEl && !libraryEmptyEl.hidden) {
+      return (
+        libraryEmptyEl.querySelector(".empty-fan") ||
+        libraryEmptyEl.querySelector(".empty-title") ||
+        libraryEmptyEl
+      );
+    }
+    if (notesEmptyEl && !notesEmptyEl.hidden) {
+      return notesEmptyEl.querySelector(".empty-title") || notesEmptyEl;
+    }
+    return siteLineEl;
+  }
+
+  function positionWalkthroughChrome(target, step) {
+    if (!target || !walkthroughCard) return;
+    const tRect = target.getBoundingClientRect();
+    const panelW = document.documentElement.clientWidth || 360;
+    if (walkthroughRing) {
+      const pad = step && step.block ? 4 : 6;
+      walkthroughRing.classList.toggle("is-block", !!(step && step.block));
+      walkthroughRing.style.top = `${Math.max(0, tRect.top - pad)}px`;
+      walkthroughRing.style.left = `${Math.max(0, tRect.left - pad)}px`;
+      walkthroughRing.style.width = `${tRect.width + pad * 2}px`;
+      walkthroughRing.style.height = `${tRect.height + pad * 2}px`;
+    }
+
+    const dockTop = !!(step && (step.dockCardTop || step.block));
+    const anchor = !!(step && step.anchorToTarget && !dockTop);
+    walkthroughCard.classList.toggle("is-anchored", anchor);
+
+    if (dockTop) {
+      walkthroughCard.style.left = "16px";
+      walkthroughCard.style.right = "16px";
+      walkthroughCard.style.width = "";
+      walkthroughCard.style.top = "56px";
+      const caretLeft = Math.max(16, Math.min(panelW - 40, tRect.left + tRect.width / 2 - 16 - 5));
+      walkthroughCard.style.setProperty("--walkthrough-caret-left", `${caretLeft}px`);
+      return;
+    }
+
+    if (anchor) {
+      // Sit the tip under the highlighted icon (collapse / hover-capture),
+      // caret centered on that control — not a full-width banner.
+      const cardW = Math.min(280, panelW - 32);
+      let left = tRect.left + tRect.width / 2 - cardW / 2;
+      left = Math.max(16, Math.min(panelW - 16 - cardW, left));
+      // Collapse is rightmost — bias tip toward the icon if centering clips.
+      if (step.targetId === "collapse-btn") {
+        left = Math.max(16, Math.min(panelW - 16 - cardW, tRect.right - cardW));
+      }
+      walkthroughCard.style.left = `${left}px`;
+      walkthroughCard.style.right = "auto";
+      walkthroughCard.style.width = `${cardW}px`;
+      walkthroughCard.style.top = `${Math.max(48, tRect.bottom + 10)}px`;
+      const caretLeft = tRect.left + tRect.width / 2 - left - 5;
+      walkthroughCard.style.setProperty(
+        "--walkthrough-caret-left",
+        `${Math.max(12, Math.min(cardW - 22, caretLeft))}px`
+      );
+      return;
+    }
+
+    walkthroughCard.style.left = "16px";
+    walkthroughCard.style.right = "16px";
+    walkthroughCard.style.width = "";
+    walkthroughCard.style.top = `${Math.max(56, tRect.bottom + 12)}px`;
+    const caretLeft = Math.max(16, Math.min(panelW - 40, tRect.left + tRect.width / 2 - 16 - 5));
+    walkthroughCard.style.setProperty("--walkthrough-caret-left", `${caretLeft}px`);
+  }
+
+  function renderWalkthroughStep() {
+    const step = WALKTHROUGH_STEPS[walkthroughIndex];
+    if (!step || !walkthroughEl) return;
+    clearWalkthroughHitTarget();
+    walkthroughStepLabel.textContent = `Step ${walkthroughIndex + 1} of ${WALKTHROUGH_STEPS.length}`;
+    walkthroughTitle.textContent = step.title;
+    walkthroughBody.textContent = step.body;
+    walkthroughBack.hidden = walkthroughIndex === 0;
+    walkthroughNext.textContent = walkthroughIndex === WALKTHROUGH_STEPS.length - 1 ? "Done" : "Next";
+    if (walkthroughProgress) {
+      walkthroughProgress.querySelectorAll(".walkthrough-dot").forEach((dot) => {
+        const i = Number(dot.getAttribute("data-tick"));
+        dot.classList.toggle("is-done", i < walkthroughIndex);
+        dot.classList.toggle("is-current", i === walkthroughIndex);
+      });
+    }
+    const target = resolveWalkthroughTarget(step);
+    // Only mark icon targets as hit targets. Block targets (empty library)
+    // must NOT be raised above the tip card — that trapped Skip/Done.
+    if (target && !step.block) {
+      walkthroughHitTarget = target;
+      target.classList.add("walkthrough-hit-target");
+    }
+    document.body.classList.add("walkthrough-open");
+    document.body.classList.toggle("walkthrough-open-icons", !step.block);
+    walkthroughEl.hidden = false;
+    walkthroughOpen = true;
+    requestAnimationFrame(() => {
+      positionWalkthroughChrome(target || activeToggle, step);
+      walkthroughNext.focus();
+    });
+    sendWalkthroughPreview(step.pagePreview || false);
+  }
+
+  function finishWalkthrough() {
+    walkthroughOpen = false;
+    clearWalkthroughHitTarget();
+    if (walkthroughEl) walkthroughEl.hidden = true;
+    sendWalkthroughPreview(false);
+    chrome.storage.local.set({ acopioWalkthroughSeen: true });
+  }
+
+  function goWalkthroughStep(nextIndex) {
+    walkthroughIndex = Math.max(0, Math.min(WALKTHROUGH_STEPS.length - 1, nextIndex));
+    renderWalkthroughStep();
+  }
+
+  function advanceWalkthroughFromStep1() {
+    setAcopioActive(true);
+    sendWalkthroughPreview(false);
+    goWalkthroughStep(1);
+  }
+
+  function maybeStartWalkthrough() {
+    if (!walkthroughEl) return;
+    chrome.storage.local.get(["acopioWalkthroughSeen"], (res) => {
+      if (res.acopioWalkthroughSeen) return;
+      walkthroughIndex = 0;
+      setTimeout(() => renderWalkthroughStep(), 320);
+    });
+  }
+
+  if (walkthroughSkip) {
+    walkthroughSkip.addEventListener("click", () => finishWalkthrough());
+  }
+  if (walkthroughBack) {
+    walkthroughBack.addEventListener("click", () => {
+      if (walkthroughIndex <= 0) return;
+      goWalkthroughStep(walkthroughIndex - 1);
+    });
+  }
+  if (walkthroughNext) {
+    walkthroughNext.addEventListener("click", () => {
+      const step = WALKTHROUGH_STEPS[walkthroughIndex];
+      if (walkthroughIndex >= WALKTHROUGH_STEPS.length - 1) {
+        if (step && step.activateCapture) setAcopioActive(true);
+        finishWalkthrough();
+        showToast("Hover-capture is on — hover anything on the page, then Collect.", null);
+        return;
+      }
+      if (walkthroughIndex === 0) {
+        advanceWalkthroughFromStep1();
+        return;
+      }
+      goWalkthroughStep(walkthroughIndex + 1);
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (!isWalkthroughOpen()) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      finishWalkthrough();
+    }
+  });
+  window.addEventListener("resize", () => {
+    if (!isWalkthroughOpen()) return;
+    const step = WALKTHROUGH_STEPS[walkthroughIndex];
+    positionWalkthroughChrome(resolveWalkthroughTarget(step) || activeToggle, step);
+  });
+
+  // Clicking the highlighted hover-capture control during step 1 completes
+  // that lesson the same way Next does (capture is already toggled by the
+  // primary click handler registered above).
+  activeToggle.addEventListener("click", () => {
+    if (!isWalkthroughOpen() || walkthroughIndex !== 0) return;
+    requestAnimationFrame(() => {
+      if (!isWalkthroughOpen() || walkthroughIndex !== 0) return;
+      if (activeToggle.getAttribute("aria-pressed") === "true") {
+        sendWalkthroughPreview(false);
+        goWalkthroughStep(1);
+      }
+    });
+  });
+
+  // Collapsing during the tour marks it seen so reopen does not restart.
+  collapseBtn.addEventListener("click", () => {
+    if (isWalkthroughOpen()) finishWalkthrough();
+  });
+
+  // Boot: empty library opens the Sites tab (the product map). A site
+  // folder with "0 items" + "← All sites" is the wrong first-run home —
+  // it looks like a broken drill-in, not where you start. Once anything
+  // is collected, keep auto-following the active tab for capture.
+  async function bootPanelView() {
+    // Leave auto-site during the async DB read so a concurrent
+    // tabs.onUpdated/onActivated can't flash an empty site folder first.
+    viewMode = "library";
+    let openLibraryHome = false;
+    try {
+      const items = (await AcopioDB.getAllItems()).filter((item) => item.type !== "note");
+      openLibraryHome = items.length === 0;
+    } catch (_) {
+      openLibraryHome = true;
+    }
+    if (openLibraryHome) await showLibrary();
+    else {
+      viewMode = "auto-site";
+      await syncActiveTab();
+    }
+    maybeStartWalkthrough();
+  }
+
+  bootPanelView();
 })();

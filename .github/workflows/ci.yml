@@ -29,4 +29,6 @@ jobs:
         run: npm run build:store
 
       - name: Verify store zip exists
-        run: test -f dist/acopio-v0.1.0-store.zip
+        run: |
+          VERSION="$(node -p "require('./manifest.json').version")"
+          test -f "dist/acopio-v${VERSION}-store.zip"

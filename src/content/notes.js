@@ -725,22 +725,23 @@
 
     menuEl.appendChild(Object.assign(document.createElement("div"), { className: "folder-menu-divider" }));
 
-    const form = document.createElement("div");
+    const form = document.createElement("form");
     form.className = "folder-menu-new-form";
+    form.setAttribute("autocomplete", "off");
     const input = document.createElement("input");
     input.type = "text";
     input.className = "folder-menu-new-input";
     input.placeholder = "New folder name";
     input.maxLength = 60;
+    input.name = "acopio-new-folder";
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
-      if (e.key === "Enter") { e.preventDefault(); confirm(); }
       if (e.key === "Escape") { e.preventDefault(); closeMenu(); }
     });
     input.addEventListener("click", (e) => e.stopPropagation());
     form.appendChild(input);
     const confirmBtn = document.createElement("button");
-    confirmBtn.type = "button";
+    confirmBtn.type = "submit";
     confirmBtn.className = "folder-menu-new-confirm";
     confirmBtn.innerHTML = Acopio.ICONS.plus;
     confirmBtn.title = "Create folder";
@@ -748,6 +749,7 @@
     const confirm = () => {
       const name = input.value.trim();
       if (!name) { input.focus(); return; }
+      if (confirmBtn.disabled) return;
       confirmBtn.disabled = true;
       let settled = false;
       const timeoutId = setTimeout(() => {
@@ -773,10 +775,21 @@
         settled = true;
         clearTimeout(timeoutId);
         confirmBtn.disabled = false;
-        showInlineError("Acopio was reloaded — refresh this page to keep collecting.");
+        Acopio.reloadPageForStaleExtension();
+        showInlineError("Reconnecting Acopio — refreshing this page…");
       }
     };
-    confirmBtn.addEventListener("click", (e) => { e.stopPropagation(); confirm(); });
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      confirm();
+    });
+    confirmBtn.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      confirm();
+    });
     form.appendChild(confirmBtn);
     menuEl.appendChild(form);
 
@@ -1078,7 +1091,13 @@
     try {
       chrome.runtime.sendMessage({ type: "CAPTURE_ITEM", payload: item }, (response) => {
         if (chrome.runtime.lastError) {
-          finish({ ok: false, error: chrome.runtime.lastError.message });
+          const errMsg = chrome.runtime.lastError.message;
+          if (Acopio.isContextInvalidatedError(errMsg) || !Acopio.isRuntimeAlive()) {
+            Acopio.reloadPageForStaleExtension();
+            finish({ ok: false, error: "Reconnecting Acopio — refreshing this page…" });
+            return;
+          }
+          finish({ ok: false, error: errMsg });
           return;
         }
         if (!response || !response.ok) {
@@ -1088,7 +1107,8 @@
         finish({ ok: true });
       });
     } catch (_) {
-      finish({ ok: false, error: "Acopio was reloaded — refresh this page to keep collecting." });
+      Acopio.reloadPageForStaleExtension();
+      finish({ ok: false, error: "Reconnecting Acopio — refreshing this page…" });
     }
   }
 
@@ -1270,9 +1290,13 @@
     "click",
     (e) => {
       if (!isVisible()) return;
-      const realTarget = e.composedPath()[0];
+      const path = e.composedPath();
+      const realTarget = path[0];
       if (cardEl.contains(realTarget)) return;
-      if (menuEl && menuEl.contains(realTarget)) return;
+      const inMenu =
+        Boolean(menuEl) &&
+        path.some((n) => n === menuEl || (n && n.nodeType === 1 && menuEl.contains(n)));
+      if (inMenu) return;
       if (menuEl) { closeMenu(); return; } // click was outside the menu but still meant to close it, not the whole tooltip
       hide();
     },

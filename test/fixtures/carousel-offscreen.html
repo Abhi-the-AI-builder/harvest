@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><style>
+  body { margin: 0; font-family: sans-serif; }
+  .viewport { width: 1152px; height: 648px; overflow: hidden; position: relative; }
+  .track { display: flex; width: 5760px; height: 648px; transform: translateX(-1152px); }
+  .slide { width: 1152px; height: 648px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 48px; color: #fff; }
+  .slide img { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
+</style></head>
+<body>
+  <div class="viewport" id="carousel">
+    <div class="track">
+      <div class="slide" style="background:#c0392b">Slide 0 (offscreen left)</div>
+      <div class="slide" style="background:#2980b9"><span>Slide 1 (visible)</span></div>
+      <div class="slide" style="background:#27ae60">Slide 2 (offscreen right)</div>
+      <div class="slide" style="background:#8e44ad">Slide 3 (offscreen right)</div>
+      <div class="slide" style="background:#d35400">Slide 4 (offscreen right)</div>
+    </div>
+  </div>
+</body>
+</html>

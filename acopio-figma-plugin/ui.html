@@ -1,27 +1,45 @@
 <style>
   :root {
-    --bg: #ffffff;
-    --surface: #f5f5f5;
-    --border: #e5e5e5;
-    --text: #1a1a1a;
-    --text-muted: #737373;
-    --accent: #18a0fb;
-    --accent-hover: #0d8fe8;
-    --success: #0fa958;
-    --error: #f24822;
-    --error-bg: #fef0ee;
+    --color-bg: #FAFAFA;
+    --color-surface: #FFFFFF;
+    --color-text: #17181A;
+    --color-text-muted: #6B6E76;
+    --color-accent: #1D3461;
+    --color-accent-wash: rgba(29, 52, 97, 0.10);
+    --color-border: rgba(23, 24, 26, 0.09);
+    --color-border-strong: rgba(23, 24, 26, 0.18);
+    --color-danger: #C33D2E;
+    --color-danger-wash: rgba(195, 61, 46, 0.08);
+    --color-success: #1F6B4A;
+    --type-color-bg: #F3E8E4;
+    --type-font-bg: #E8EEF8;
+    --type-image-bg: #E6F2EC;
+    --type-component-bg: #FBF0DC;
+    --type-note-bg: #E3EEFB;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --text-caption: 12px;
+    --text-body: 14px;
+    --text-subheading: 16px;
     --radius-sm: 8px;
-    --radius-md: 16px;
+    --radius-lg: 16px;
+    --radius-full: 999px;
+    --shadow-raised: 0 2px 6px rgba(23, 24, 26, 0.08), 0 8px 20px rgba(23, 24, 26, 0.10);
+    --ease-fast: 120ms ease-out;
+    --ease-base: 180ms cubic-bezier(.2, .7, .3, 1);
   }
 
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    font-size: 12px;
-    color: var(--text);
-    background: var(--bg);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: var(--text-body);
+    color: var(--color-text);
+    background: var(--color-bg);
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -31,157 +49,353 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 16px;
-    gap: 12px;
+    padding: var(--space-4);
+    gap: var(--space-4);
     overflow-y: auto;
   }
 
-  h1 {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0;
+  .brand {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
   }
 
-  .subtitle {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin: 0;
-    line-height: 1.5;
+  .brand-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    flex: none;
+    object-fit: cover;
+    box-shadow: var(--shadow-raised);
+    background: #000;
   }
 
-  .welcome-card {
-    background: #17181a;
-    color: #ffffff;
-    border-radius: var(--radius-md);
-    padding: 16px;
+  .brand-copy {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    gap: var(--space-1);
+    min-width: 0;
   }
 
-  .welcome-card[hidden] { display: none !important; }
-
-  .welcome-eyebrow {
-    margin: 0;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: rgba(255, 255, 255, 0.72);
-  }
-
-  .welcome-title {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
+  h1 {
+    font-size: var(--text-subheading);
+    font-weight: 700;
     line-height: 1.3;
   }
 
+  .subtitle {
+    font-size: var(--text-caption);
+    color: var(--color-text-muted);
+    line-height: 1.5;
+  }
+
+  /* Orbit hero — shape-of-things empty/idle illustration */
+  .orbit-stage {
+    position: relative;
+    width: 100%;
+    height: 208px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    overflow: hidden;
+    flex: none;
+  }
+
+  .orbit-stage[hidden] { display: none !important; }
+
+  .orbit-ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    border: 1px dashed rgba(23, 24, 26, 0.12);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  /* Outer ring must stay under stage height with padding — previously 176 in 168 clipped. */
+  .orbit-ring-a { width: 64px; height: 64px; }
+  .orbit-ring-b { width: 104px; height: 104px; }
+  .orbit-ring-c { width: 144px; height: 144px; opacity: 0.7; }
+
+  .orbit-core {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    margin: -22px 0 0 -22px;
+    border-radius: 12px;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-raised);
+    z-index: 2;
+    overflow: hidden;
+  }
+  .orbit-core img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .orbit-chip {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 1px 2px rgba(23, 24, 26, 0.06);
+    z-index: 1;
+    color: var(--color-text);
+  }
+  .orbit-chip svg { width: 14px; height: 14px; }
+  .orbit-chip-color { background: var(--type-color-bg); left: 18%; top: 20%; }
+  .orbit-chip-font { background: var(--type-font-bg); right: 16%; top: 18%; }
+  .orbit-chip-image { background: var(--type-image-bg); left: 14%; bottom: 22%; }
+  .orbit-chip-component { background: var(--type-component-bg); right: 14%; bottom: 20%; }
+  .orbit-chip-note { background: var(--type-note-bg); left: 44%; bottom: 14%; }
+
+  .welcome-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    box-shadow: var(--shadow-raised);
+  }
+  .welcome-card[hidden] { display: none !important; }
+
+  .welcome-eyebrow {
+    font-size: var(--text-caption);
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+  .welcome-title {
+    font-size: var(--text-body);
+    font-weight: 700;
+    line-height: 1.35;
+  }
   .welcome-body {
-    margin: 0;
-    font-size: 11px;
+    font-size: var(--text-caption);
     line-height: 1.55;
-    color: rgba(255, 255, 255, 0.88);
+    color: var(--color-text-muted);
+  }
+
+  .hint {
+    font-size: var(--text-caption);
+    line-height: 1.45;
+    color: var(--color-text-muted);
+  }
+
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: auto;
+    padding-top: var(--space-4);
+  }
+
+  .actions .hint {
+    margin-bottom: var(--space-1);
+  }
+
+  #status:empty {
+    display: none;
+  }
+
+  .paste-zone {
+    display: none;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+  }
+  .paste-zone.is-open {
+    display: flex;
+  }
+  .paste-zone textarea {
+    width: 100%;
+    min-height: 72px;
+    resize: vertical;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--color-text);
+    background: var(--color-surface);
+  }
+  .paste-zone textarea:focus {
+    outline: 2px solid var(--color-accent-wash);
+    border-color: var(--color-accent);
+  }
+  .paste-zone-hint {
+    font-size: var(--text-caption);
+    color: var(--color-text-muted);
+    line-height: 1.45;
   }
 
   button {
     font-family: inherit;
-    font-size: 12px;
+    font-size: var(--text-caption);
     font-weight: 600;
     border: none;
     border-radius: var(--radius-sm);
-    padding: 10px 14px;
+    padding: var(--space-3) var(--space-4);
     cursor: pointer;
-    transition: background 120ms ease-out, border-color 120ms ease-out;
+    transition: background var(--ease-fast), color var(--ease-fast), border-color var(--ease-fast), filter var(--ease-fast);
   }
-
-  button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+  button:disabled { opacity: 0.45; cursor: default; }
 
   .btn-primary {
-    background: var(--accent);
+    background: var(--color-accent);
     color: #fff;
     width: 100%;
   }
-  .btn-primary:not(:disabled):hover { background: var(--accent-hover); }
+  .btn-primary:not(:disabled):hover { filter: brightness(1.08); }
 
   .btn-secondary {
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border-strong);
     width: 100%;
   }
   .btn-secondary:not(:disabled):hover {
-    border-color: var(--accent);
-    color: var(--accent);
+    background: var(--color-accent-wash);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
   }
 
   #status {
-    font-size: 11px;
-    color: var(--text-muted);
+    font-size: var(--text-caption);
+    color: var(--color-text-muted);
     min-height: 16px;
-    line-height: 1.4;
+    line-height: 1.45;
   }
-  #status.success { color: var(--success); }
-  #status.error { color: var(--error); }
-
-  .footer {
-    border-top: 1px solid var(--border);
-    padding: 12px 16px;
-  }
-
-  .btn-ghost {
-    background: transparent;
-    color: var(--text-muted);
-    width: 100%;
+  #status.success { color: var(--color-success); }
+  #status.error {
+    color: var(--color-danger);
+    background: var(--color-danger-wash);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
   }
 </style>
 
 <div class="content">
+  <div class="brand">
+    <img class="brand-logo" src="data:image/png;base64,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" width="40" height="40" alt="Acopio" />
+    <div class="brand-copy">
+      <h1>Acopio Import</h1>
+      <p class="subtitle">Pull what you collected in Acopio onto this page.</p>
+    </div>
+  </div>
+
+  <div id="orbit-stage" class="orbit-stage" aria-hidden="true">
+    <div class="orbit-ring orbit-ring-a"></div>
+    <div class="orbit-ring orbit-ring-b"></div>
+    <div class="orbit-ring orbit-ring-c"></div>
+    <div class="orbit-core" title="Acopio">
+      <img src="data:image/png;base64,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" width="44" height="44" alt="" />
+    </div>
+    <div class="orbit-chip orbit-chip-color" title="Color">
+      <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>
+    </div>
+    <div class="orbit-chip orbit-chip-font" title="Font">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 12 L8 3.5 L12 12"/><path d="M5.5 9h5"/></svg>
+    </div>
+    <div class="orbit-chip orbit-chip-image" title="Image">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><circle cx="6" cy="7" r="1.2"/><path d="M3.5 11.5l3-3 2 2 2.5-2.5 1.5 1.5"/></svg>
+    </div>
+    <div class="orbit-chip orbit-chip-component" title="Component">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="3" y="3" width="4.5" height="4.5" rx="1"/><rect x="8.5" y="3" width="4.5" height="4.5" rx="1"/><rect x="3" y="8.5" width="4.5" height="4.5" rx="1"/><rect x="8.5" y="8.5" width="4.5" height="4.5" rx="1"/></svg>
+    </div>
+    <div class="orbit-chip orbit-chip-note" title="Note">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M4 2.5h6.5L13 5v8.5H4z"/><path d="M10.5 2.5V5H13"/><path d="M6 8h4M6 10.5h3"/></svg>
+    </div>
+  </div>
+
   <div id="acopio-welcome" class="welcome-card" hidden>
-    <p class="welcome-eyebrow">Opened from Acopio</p>
+    <p class="welcome-eyebrow">From Acopio</p>
     <p class="welcome-title" id="welcome-title">Export ready</p>
     <p class="welcome-body" id="welcome-body"></p>
   </div>
 
-  <div>
-    <h1>Acopio Import</h1>
-    <p class="subtitle">Import items copied from the Acopio Chrome extension. Each item becomes a frame with its preview and note.</p>
+  <div class="actions">
+    <p class="hint" id="import-hint">Export in Acopio → click Import here. It fetches your export over the secure handoff. Paste is only a backup.</p>
+    <div id="status" role="status" aria-live="polite"></div>
+    <button class="btn-primary" id="import-btn" type="button">Import from Acopio</button>
+    <button class="btn-secondary" id="paste-btn" type="button">Paste export instead</button>
+    <div id="paste-zone" class="paste-zone" hidden>
+      <p class="paste-zone-hint">Figma often blocks clipboard read. Click the box and press <strong>⌘V</strong> / <strong>Ctrl+V</strong> after Export to Figma.</p>
+      <textarea id="paste-input" rows="4" placeholder="Paste Acopio export JSON here…" spellcheck="false" autocomplete="off"></textarea>
+    </div>
   </div>
-
-  <button class="btn-primary" id="import-btn" type="button">Import from Acopio</button>
-  <button class="btn-secondary" id="paste-btn" type="button">Paste from clipboard</button>
-
-  <div id="status" role="status" aria-live="polite"></div>
-</div>
-
-<div class="footer">
-  <button class="btn-ghost" id="close-btn" type="button">Close</button>
 </div>
 
 <script>
   const importBtn = document.getElementById("import-btn");
   const pasteBtn = document.getElementById("paste-btn");
-  const closeBtn = document.getElementById("close-btn");
+  const pasteZone = document.getElementById("paste-zone");
+  const pasteInput = document.getElementById("paste-input");
   const statusEl = document.getElementById("status");
   const welcomeEl = document.getElementById("acopio-welcome");
   const welcomeTitleEl = document.getElementById("welcome-title");
   const welcomeBodyEl = document.getElementById("welcome-body");
+  const orbitStage = document.getElementById("orbit-stage");
 
   const SUPPORTED_VERSIONS = [1, 2];
   let importing = false;
-  let autoImportAttempted = false;
+  let awaitingPaste = false;
+  let savedPairKey = null;
+  let pendingImportAfterPairKey = false;
 
   function setStatus(text, kind) {
     statusEl.textContent = text || "";
     statusEl.className = kind || "";
   }
 
+  function setOrbitVisible(visible) {
+    orbitStage.hidden = !visible;
+  }
+
+  function openPasteZone(message) {
+    pasteZone.hidden = false;
+    pasteZone.removeAttribute("hidden");
+    pasteZone.classList.add("is-open");
+    if (message) setStatus(message, "error");
+    setOrbitVisible(true);
+    pasteInput.focus();
+    pasteInput.select();
+  }
+
+  function closePasteZone() {
+    awaitingPaste = false;
+    pasteZone.hidden = true;
+    pasteZone.setAttribute("hidden", "");
+    pasteZone.classList.remove("is-open");
+    pasteInput.value = "";
+  }
+
+  function beginAwaitingPaste(message) {
+    awaitingPaste = true;
+    openPasteZone(
+      message ||
+        "Paste backup: press ⌘V / Ctrl+V once, or paste your Acopio link code."
+    );
+    importBtn.textContent = "Waiting for ⌘V…";
+  }
+
   function validatePayload(payload) {
     if (!payload || typeof payload !== "object") {
-      return "Clipboard doesn't contain a Acopio export.";
+      return "Clipboard doesn't contain an Acopio export.";
     }
     if (!SUPPORTED_VERSIONS.includes(payload.version)) {
       return `Unsupported export version (${payload.version ?? "missing"}).`;
@@ -200,17 +414,14 @@
     const count = payload.items.length;
     const sites = siteCountFor(payload.items);
     const siteNote = sites > 1 ? ` from ${sites} sites` : "";
-    const scope = payload.scopeLabel ? ` (${payload.scopeLabel})` : "";
+    const scope = payload.scopeLabel ? ` · ${payload.scopeLabel}` : "";
     welcomeTitleEl.textContent = `${count} item${count === 1 ? "" : "s"}${siteNote}${scope}`;
     if (autoImporting) {
-      welcomeBodyEl.textContent =
-        "Importing from your clipboard now. First time here? Install this plugin once via Plugins → Development → Import plugin from manifest — choose acopio-figma-plugin/manifest.json in the Acopio repo.";
-    } else if (payload.openedFromExtension || payload.autoImport) {
-      welcomeBodyEl.textContent =
-        "Acopio copied your export and opened Figma. Run this plugin once (Plugins → Development → Acopio Import, or ⌘⌥P on Mac). It reads the clipboard automatically — or click Import from Acopio below. First time? Import the plugin from acopio-figma-plugin/manifest.json.";
+      welcomeBodyEl.textContent = "Importing now…";
+      setOrbitVisible(false);
     } else {
-      welcomeBodyEl.textContent =
-        "Acopio export found on your clipboard. Click Import from Acopio, or Paste from clipboard if you copied again in the extension.";
+      welcomeBodyEl.textContent = "Export found. Importing onto this page.";
+      setOrbitVisible(true);
     }
     welcomeEl.hidden = false;
   }
@@ -219,58 +430,130 @@
     importing = busy;
     importBtn.disabled = busy;
     pasteBtn.disabled = busy;
+    pasteInput.disabled = busy;
     if (label) setStatus(label);
   }
 
-  async function readClipboardText() {
-    return navigator.clipboard.readText();
+  function extractPairKeyFromText(text) {
+    const raw = String(text || "").trim();
+    const m = raw.match(/ACOPIO_FIGMA_PAIR:([a-zA-Z0-9]+)/);
+    if (m) return m[1];
+    try {
+      const payload = JSON.parse(raw.includes("\n") ? raw.slice(raw.indexOf("{")) : raw);
+      if (payload && payload.pairKey) return String(payload.pairKey);
+    } catch (_) {}
+    if (/^[a-zA-Z0-9]{8,32}$/.test(raw)) return raw;
+    return null;
   }
 
   function sendImport(payload) {
+    awaitingPaste = false;
+    closePasteZone();
+    clearError();
     setBusy(true, "Importing…");
+    setOrbitVisible(false);
+    importBtn.textContent = "Import from Acopio";
+    if (payload && payload.pairKey) {
+      savedPairKey = String(payload.pairKey);
+      parent.postMessage({ pluginMessage: { type: "set-pair-key", pairKey: savedPairKey } }, "*");
+    }
     parent.postMessage({ pluginMessage: { type: "import-payload", payload } }, "*");
+  }
+
+  function requestHandoffImport(pairKey) {
+    clearError();
+    setBusy(true, "Fetching export…");
+    importBtn.textContent = "Fetching…";
+    parent.postMessage(
+      { pluginMessage: { type: "import-from-handoff", pairKey: pairKey || savedPairKey || null } },
+      "*"
+    );
+  }
+
+  function importFromText(text, { fromPasteZone } = {}) {
+    if (!text || !String(text).trim()) {
+      showError("Paste was empty. Export to Figma in Acopio, then try Import again.");
+      beginAwaitingPaste();
+      return false;
+    }
+    const pairFromText = extractPairKeyFromText(text);
+    if (pairFromText) {
+      savedPairKey = pairFromText;
+      parent.postMessage({ pluginMessage: { type: "set-pair-key", pairKey: pairFromText } }, "*");
+      // If the paste is only a link code (or code + JSON), prefer cloud fetch.
+      const jsonStart = String(text).indexOf("{");
+      if (jsonStart < 0) {
+        requestHandoffImport(pairFromText);
+        return true;
+      }
+    }
+    let payload;
+    try {
+      const raw = String(text);
+      const jsonStart = raw.indexOf("{");
+      payload = JSON.parse(jsonStart >= 0 ? raw.slice(jsonStart) : raw);
+    } catch (_) {
+      if (pairFromText) {
+        requestHandoffImport(pairFromText);
+        return true;
+      }
+      showError("That isn’t Acopio JSON. Export again, or paste your link code.");
+      beginAwaitingPaste();
+      return false;
+    }
+    const err = validatePayload(payload);
+    if (err) {
+      showError(err);
+      beginAwaitingPaste();
+      return false;
+    }
+    showWelcomeForPayload(payload, { autoImporting: false });
+    sendImport(payload);
+    return true;
+  }
+
+  async function tryClipboardThenLink() {
+    // Tertiary only — Figma usually denies this.
+    try {
+      const text = await navigator.clipboard.readText();
+      const pair = extractPairKeyFromText(text);
+      if (pair) {
+        savedPairKey = pair;
+        parent.postMessage({ pluginMessage: { type: "set-pair-key", pairKey: pair } }, "*");
+        requestHandoffImport(pair);
+        return;
+      }
+      if (text && text.trim()) {
+        importFromText(text, { fromPasteZone: false });
+        return;
+      }
+    } catch (_) {
+      // expected
+    }
+    setBusy(false);
+    importBtn.textContent = "Import from Acopio";
+    beginAwaitingPaste(
+      "Link once: paste the code from Acopio’s Finish in Figma modal. After that, Import is one click."
+    );
   }
 
   async function importFromClipboard(source) {
     if (importing) return;
     clearError();
-    const idleImport = importBtn.textContent;
-    const idlePaste = pasteBtn.textContent;
     if (source === "paste") {
-      pasteBtn.disabled = true;
-      pasteBtn.textContent = "Reading clipboard…";
-    } else {
-      importBtn.disabled = true;
-      importBtn.textContent = "Reading clipboard…";
+      beginAwaitingPaste("Backup: press ⌘V, or paste your Acopio link code / export JSON.");
+      return;
     }
-    try {
-      const text = await readClipboardText();
-      if (!text || !text.trim()) {
-        showError("Clipboard is empty. In Acopio, use Export to Figma first.");
-        return;
-      }
-      let payload;
-      try {
-        payload = JSON.parse(text);
-      } catch (_) {
-        showError("Clipboard doesn't contain valid Acopio JSON.");
-        return;
-      }
-      const err = validatePayload(payload);
-      if (err) {
-        showError(err);
-        return;
-      }
-      showWelcomeForPayload(payload, { autoImporting: false });
-      sendImport(payload);
-    } catch (_) {
-      showError("Couldn't read clipboard. Click Paste from clipboard after copying in Acopio.");
-    } finally {
-      importBtn.disabled = importing;
-      pasteBtn.disabled = importing;
-      importBtn.textContent = idleImport;
-      pasteBtn.textContent = idlePaste;
+    // Primary: fetch by pair key (no clipboard).
+    if (savedPairKey) {
+      requestHandoffImport(savedPairKey);
+      return;
     }
+    // Ask main thread for a previously saved key, then fetch or link.
+    pendingImportAfterPairKey = true;
+    setBusy(true, "Checking link…");
+    importBtn.textContent = "Checking…";
+    parent.postMessage({ pluginMessage: { type: "get-pair-key" } }, "*");
   }
 
   function showError(message) {
@@ -281,52 +564,73 @@
     setStatus("");
   }
 
-  async function tryAutoImport() {
-    if (autoImportAttempted || importing) return;
-    autoImportAttempted = true;
-    try {
-      const text = await readClipboardText();
-      if (!text || !text.trim()) return;
-      let payload;
-      try {
-        payload = JSON.parse(text);
-      } catch (_) {
-        return;
-      }
-      if (!payload.autoImport && !payload.openedFromExtension) return;
-      const err = validatePayload(payload);
-      if (err) return;
-      showWelcomeForPayload(payload, { autoImporting: Boolean(payload.autoImport) });
-      if (payload.autoImport) {
-        sendImport(payload);
-      }
-    } catch (_) {
-      // Clipboard denied or empty — user can click Import manually.
-    }
+  function handlePasteEvent(e) {
+    if (importing) return;
+    const text = e.clipboardData && e.clipboardData.getData("text");
+    if (!text) return;
+    if (!awaitingPaste && e.target !== pasteInput) return;
+    e.preventDefault();
+    pasteInput.value = text;
+    importFromText(text, { fromPasteZone: true });
   }
 
   importBtn.addEventListener("click", () => importFromClipboard("import"));
   pasteBtn.addEventListener("click", () => importFromClipboard("paste"));
-  closeBtn.addEventListener("click", () => {
-    parent.postMessage({ pluginMessage: { type: "cancel" } }, "*");
+  window.addEventListener("paste", handlePasteEvent);
+  pasteInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      importFromText(pasteInput.value, { fromPasteZone: true });
+    }
   });
 
   window.onmessage = (event) => {
     const msg = event.data.pluginMessage;
     if (!msg) return;
     if (msg.type === "plugin-ready") {
-      tryAutoImport();
+      if (msg.pairKey) savedPairKey = msg.pairKey;
+    } else if (msg.type === "pair-key") {
+      savedPairKey = msg.pairKey || null;
+      if (pendingImportAfterPairKey) {
+        pendingImportAfterPairKey = false;
+        if (savedPairKey) {
+          requestHandoffImport(savedPairKey);
+        } else {
+          tryClipboardThenLink();
+        }
+        return;
+      }
+      // User just pasted / saved a link code while waiting — fetch.
+      if (savedPairKey && awaitingPaste && !importing) {
+        requestHandoffImport(savedPairKey);
+      }
+    } else if (msg.type === "need-pair-key") {
+      pendingImportAfterPairKey = false;
+      setBusy(false);
+      importBtn.textContent = "Import from Acopio";
+      beginAwaitingPaste(
+        "Paste the link code shown in Acopio after Export (one-time). Then Import works with one click."
+      );
     } else if (msg.type === "progress") {
       setStatus(`Importing ${msg.done} / ${msg.total}…`);
     } else if (msg.type === "import-complete") {
       setBusy(false);
+      awaitingPaste = false;
+      importBtn.textContent = "Import from Acopio";
       const skipped = msg.failed ? ` (${msg.failed} skipped)` : "";
       setStatus(`Imported ${msg.imported} item${msg.imported === 1 ? "" : "s"}${skipped}.`, "success");
       welcomeBodyEl.textContent = `Imported ${msg.imported} item${msg.imported === 1 ? "" : "s"} onto this page.`;
-      closeBtn.textContent = "Close";
+      welcomeEl.hidden = false;
+      setOrbitVisible(false);
+      closePasteZone();
     } else if (msg.type === "import-error") {
       setBusy(false);
+      importBtn.textContent = "Import from Acopio";
       showError(msg.message || "Import failed.");
+      setOrbitVisible(true);
+      beginAwaitingPaste(
+        "Couldn't fetch export. Export again in Acopio, or paste JSON / link code here."
+      );
     }
   };
 </script>

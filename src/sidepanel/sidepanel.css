@@ -545,6 +545,9 @@ body { display: flex; flex-direction: column; }
 #select-bar .export-split { flex: 0 0 auto; }
 #select-bar .export-primary-btn { flex: 0 0 auto; padding: 0 var(--space-2); }
 #select-bar .select-bar-btn-with-icon { padding-right: var(--space-2); }
+/* Sites folder multiselect — export + Delete, same layout. */
+#library-select-bar .export-split { flex: 0 0 auto; }
+#library-select-bar .export-primary-btn { flex: 0 0 auto; padding: 0 var(--space-2); }
 
 /* Pattern 7 (CLAUDE.md) — a split button for the export action instead of
    several same-weight buttons competing in one row. Radius-full pill
@@ -572,9 +575,8 @@ body { display: flex; flex-direction: column; }
 .export-chevron-btn:hover { background: rgba(255,255,255,0.1); }
 .export-chevron-btn svg { transition: transform var(--ease-fast); }
 .export-chevron-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
-/* Figma export currently disabled (sidepanel.js, ENABLE_FIGMA_EXPORT) —
-   with the chevron hidden, the primary button is the whole control again,
-   so it gets its right side back instead of staying visibly cut off. */
+/* When the chevron is hidden (no secondary destinations), the primary
+   button is the whole control again — restore its right radius. */
 .export-split-solo .export-primary-btn { border-radius: var(--radius-sm); border-right: 1px solid rgba(255,255,255,0.25); }
 /* GitHub-style action menu — fixed positioning (set in JS) so the panel
    never clips it; white surface, border, two-layer shadow, heading row. */
@@ -625,24 +627,24 @@ body { display: flex; flex-direction: column; }
 @keyframes sp-modal-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
 .sp-modal-header {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2);
-  padding: var(--space-4);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   background: #F6F8FA;
   border-bottom: 1px solid rgba(31, 35, 40, 0.15);
 }
 .sp-modal-title {
   font-size: 14px; font-weight: 600; line-height: 20px; color: var(--color-text);
-  margin: 0; flex: 1; min-width: 0; padding-top: var(--space-1);
+  margin: 0; flex: 1; min-width: 0;
 }
 .sp-modal-close {
-  flex: none; width: 32px; height: 32px; border: none; border-radius: 6px; background: none;
+  flex: none; width: 28px; height: 28px; border: none; border-radius: 6px; background: none;
   color: var(--color-text-muted); display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; margin: -4px -8px 0 0; transition: background var(--ease-fast), color var(--ease-fast);
+  cursor: pointer; margin: 0 -4px 0 0; transition: background var(--ease-fast), color var(--ease-fast);
 }
 .sp-modal-close:hover { background: rgba(208, 215, 222, 0.48); color: var(--color-text); }
 .sp-modal-close svg { pointer-events: none; }
 
-.sp-modal-main { padding: var(--space-4); }
+.sp-modal-main { padding: var(--space-3) var(--space-4); }
 .sp-modal-body {
   font-size: 14px; line-height: 20px; color: var(--color-text); margin: 0;
 }
@@ -650,7 +652,7 @@ body { display: flex; flex-direction: column; }
 
 .sp-modal-footer {
   display: flex; justify-content: flex-end; gap: var(--space-2);
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4);
   border-top: 1px solid rgba(31, 35, 40, 0.15);
   background: #F6F8FA;
 }
@@ -737,11 +739,15 @@ body { display: flex; flex-direction: column; }
   outline: none; border-color: #0969DA; box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
 }
 .collection-picker-new button {
+  width: 36px; height: 36px; box-sizing: border-box;
   border: 1px solid rgba(27, 31, 36, 0.15); background: var(--color-accent); color: #fff;
-  border-radius: 6px; padding: 5px 16px; font-size: 14px; font-weight: 500; line-height: 20px;
+  border-radius: 6px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; flex: none; transition: filter var(--ease-fast);
 }
+.collection-picker-new button svg { width: 14px; height: 14px; pointer-events: none; }
 .collection-picker-new button:hover { filter: brightness(1.06); }
+.collection-picker-new button:disabled { opacity: 0.5; cursor: default; }
 
 /* Undo toast */
 .sp-toast {
@@ -833,6 +839,25 @@ body { display: flex; flex-direction: column; }
 /* Inter throughout, including hex codes — no separate monospace treatment
    for data values. */
 .tile-rich-meta { font-size: 11px; font-weight: 500; color: var(--color-text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-rich-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.tile-rich-color-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border-strong);
+  flex: none;
+}
+.tile-rich-color-hex {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--color-text);
+  letter-spacing: 0.02em;
+}
 /* The note's actual text inside the tile body — no floating badge to
    clear space for anymore, so no right-padding compensation needed.
    Explicit height/line-height (not just relying on the font's natural
@@ -1355,7 +1380,18 @@ button.tile-note-badge:hover, button.tile-note-badge:focus-visible { background:
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 3px 10px rgba(29,52,97,0.4);
 }
-.collect-fab svg { width: 15px; height: 15px; }
+.collect-fab svg { width: 15px; height: 15px; pointer-events: none; }
+button.collect-fab {
+  cursor: pointer;
+  transition: filter var(--ease-fast), transform var(--ease-fast);
+}
+button.collect-fab:hover { filter: brightness(1.08); }
+button.collect-fab:active { transform: scale(0.96); }
+button.collect-fab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+.empty-fan .stack-cards { pointer-events: none; }
 
 /* --- Compare / Pairing view (Section 7E) --- */
 .compare-view { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
@@ -1506,3 +1542,208 @@ button.tile-note-badge:hover, button.tile-note-badge:focus-visible { background:
    chrome inside the empty composite — kept for any leftover markup. */
 .et-card-frame .note-date-group { padding-left: 0; margin-left: 0; }
 .et-card-frame .note-tile { padding-left: 0; }
+
+/* --- First-run walkthrough (coachmarks) — finalized mockup -------------- */
+/* Always win over empty-state art (zoom/transform create stubborn layers). */
+.walkthrough {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+}
+.walkthrough[hidden] { display: none !important; }
+.walkthrough-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 24, 26, 0.42);
+  pointer-events: auto;
+}
+.walkthrough-ring {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 6px var(--color-accent),
+    0 0 0 14px rgba(29, 52, 97, 0.22);
+  animation: walkthrough-pulse 1.5s ease-out infinite;
+  transition: top var(--ease-fast), left var(--ease-fast), width var(--ease-fast), height var(--ease-fast), border-radius var(--ease-fast);
+}
+.walkthrough-ring.is-block {
+  border-radius: var(--radius-lg);
+  background: transparent;
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 6px var(--color-accent),
+    0 0 0 14px rgba(29, 52, 97, 0.18);
+}
+@keyframes walkthrough-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 3px #fff,
+      0 0 0 6px var(--color-accent),
+      0 0 0 14px rgba(29, 52, 97, 0.22);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px #fff,
+      0 0 0 8px var(--color-accent),
+      0 0 0 18px rgba(29, 52, 97, 0.32);
+  }
+}
+
+/* Icon under the ring — must stay visible (ring used to paint a white disc over it). */
+.walkthrough-hit-target {
+  position: relative !important;
+  z-index: 3 !important;
+  background: var(--color-accent-wash) !important;
+  color: var(--color-accent) !important;
+  box-shadow: inset 0 0 0 1.5px var(--color-accent) !important;
+}
+.walkthrough-card {
+  position: absolute;
+  left: var(--space-4);
+  right: var(--space-4);
+  top: 56px;
+  z-index: 2;
+  pointer-events: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 12px;
+  padding: var(--space-3);
+  box-shadow: 0 1px 3px rgba(140, 149, 159, 0.15), 0 8px 24px rgba(27, 31, 36, 0.12);
+  animation: sp-fade-in var(--ease-base);
+}
+/* Anchored under a topbar icon (hover-capture / collapse) — not full-bleed. */
+.walkthrough-card.is-anchored {
+  right: auto;
+  width: min(280px, calc(100% - 32px));
+}
+.walkthrough-card::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: var(--walkthrough-caret-left, 72px);
+  width: 10px;
+  height: 10px;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border-strong);
+  border-top: 1px solid var(--color-border-strong);
+  transform: rotate(45deg);
+}
+.walkthrough-eyebrow {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-caption);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+.walkthrough-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-subheading);
+  font-weight: 650;
+  color: var(--color-text);
+  line-height: 1.3;
+}
+.walkthrough-body {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-body);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+.walkthrough-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+.walkthrough-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.walkthrough-dot.is-done,
+.walkthrough-dot.is-current {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: #fff;
+}
+.walkthrough-progress-line {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-strong);
+  min-width: 12px;
+  max-width: 32px;
+}
+.walkthrough-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.walkthrough-actions-end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.walkthrough-btn-text {
+  border: none;
+  background: transparent;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--ease-fast), background var(--ease-fast);
+}
+.walkthrough-btn-text:hover { color: var(--color-text); background: var(--color-bg); }
+.walkthrough-btn-primary {
+  border: none;
+  background: var(--color-accent);
+  color: #fff;
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  font-size: var(--text-body);
+  font-weight: 650;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: filter var(--ease-fast);
+}
+.walkthrough-btn-primary:hover { filter: brightness(1.08); }
+.walkthrough-btn-primary:focus-visible,
+.walkthrough-btn-text:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Steps 1–2: raise only the topbar so hover-capture / collapse stay
+   clickable above the scrim. */
+body.walkthrough-open-icons .topbar {
+  position: relative;
+  z-index: 2147483001;
+}
+
+/* Empty-state fan art uses zoom/transform — those layers were painting
+   over the tip card and blocking Skip/Done. Hide the decorative stack
+   for the whole tour; keep title/body/fan so step 3 still has a target. */
+body.walkthrough-open .empty-composite {
+  visibility: hidden !important;
+  height: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}

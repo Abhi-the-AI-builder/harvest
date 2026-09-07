@@ -177,4 +177,60 @@
   };
 
   Acopio.FAMILY_OPTIONS = ["heading", "body", "button", "color", "image", "other"];
+
+  // Nearest complementary type for "Collect heading + body" — same section
+  // first, then document order. Honest null when nothing plausible is nearby.
+  Acopio.findNearbyTypographyPartner = function findNearbyTypographyPartner(el, wantFamily) {
+    if (!el || !el.isConnected) return null;
+    const wantHeading = wantFamily === "heading";
+
+    function isCandidate(node) {
+      if (!node || node.nodeType !== Node.ELEMENT_NODE || node === el) return false;
+      if (!(node.offsetWidth > 0 && node.offsetHeight > 0)) return false;
+      const tag = node.tagName.toLowerCase();
+      if (wantHeading) {
+        if (/^h[1-6]$/.test(tag)) return true;
+        const info = Acopio.detectTag(node);
+        return Boolean(info && info.type === "font" && info.family === "heading");
+      }
+      if (tag === "p" || tag === "li") return true;
+      const info = Acopio.detectTag(node);
+      return Boolean(info && info.type === "font" && (info.family === "body" || info.family === "other"));
+    }
+
+    // 1. Direct siblings (most common: heading then paragraph).
+    let sib = wantHeading ? el.previousElementSibling : el.nextElementSibling;
+    while (sib) {
+      if (isCandidate(sib)) return sib;
+      // One level of nested text (e.g. <div><p>…</p></div> beside a heading).
+      const nested = sib.querySelector(wantHeading ? "h1,h2,h3,h4,h5,h6" : "p,li");
+      if (nested && isCandidate(nested)) return nested;
+      sib = wantHeading ? sib.previousElementSibling : sib.nextElementSibling;
+    }
+
+    // 2. Same section / article / list item / card-ish container.
+    const section =
+      el.closest("section, article, li, header, main, [class*='hero'], [class*='feature'], [class*='content']") ||
+      el.parentElement;
+    if (section) {
+      const sel = wantHeading ? "h1,h2,h3,h4,h5,h6" : "p,li";
+      const nodes = Array.from(section.querySelectorAll(sel));
+      if (wantHeading) {
+        for (let i = nodes.length - 1; i >= 0; i--) {
+          const n = nodes[i];
+          if (el.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_PRECEDING && isCandidate(n)) {
+            return n;
+          }
+        }
+      } else {
+        for (const n of nodes) {
+          if (el.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING && isCandidate(n)) {
+            return n;
+          }
+        }
+      }
+    }
+
+    return null;
+  };
 })();

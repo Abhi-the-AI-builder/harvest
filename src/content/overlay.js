@@ -6,6 +6,17 @@
   const Acopio = window.Acopio;
   const ACCENT = "#1D3461"; // deep navy — calmer, more premium than the earlier orange
 
+  // Off for this deploy, per direct instruction — the HTML/CSS→Figma-layer
+  // conversion path (AcopioFigmaClipboard, figma-clipboard.js) still has
+  // open, confirmed fidelity bugs (missing content on video/complex-image
+  // components) that need more work before shipping. Component Copy falls
+  // straight to the plain-image path below instead — same code, same
+  // pattern as sidepanel.js's own ENABLE_FIGMA_EXPORT/ENABLE_FIGMA_PLUGIN_
+  // COPY flags. Text (font) and color copies are entirely separate code
+  // paths above and are never touched by this flag. Nothing here is
+  // deleted — flip back to true once the conversion pipeline is solid.
+  const ENABLE_FIGMA_LAYER_CONVERSION = false;
+
   // Bundled locally (fonts/Inter-var.woff2, SIL Open Font License) and
   // loaded via chrome.runtime.getURL — never from Google Fonts at runtime,
   // which would be exactly the kind of external network call Section 9's
@@ -365,12 +376,41 @@
     .color-pair-col { flex: 1; min-width: 0; }
     .color-pair-col .gradient-stop { width: 100%; box-sizing: border-box; }
     .copy-btn {
+      position: relative;
       border: none; background: var(--color-bg); border-radius: var(--radius-xs);
       width: 18px; height: 18px; flex: none; display: flex; align-items: center; justify-content: center;
       color: var(--color-text-muted); cursor: pointer; transition: background var(--ease-fast), color var(--ease-fast);
     }
     .copy-btn:hover { background: var(--color-accent-wash); color: var(--color-accent); }
     .copy-btn.is-copied { background: var(--color-accent); color: var(--color-surface); border-color: var(--color-accent); }
+    /* Custom tip above the control — native title sat over the preview. */
+    .copy-btn[data-tip]::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 6px);
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: 168px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(23, 24, 26, 0.92);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 550;
+      line-height: 1.35;
+      text-align: center;
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity var(--ease-fast), visibility var(--ease-fast);
+      z-index: 8;
+    }
+    .copy-btn[data-tip]:hover::after,
+    .copy-btn[data-tip]:focus-visible::after {
+      opacity: 1;
+      visibility: visible;
+    }
     /* Header copy/copy-as-SVG buttons — a primary header action, not a
        small inline chip accessory, so they match the SAME larger size the
        prominent single-hex "solo" chip already uses (.gradient-stop-solo
@@ -573,6 +613,24 @@
        "this is a deliberate card, not a raw thumbnail" frame. */
     .image-swatch-card { margin-top: var(--space-2); border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg); }
     .thumb { display: block; width: 100%; max-height: 160px; object-fit: cover; }
+    /* Component Preview must show the FULL selection — cover was cropping
+       wide heroes (e.g. 934×533) into a misleading zoomed strip. */
+    .thumb.component-preview-thumb {
+      object-fit: contain;
+      object-position: top center;
+      max-height: 180px;
+      background: #fff;
+    }
+    .thumb.component-preview-pending {
+      min-height: 96px;
+      background: linear-gradient(90deg, var(--color-bg) 0%, #eceef2 50%, var(--color-bg) 100%);
+      background-size: 200% 100%;
+      animation: preview-shimmer 1.1s ease-in-out infinite;
+    }
+    @keyframes preview-shimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
     .error { color: var(--color-danger); font-size: var(--text-caption); margin-top: var(--space-2); }
     /* Pattern 8 — quiet inline microcopy near the action ("Draft saved"
        reference), not a loud centered toast. Light surface, muted text,
@@ -599,6 +657,8 @@
   let currentTagInfo = null;
   let outlinedEl = null;
   let prevOutline = "";
+  let prevOutlineOffset = "";
+  let paintedOutlineEl = null;
   // Typed into the always-visible note field before Collect is ever
   // clicked (Section 6 rework — see buildNoteField). Lives at module scope,
   // not local to render(), because render() re-runs for the SAME element on
@@ -608,6 +668,13 @@
   let noteValue = "";
   let noteFieldHasFocus = false;
   let isSaving = false;
+  let isCopying = false;
+  // Separate from isCopying (which only spans the async copy operation
+  // itself): this stays true for the full 1200ms the checkmark is on
+  // screen, since showFor's media-recheck rebuilding the card mid-flash
+  // destroys the very button showing it — see flashCopyFeedback and the
+  // recheck's guard below.
+  let copyFeedbackActive = false;
   // Whether the compact family tag is expanded into the full Heading/Body/
   // Button/Other picker. Reset only when a genuinely new element is
   // selected (showFor/navigate) — NOT inside render() itself, since
@@ -972,22 +1039,23 @@
 
     folderMenuEl.appendChild(Object.assign(document.createElement("div"), { className: "folder-menu-divider" }));
 
-    const form = document.createElement("div");
+    const form = document.createElement("form");
     form.className = "folder-menu-new-form";
+    form.setAttribute("autocomplete", "off");
     const input = document.createElement("input");
     input.type = "text";
     input.className = "folder-menu-new-input";
     input.placeholder = "New folder name";
     input.maxLength = 60;
+    input.name = "acopio-new-folder";
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
-      if (e.key === "Enter") { e.preventDefault(); confirm(); }
       if (e.key === "Escape") { e.preventDefault(); closeFolderMenu(); }
     });
     input.addEventListener("click", (e) => e.stopPropagation());
     form.appendChild(input);
     const confirmBtn = document.createElement("button");
-    confirmBtn.type = "button";
+    confirmBtn.type = "submit";
     confirmBtn.className = "folder-menu-new-confirm";
     confirmBtn.innerHTML = Acopio.ICONS.plus;
     confirmBtn.title = "Create folder";
@@ -995,6 +1063,7 @@
     const confirm = () => {
       const name = input.value.trim();
       if (!name) { input.focus(); return; }
+      if (confirmBtn.disabled) return;
       confirmBtn.disabled = true;
       let settled = false;
       const timeoutId = setTimeout(() => {
@@ -1022,10 +1091,27 @@
         settled = true;
         clearTimeout(timeoutId);
         confirmBtn.disabled = false;
-        showInlineError("Acopio was reloaded — refresh this page to keep collecting.");
+        if (!Acopio.ensureRuntimeOrReload()) {
+          showInlineError("Reconnecting Acopio — refreshing this page…");
+        } else {
+          showInlineError("Acopio was reloaded — refresh this page to keep collecting.");
+        }
       }
     };
-    confirmBtn.addEventListener("click", (e) => { e.stopPropagation(); confirm(); });
+    // Form submit = Enter or +. pointerdown also creates before any
+    // capture-phase outside-click can tear the menu down (Enter worked;
+    // + often lost the race against that listener).
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      confirm();
+    });
+    confirmBtn.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      confirm();
+    });
     form.appendChild(confirmBtn);
     folderMenuEl.appendChild(form);
 
@@ -1126,7 +1212,9 @@
   // even though the tooltip had shown real content a second earlier.
   function isDegenerateCapture(tagInfo, data) {
     if (!data) return true;
-    if (tagInfo.type === "component") return !data.boundingBoxWidth || !data.boundingBoxHeight || !data.layoutTree;
+    // Components: size is required. layoutTree is synthesized when walk fails,
+    // so missing tree alone must not block Collect — screenshot still saves trust.
+    if (tagInfo.type === "component") return !data.boundingBoxWidth || !data.boundingBoxHeight;
     if (tagInfo.type === "font") return !data.boundingBoxWidth || !data.boundingBoxHeight;
     if (tagInfo.type === "image") return !data.width || !data.height;
     return false; // color has no rect dependency to collapse
@@ -1152,7 +1240,14 @@
   function clearOutline() {
     if (outlinedEl) {
       outlinedEl.style.outline = prevOutline;
+      outlinedEl.style.outlineOffset = prevOutlineOffset || "";
       outlinedEl = null;
+    }
+    if (paintedOutlineEl) {
+      try {
+        paintedOutlineEl.remove();
+      } catch (_) {}
+      paintedOutlineEl = null;
     }
   }
 
@@ -1160,8 +1255,37 @@
     clearOutline();
     outlinedEl = el;
     prevOutline = el.style.outline;
-    el.style.outline = `1.5px dashed ${ACCENT}`;
-    el.style.outlineOffset = "1px";
+    prevOutlineOffset = el.style.outlineOffset;
+    // Painted-bounds overlay so overflow:visible captions / descenders
+    // aren't visually cropped by a border-box-only CSS outline.
+    ensureHost();
+    const painted =
+      typeof Acopio.measurePaintedBounds === "function"
+        ? Acopio.measurePaintedBounds(el)
+        : null;
+    if (painted && painted.width > 0 && painted.height > 0) {
+      paintedOutlineEl = document.createElement("div");
+      paintedOutlineEl.setAttribute("data-acopio", "painted-outline");
+      paintedOutlineEl.style.cssText = [
+        "position:fixed",
+        `left:${Math.round(painted.left)}px`,
+        `top:${Math.round(painted.top)}px`,
+        `width:${Math.round(painted.width)}px`,
+        `height:${Math.round(painted.height)}px`,
+        `border:1.5px dashed ${ACCENT}`,
+        "border-radius:2px",
+        "box-sizing:border-box",
+        "pointer-events:none",
+        "z-index:2147483646",
+      ].join(";");
+      document.documentElement.appendChild(paintedOutlineEl);
+      Acopio.registerOwnRoot(paintedOutlineEl);
+      el.style.outline = "none";
+      el.style.outlineOffset = "";
+    } else {
+      el.style.outline = `1.5px dashed ${ACCENT}`;
+      el.style.outlineOffset = "1px";
+    }
   }
 
   const selectorFor = Acopio.cssSelectorFor;
@@ -1177,14 +1301,34 @@
       left = anchorRect.left - cardW - margin;
     }
     if (left < margin) {
-      // Neither side fits comfortably (small viewport) — place below/above instead.
-      left = Math.min(Math.max(anchorRect.left, margin), window.innerWidth - cardW - margin);
+      // Neither side fits comfortably (small viewport / near-full-width
+      // hero) — place below/above. For wide anchors, pin to the viewport
+      // edge so we don't clamp back ONTO the selection (that baked the
+      // Collect card into Preview screenshots).
+      if (anchorRect.width > window.innerWidth * 0.55) {
+        left = window.innerWidth - cardW - margin;
+      } else {
+        left = Math.min(Math.max(anchorRect.left, margin), window.innerWidth - cardW - margin);
+      }
       top = anchorRect.bottom + margin;
       if (top + cardH > window.innerHeight) {
-        top = anchorRect.top - cardH - margin;
+        top = Math.max(margin, anchorRect.top - cardH - margin);
       }
+      if (top < margin) top = margin;
     }
     top = Math.min(Math.max(top, margin), window.innerHeight - cardH - margin);
+
+    // If we still overlap the selection (wide short heroes), park at the
+    // top-right of the viewport — Preview must not include this card.
+    const overlapsAnchor =
+      left < anchorRect.right &&
+      left + cardW > anchorRect.left &&
+      top < anchorRect.bottom &&
+      top + cardH > anchorRect.top;
+    if (overlapsAnchor && anchorRect.width > window.innerWidth * 0.45) {
+      left = window.innerWidth - cardW - margin;
+      top = margin;
+    }
 
     // Purely additive — only fires when the three branches above provably
     // have nowhere clear to put the card (the anchor itself is both wider
@@ -1321,7 +1465,12 @@
     }
     if (CHILD_TAG_LABELS[tag]) return CHILD_TAG_LABELS[tag];
     const kind = Acopio.componentIconFor(k.outerHTML);
-    if (kind === "image") return "Image";
+    if (kind === "image") {
+      // Wrapper around photo + copy (designer card) — don't claim Image-only.
+      const text = (k.innerText || "").replace(/\s+/g, " ").trim();
+      if (text.length >= 3) return "Component";
+      return "Image";
+    }
     if (kind === "font") return "Text";
     return "Group";
   }
@@ -1340,7 +1489,33 @@
     return CHIP_KIND[label] || "component";
   }
   function describeChildren(el) {
-    return Array.from(el.children).map((k) => ({ el: k, label: labelForChild(k) }));
+    // Prefer honest subtree inventory whenever it sees Text/Heading —
+    // direct children often collapse a photo+copy card to "Image" only.
+    if (typeof Acopio.inventoryContainsLabels === "function") {
+      const inventory = Acopio.inventoryContainsLabels(el);
+      if (
+        inventory.length >= 2 ||
+        inventory.includes("Text") ||
+        inventory.includes("Heading")
+      ) {
+        return inventory.map((label) => ({ el, label }));
+      }
+      if (inventory.length === 1 && inventory[0] !== "Image") {
+        return inventory.map((label) => ({ el, label }));
+      }
+    }
+    const kids = Array.from(el.children).map((k) => ({ el: k, label: labelForChild(k) }));
+    if (
+      kids.length > 0 &&
+      kids.every((c) => c.label === "Image" || c.label === "Icon" || c.label === "GIF") &&
+      typeof Acopio.inventoryContainsLabels === "function"
+    ) {
+      const inv = Acopio.inventoryContainsLabels(el);
+      if (inv.includes("Text") || inv.includes("Heading") || inv.length > 1) {
+        return inv.map((label) => ({ el, label }));
+      }
+    }
+    return kids;
   }
 
   // A real screenshot of exactly this element, cropped from a full-viewport
@@ -1374,7 +1549,37 @@
   // because that copy-click capture was stuck behind a pile of preview
   // requests for elements the user had already moved past.
   function captureElementScreenshot(el, purpose) {
-    const rect = el.getBoundingClientRect();
+    const painted =
+      typeof Acopio.measurePaintedBounds === "function"
+        ? Acopio.measurePaintedBounds(el)
+        : null;
+    const raw = el.getBoundingClientRect();
+    const tight = painted && painted.width > 0 && painted.height > 0
+      ? {
+          left: painted.left,
+          top: painted.top,
+          right: painted.right,
+          bottom: painted.bottom,
+        }
+      : raw;
+    // Both measurePaintedBounds and getBoundingClientRect describe the CSS
+    // layout box, not actual rendered glyph ink — a bold/heavy display
+    // font's real ascender/cap-height overshoot can extend a few pixels
+    // above that box's own top edge (confirmed live: a 600-weight 64px
+    // Inter heading with 72px line-height, only ~4px of top leading,
+    // cropped off the tops of every capital letter). Padding the crop
+    // rect slightly on every side costs nothing but a few pixels of extra
+    // margin around the screenshot — clipping real content is the far
+    // worse failure mode.
+    const INK_PAD = 6;
+    const rect = {
+      left: tight.left - INK_PAD,
+      top: tight.top - INK_PAD,
+      right: tight.right + INK_PAD,
+      bottom: tight.bottom + INK_PAD,
+      width: tight.right - tight.left + INK_PAD * 2,
+      height: tight.bottom - tight.top + INK_PAD * 2,
+    };
     if (rect.width <= 0 || rect.height <= 0) return Promise.resolve(null);
     if (rect.bottom <= 0 || rect.top >= window.innerHeight || rect.right <= 0 || rect.left >= window.innerWidth) return Promise.resolve(null);
     // Acopio renders more than just this tooltip on the page — the
@@ -1389,13 +1594,33 @@
     // paint," not "has painted" — captureVisibleTab can still win that
     // race and capture the pre-hide frame with just one.
     const roots = Acopio.ownRoots.filter((r) => {
-      if (!r || !r.style) return false;
-      // Passive hover previews crop the hovered element only — the tooltip
-      // sits beside it and the floating toolbar is elsewhere. Hiding Acopio
-      // roots for every preview made the open tooltip/toolbar visibly blink.
-      if (purpose === "preview") return false;
-      return true;
+      if (!r || !r.style || !r.isConnected) return false;
+      // Always hide only chrome that overlaps the crop — including Copy /
+      // Collect full-res shots. Hiding every root (old Copy path) made the
+      // tooltip vanish even when it sat beside the selection → flicker.
+      try {
+        const rr = r.getBoundingClientRect();
+        if (rr.width <= 0 || rr.height <= 0) return false;
+        const overlaps = !(
+          rr.right <= rect.left ||
+          rr.left >= rect.right ||
+          rr.bottom <= rect.top ||
+          rr.top >= rect.bottom
+        );
+        return overlaps;
+      } catch (_) {
+        return true;
+      }
     });
+    // Dashed hover outline is painted ON the element — strip it for the
+    // capture frame or it shows up in Preview / Collect screenshots.
+    const outlineEl = outlinedEl === el ? el : null;
+    const savedOutline = outlineEl ? outlineEl.style.outline : "";
+    const savedOutlineOffset = outlineEl ? outlineEl.style.outlineOffset : "";
+    if (outlineEl) {
+      outlineEl.style.outline = "none";
+      outlineEl.style.outlineOffset = "";
+    }
     // Only the FIRST concurrent hide records the true original state — see
     // rootsHideCount/rootsTrueVisibility above for why a per-call snapshot
     // was wrong. A later overlapping call reading roots that are already
@@ -1419,6 +1644,10 @@
       if (rootsHideCount === 0 && rootsTrueVisibility) {
         roots.forEach((r, i) => { if (r) r.style.visibility = rootsTrueVisibility[i]; });
         rootsTrueVisibility = null;
+      }
+      if (outlineEl) {
+        outlineEl.style.outline = savedOutline;
+        outlineEl.style.outlineOffset = savedOutlineOffset;
       }
     };
     return new Promise((resolve) => {
@@ -1455,14 +1684,21 @@
               if (chrome.runtime.lastError || !response || !response.ok) {
                 // Silent to the UI on purpose (a nice-to-have upgrade over
                 // the best-effort fallback, not a required feature).
+                // Prefer the app-level error — chrome.runtime.lastError can
+                // be a generic port message that would hide "superseded".
+                const appErr = response && response.error;
+                const transportErr =
+                  chrome.runtime.lastError && chrome.runtime.lastError.message;
+                const errMsg = appErr || transportErr || "unknown error";
                 // "superseded by a newer hover" is an expected race when the
                 // pointer moves on before captureVisibleTab returns — not a
-                // real failure, so don't noise the console with it.
-                const errMsg =
-                  (chrome.runtime.lastError && chrome.runtime.lastError.message) ||
-                  (response && response.error) ||
-                  "unknown error";
-                if (!String(errMsg).includes("superseded")) {
+                // real failure. Preview misses are also common; don't treat
+                // either as console.error (Cursor/DevTools surface those as bugs).
+                const expected =
+                  /superseded/i.test(String(appErr || "")) ||
+                  /superseded/i.test(String(errMsg)) ||
+                  purpose === "preview";
+                if (!expected) {
                   console.error("[Acopio] screenshot failed:", errMsg);
                 }
                 finish(null);
@@ -1886,7 +2122,13 @@
         frag.appendChild(swatchCard);
       }
     } else {
-      const rect = el.getBoundingClientRect();
+      const rect =
+        typeof Acopio.measurePaintedBounds === "function"
+          ? (() => {
+              const p = Acopio.measurePaintedBounds(el);
+              return { width: p.width, height: p.height };
+            })()
+          : el.getBoundingClientRect();
       const children = describeChildren(el);
       // Dimensions sit as a tag right after "Component" in the headline —
       // same inline-tag treatment the font type's Heading/Body/Button/
@@ -1907,20 +2149,27 @@
           ? Acopio.videoSrcFor(previewImg)
           : Acopio.resolveImgSrc(previewImg)
         : null;
-      if (previewSrc) {
-        // No separate caption here — the "Image" chip in "Contains:" below
-        // already says this exists; a redundant label above the thumbnail
-        // was saying it twice.
-        const swatchCard = document.createElement("div");
-        swatchCard.className = "image-swatch-card";
-        swatchCard.style.marginTop = "var(--space-3)";
+      // Only use an inner <img> as the instant placeholder when it actually
+      // dominates the component. A logo strip inside a 934px hero made the
+      // Preview look like a single logo until the real screenshot landed.
+      let useInnerMediaPlaceholder = false;
+      if (previewSrc && previewImg) {
+        try {
+          const ir = previewImg.getBoundingClientRect();
+          const areaRatio = (ir.width * ir.height) / Math.max(1, rect.width * rect.height);
+          useInnerMediaPlaceholder = areaRatio >= 0.45;
+        } catch (_) {
+          useInnerMediaPlaceholder = false;
+        }
+      }
+      const swatchCard = document.createElement("div");
+      swatchCard.className = "image-swatch-card";
+      swatchCard.style.marginTop = "var(--space-3)";
+      if (useInnerMediaPlaceholder) {
         const thumb = document.createElement(previewImg.tagName.toLowerCase() === "video" ? "video" : "img");
-        // component-preview-thumb: the real captureElementPreview screenshot
-        // (below) swaps THIS element out once it resolves — this extracted
-        // <img>/<video> is only ever the instant, synchronous placeholder.
         thumb.className = "thumb component-preview-thumb";
         thumb.src = previewSrc;
-        Acopio.withPinterestFallback(thumb, previewSrc); // no-op for video / non-Pinterest src
+        Acopio.withPinterestFallback(thumb, previewSrc);
         if (thumb.tagName === "VIDEO") {
           thumb.autoplay = true;
           thumb.loop = true;
@@ -1928,8 +2177,13 @@
           thumb.playsInline = true;
         }
         swatchCard.appendChild(thumb);
-        frag.appendChild(swatchCard);
+      } else {
+        const pending = document.createElement("div");
+        pending.className = "thumb component-preview-thumb component-preview-pending";
+        pending.setAttribute("aria-hidden", "true");
+        swatchCard.appendChild(pending);
       }
+      frag.appendChild(swatchCard);
       // Kick off the real screenshot regardless of whether previewSrc found
       // anything — a pure-text/UI component (no img/video at all) still
       // deserves a real preview, not just the generic two-squares icon it'd
@@ -1963,17 +2217,36 @@
           chip.type = "button";
           chip.className = `contains-chip contains-chip-${chipKindFor(childLabel)}`;
           chip.textContent = childLabel;
+          // Inventory chips may point at the root — resolve a jump target.
+          const jumpEl = (() => {
+            if (childEl !== el) return childEl;
+            if (childLabel === "Heading") return el.querySelector("h1,h2,h3,h4,h5,h6") || el;
+            if (childLabel === "Image" || childLabel === "Icon" || childLabel === "GIF") {
+              return el.querySelector("img, picture, video, svg") || el;
+            }
+            if (childLabel === "Link") return el.querySelector("a[href]") || el;
+            if (childLabel === "Button") {
+              return el.querySelector("button, [role='button']") || el;
+            }
+            if (childLabel === "Text") {
+              return (
+                el.querySelector("p, span, li, figcaption, label") ||
+                el
+              );
+            }
+            return el;
+          })();
           chip.title = `Jump to this ${childLabel.toLowerCase()} to collect just that piece`;
           chip.addEventListener("click", (e) => {
             e.stopPropagation();
-            if (!childEl.isConnected) {
+            if (!jumpEl.isConnected) {
               showInlineError("This element changed — try again.");
               return;
             }
-            currentTarget = childEl;
-            currentTagInfo = childEl.tagName.toLowerCase() === "iframe"
+            currentTarget = jumpEl;
+            currentTagInfo = jumpEl.tagName.toLowerCase() === "iframe"
               ? { type: "component", family: "other" }
-              : Acopio.detectTag(childEl);
+              : Acopio.detectTag(jumpEl);
             pillsExpanded = false;
             noteValue = ""; // same reason as navigate() — a different element, not a carried-over note
             render();
@@ -1999,15 +2272,24 @@
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         const text = btn.dataset.copy;
-        navigator.clipboard.writeText(text).then(() => {
-          const original = btn.innerHTML;
-          btn.innerHTML = Acopio.ICONS.check;
-          btn.classList.add("is-copied");
-          setTimeout(() => {
-            btn.innerHTML = original;
-            btn.classList.remove("is-copied");
-          }, 1200);
-        }).catch(() => {});
+        const looksLikeHex = typeof text === "string" && /^#[0-9A-Fa-f]{3,8}$/.test(text.trim());
+        const writePromise = looksLikeHex
+          ? Acopio.writeDesignClipboard({
+              svg: Acopio.colorSwatchSvgMarkup({ hex: text.trim().toUpperCase() }),
+              humanPlain: text.trim().toUpperCase(),
+            })
+          : navigator.clipboard.writeText(text);
+        writePromise
+          .then(() => {
+            const original = btn.innerHTML;
+            btn.innerHTML = Acopio.ICONS.check;
+            btn.classList.add("is-copied");
+            setTimeout(() => {
+              btn.innerHTML = original;
+              btn.classList.remove("is-copied");
+            }, 1200);
+          })
+          .catch(() => {});
       });
     });
     return frag;
@@ -2103,8 +2385,8 @@
     const fab = document.createElement("button");
     fab.className = "collect-fab";
     fab.type = "button";
-    fab.setAttribute("aria-label", "Collect this element");
-    fab.title = "+ Collect";
+    fab.setAttribute("aria-label", "Collect");
+    fab.title = "Collect";
     fab.innerHTML = Acopio.ICONS.plus;
     fab.addEventListener("click", onCollectClick);
     return fab;
@@ -2209,25 +2491,17 @@
       const collectBtn = document.createElement("button");
       collectBtn.className = "collect-btn";
       collectBtn.type = "button";
-      collectBtn.innerHTML = `${Acopio.ICONS.plus}<span>Collect</span>`;
+      collectBtn.textContent = "Collect";
+      collectBtn.setAttribute("aria-label", "Collect");
       collectBtn.addEventListener("click", onCollectClick);
       actions.appendChild(collectBtn);
     }
   }
 
   // --- Copy for pasting elsewhere (Figma, Claude, a doc) ------------------
-  // One clipboard write can carry more than one format at once — a visual
-  // target (Figma, a doc, Slack) picks up the PNG, a text target (Claude's
-  // own chat input, a plain-text field) picks up the description instead,
-  // so a single click gives whichever destination you paste into the
-  // format it can actually use, rather than a flat picture everywhere.
-  // Real Figma Auto Layout (matching padding/gaps/resizing, not just a
-  // picture of them) isn't reachable this way at all — that's Figma's own
-  // internal data model, only writable from a plugin running inside Figma
-  // itself, nothing a browser clipboard write can carry — so this never
-  // claims to produce that; "Copy as SVG" below is the closest honest
-  // equivalent, and only offered when the content is genuinely vector to
-  // begin with.
+  // Components dual-write image/png (chat/notes) + Figma HTML envelope
+  // (editable ⌘V). Worst case falls back to PNG only. Non-components still
+  // dual-write image + plain text for whichever destination you paste into.
   function canvasToPngBlob(canvas) {
     return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   }
@@ -2290,7 +2564,7 @@
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#17181A";
+    ctx.fillStyle = data.colorHex || "#17181A";
     const size = Math.min(data.sizePx || 32, 72);
     ctx.font = `${data.weight || 400} ${size}px ${data.fallbackStack || "sans-serif"}`;
     ctx.textBaseline = "middle";
@@ -2311,8 +2585,10 @@
     // Safe to leave in permanently: console.debug, not user-visible UI.
     const trace = (stage, detail) => console.debug("[Acopio copy]", stage, detail || "");
     try {
-      if (tagInfo.type === "color") return await colorSwatchPngBlob(data);
-      if (tagInfo.type === "font") return await fontSamplePngBlob(data);
+      // Color/font Copy no longer attaches PNG — Figma prefers raster and
+      // that made typography/swatches paste as useless images. Color uses
+      // SVG; font uses styled text (see copyForPaste).
+      if (tagInfo.type === "color" || tagInfo.type === "font") return null;
       if (tagInfo.type === "image" && data.url) return await urlToPngBlob(data.url);
       if (tagInfo.type === "component") {
         // Always capture fresh, full-resolution, here — deliberately NOT
@@ -2363,9 +2639,7 @@
       return `Color: ${data.hex || "?"}${gradientNote}\nFrom: ${src}`;
     }
     if (tagInfo.type === "font") {
-      const lh = data.lineHeightPx ? `/${Math.round(data.lineHeightPx)}px` : "";
-      const ls = data.letterSpacingPx ? `, ${data.letterSpacingPx}px letter-spacing` : "";
-      return `Font: ${data.family}, ${data.weight}, ${Math.round(data.sizePx)}px${lh}${ls}\nSample: "${data.sampleText || ""}"\nFrom: ${src}`;
+      return `${Acopio.fontSamplePlainText(data)}\nFrom: ${src}`;
     }
     if (tagInfo.type === "image") {
       const gifNote = data.isVideo ? " (GIF)" : "";
@@ -2379,18 +2653,97 @@
     const original = btn.innerHTML;
     btn.innerHTML = Acopio.ICONS.check;
     btn.classList.add("is-copied");
+    copyFeedbackActive = true;
     setTimeout(() => {
       btn.innerHTML = original;
       btn.classList.remove("is-copied");
+      copyFeedbackActive = false;
     }, 1200);
   }
   async function copyForPaste(el, tagInfo, data, btn) {
+    isCopying = true;
     try {
       const note = noteValue.trim();
       const label = overlayCopyLabel(tagInfo);
+
+      if (tagInfo.type === "color") {
+        const svg = Acopio.colorSwatchSvgMarkup(data);
+        await Acopio.writeDesignClipboard({
+          svg,
+          humanPlain: data.hex || "?",
+        });
+        flashCopyFeedback(btn);
+        showToast("Copied swatch");
+        return;
+      }
+
+      if (tagInfo.type === "font") {
+        // Always rebuild from the live element so Copy isn't stuck on a
+        // truncated sampleText from an older collect (80-char era).
+        const built = Acopio.buildCaptureData(el, tagInfo);
+        const liveData = (built && built.data) || data;
+        const svg = Acopio.fontBoardSvgMarkup([liveData]);
+        const plain = note
+          ? `${Acopio.fontSamplePlainText(liveData)}\n\n${note}`
+          : Acopio.fontSamplePlainText(liveData);
+        const htmlBody =
+          Acopio.fontStyledHtmlFragment(liveData, { marginBottom: 0 }) +
+          (note
+            ? `<div style="margin-top:8px;color:#6B6E76;font-size:12px;">${Acopio.escapeHtml(note).replace(/\n/g, "<br>")}</div>`
+            : "");
+        await Acopio.writeDesignClipboard({
+          svg,
+          humanPlain: plain,
+          html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${htmlBody}</body></html>`,
+        });
+        flashCopyFeedback(btn);
+        showToast("Copied text");
+        return;
+      }
+
+      if (ENABLE_FIGMA_LAYER_CONVERSION && tagInfo.type === "component" && el && el.isConnected && window.AcopioFigmaClipboard) {
+        // Dual clipboard: screenshot for chat/notes + Figma layers for ⌘V.
+        // These are independent, both-expensive async operations (a
+        // captureVisibleTab round trip vs. cloning + font/image waits +
+        // running the DOM→Figma converter) with no data dependency until
+        // the very final clipboard write — starting the screenshot without
+        // awaiting it and handing the *promise* straight to
+        // copyElementAsEditableFigma (which only awaits it right before
+        // that final write) lets both run concurrently instead of one
+        // fully finishing before the other starts, roughly halving
+        // perceived Copy latency in the common case.
+        const pngBlobPromise = resolveCopyImageBlob(tagInfo, data, el);
+        const plain = note ? `${label}\n\n${note}` : label;
+        const converted = await AcopioFigmaClipboard.copyElementAsEditableFigma(el, {
+          name: label || "Component",
+          width: Math.round((data && data.boundingBoxWidth) || el.getBoundingClientRect().width),
+          height: Math.round((data && data.boundingBoxHeight) || el.getBoundingClientRect().height),
+          pngBlob: pngBlobPromise,
+          plainText: plain,
+        });
+        if (converted.ok) {
+          flashCopyFeedback(btn);
+          if (converted.mode === "figma+image") {
+            showToast("Copied — refined Auto Layout for Figma; image for chat/notes");
+          } else if (converted.mode === "figma") {
+            showToast("Copied refined layers — paste in Figma (⌘V)");
+          } else {
+            // converted.error carries the actual conversion failure reason
+            // (thrown message, or "too large/empty") but was previously
+            // discarded entirely — logging it is the only way to diagnose
+            // *why* a given real-world component fell back to a flat
+            // image instead of guessing blind every time it happens.
+            console.warn("[Acopio] Figma layer conversion fell back to image:", converted.error || "(no error captured)");
+            showToast("Copied screenshot — editable Figma paste unavailable for this component");
+          }
+          return;
+        }
+        // Fall through to PNG-only path if dual write failed entirely.
+      }
+
+      const clipboardTypes = {};
       const imageBlob = await resolveCopyImageBlob(tagInfo, data, el);
       const isVisual = (tagInfo.type === "component" || tagInfo.type === "image") && imageBlob;
-      const clipboardTypes = {};
 
       if (isVisual) {
         clipboardTypes["image/png"] = imageBlob;
@@ -2416,9 +2769,19 @@
 
       await navigator.clipboard.write([new ClipboardItem(clipboardTypes)]);
       flashCopyFeedback(btn);
+      if (tagInfo.type === "component") {
+        showToast("Copied screenshot — editable paste needs a live component on the page");
+      }
     } catch (err) {
-      console.error("[Acopio] copy failed:", err);
-      showInlineError("Couldn't copy — try again.");
+      const msg = err && err.message ? err.message : String(err);
+      console.error("[Acopio] copy failed:", msg);
+      showInlineError(
+        /NotAllowed|Document is not focused|clipboard/i.test(msg)
+          ? "Couldn't copy — click the page once, then try Copy again."
+          : "Couldn't copy — try again."
+      );
+    } finally {
+      isCopying = false;
     }
   }
   async function copySvgMarkup(el, btn) {
@@ -2553,8 +2916,21 @@
     copyBtn.type = "button";
     copyBtn.className = "copy-btn";
     copyBtn.innerHTML = Acopio.ICONS.copy;
-    copyBtn.title = "Copy — image for Figma/docs, description for Claude/text";
-    copyBtn.setAttribute("aria-label", "Copy this capture");
+    // No data-tip here — the long "paste in Figma for editable Auto
+    // Layout" hover bubble overlapped the header/close-button area in
+    // this cramped footer row (confirmed via screenshot). aria-label
+    // below still names the button for accessibility; the actual
+    // post-copy confirmation is the toast (showToast calls further down).
+    copyBtn.setAttribute(
+      "aria-label",
+      currentTagInfo.type === "color"
+        ? "Copy color swatch"
+        : currentTagInfo.type === "font"
+          ? "Copy font as text"
+          : currentTagInfo.type === "component"
+            ? "Copy component for editable Figma paste"
+            : "Copy this capture"
+    );
     copyBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       copyForPaste(el, currentTagInfo, copyData, copyBtn);
@@ -2565,7 +2941,7 @@
       copySvgBtn.type = "button";
       copySvgBtn.className = "copy-btn";
       copySvgBtn.innerHTML = Acopio.ICONS.codeBrackets;
-      copySvgBtn.title = "Copy as SVG — pastes into Figma as real editable vector layers";
+      copySvgBtn.setAttribute("data-tip", "Copy as SVG — pastes into Figma as real editable vector layers");
       copySvgBtn.setAttribute("aria-label", "Copy as SVG markup");
       copySvgBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2841,16 +3217,40 @@
     isCollectingPreview = true;
     try {
       if (tagInfo.type === "component") {
-        // Always take a fresh full-resolution capture at collect time — do not
-        // gate on lastElementCapture matching (that left previewImage unset when
-        // the passive hover preview was stale or missing, breaking sidepanel copy/ZIP).
-        let source = await captureElementScreenshot(el);
-        if (!source && lastElementCapture && lastElementCapture.el === el && lastElementCapture.dataUrl) {
+        // Warm the Figma converter in parallel with the screenshot so the
+        // post-Collect bake (below) starts hot — no quality tradeoff.
+        if (window.AcopioFigmaClipboard) {
+          AcopioFigmaClipboard.ensureLoaded().catch(() => {});
+        }
+        // Prefer the hover preview already on hand — a second captureVisibleTab
+        // hides overlapping Acopio chrome and caused tooltip flicker on Collect.
+        // Fresh capture only when we have nothing usable yet.
+        let source = null;
+        if (lastElementCapture && lastElementCapture.el === el && lastElementCapture.dataUrl) {
           source = lastElementCapture.dataUrl;
+        } else {
+          source = await captureElementScreenshot(el);
         }
         if (source) {
           data.previewImage = await dataUrlToPngDataUrl(source);
         }
+        // Sparse / irregular trees rely on this PNG in Figma — never leave it empty
+        // when preferScreenshot is set if we still have a hover capture to use.
+        if (
+          !data.previewImage &&
+          (data.preferScreenshot || (data.layoutTree && data.layoutTree.preferScreenshot)) &&
+          lastElementCapture &&
+          lastElementCapture.dataUrl
+        ) {
+          try {
+            data.previewImage = await dataUrlToPngDataUrl(lastElementCapture.dataUrl);
+          } catch (_) {
+            data.previewImage = lastElementCapture.dataUrl;
+          }
+        }
+        // Figma clipboard bake is NOT awaited here — Collect returns after
+        // screenshot + save. Same convert runs idle after save (see
+        // scheduleFigmaClipboardBake) and merges into the stored item.
       } else if (tagInfo.type === "image") {
         if (data.isVideo) {
           await inlineVideoFrameAtCapture(el, data);
@@ -2870,6 +3270,65 @@
       isCollectingPreview = false;
     }
     doFinalize(el, tagInfo, data);
+  }
+
+  const figmaBakeInFlight = new Set();
+
+  /**
+   * Full-quality Figma Kiwi bake after Collect UI is done. Same converter as
+   * the old blocking path — only scheduling changed. Merges into IndexedDB
+   * when finished so Library Copy still gets refined paste.
+   */
+  function scheduleFigmaClipboardBake(el, itemId, bakeOpts) {
+    if (!el || !itemId || !window.AcopioFigmaClipboard) return;
+    if (figmaBakeInFlight.has(itemId)) return;
+    const run = async () => {
+      if (figmaBakeInFlight.has(itemId)) return;
+      figmaBakeInFlight.add(itemId);
+      try {
+        if (!el.isConnected) return;
+        await AcopioFigmaClipboard.ensureLoaded();
+        if (!el.isConnected) return;
+        const baked = await Promise.race([
+          AcopioFigmaClipboard.convertLiveToClipboardHtml(el, bakeOpts),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Figma bake timed out")), 20000)
+          ),
+        ]);
+        const html = typeof baked === "string" ? baked : baked && baked.html;
+        const fontAssets = typeof baked === "object" && baked && baked.fontAssets ? baked.fontAssets : [];
+        if (!html || !html.length) return;
+        const patch = { figmaClipboardHtml: html };
+        if (fontAssets.length) patch.fontFaces = fontAssets;
+        await new Promise((resolve) => {
+          try {
+            chrome.runtime.sendMessage(
+              {
+                type: "MERGE_ITEM_DATA",
+                payload: { id: itemId, patch },
+              },
+              (resp) => {
+                if (resp && resp.ok && resp.item) {
+                  const idx = sessionCaptures.findIndex((c) => c && c.id === itemId);
+                  if (idx >= 0) sessionCaptures[idx] = resp.item;
+                }
+                resolve();
+              }
+            );
+          } catch (_) {
+            resolve();
+          }
+        });
+      } catch (bakeErr) {
+        console.debug(
+          "[Acopio] background Figma bake skipped:",
+          String((bakeErr && bakeErr.message) || bakeErr)
+        );
+      } finally {
+        figmaBakeInFlight.delete(itemId);
+      }
+    };
+    setTimeout(run, 0);
   }
 
   function onCollectClick() {
@@ -2938,7 +3397,13 @@
         showInlineError(result.error || "Couldn't save this item.");
         return;
       }
-      sessionCaptures.push(result.item);
+      if (result.updated && result.item && result.item.id) {
+        const idx = sessionCaptures.findIndex((c) => c && c.id === result.item.id);
+        if (idx >= 0) sessionCaptures[idx] = result.item;
+        else sessionCaptures.push(result.item);
+      } else {
+        sessionCaptures.push(result.item);
+      }
       if (sessionCaptures.length > MAX_STACK_SLOTS) sessionCaptures.shift();
       // When collecting into this site's folder, result.count is authoritative.
       // For a Collection destination, bump the collection stack total locally
@@ -2984,6 +3449,20 @@
         };
         verifyImg.src = data.url;
       }
+      // Same full-quality Figma bake as before — runs after Collect UI returns.
+      if (
+        tagInfo.type === "component" &&
+        result.item &&
+        result.item.id &&
+        el &&
+        el.isConnected
+      ) {
+        scheduleFigmaClipboardBake(el, result.item.id, {
+          name: (typeof selectorFor === "function" && selectorFor(el)) || "Component",
+          width: data.boundingBoxWidth,
+          height: data.boundingBoxHeight,
+        });
+      }
       pendingStackAnim = true;
       // The one deliberate high-craft moment (design-tokens.md): the button
       // morphs into a checkmark with a spring overshoot instead of jumping
@@ -2992,14 +3471,16 @@
       // beat rather than a silent instant swap.
       if (btn) {
         btn.classList.add("is-collected");
-        btn.innerHTML = isFab ? Acopio.ICONS.check : `${Acopio.ICONS.check}<span>Collected</span>`;
+        btn.innerHTML = isFab
+          ? Acopio.ICONS.check
+          : `${Acopio.ICONS.check}<span>${result.updated ? "Updated" : "Collected"}</span>`;
       }
       const myFinalizeGeneration = myGeneration;
       linkCollection.then(() => {
         setTimeout(() => {
           if (myFinalizeGeneration !== generation) return; // moved on before the beat finished
           const destLabel = selectedCollectionId ? selectedFolderName : result.hostname;
-          showToast(`Collected to ${destLabel}`);
+          showToast(result.updated ? `Updated in ${destLabel}` : `Collected to ${destLabel}`);
           // Refresh just the action row in place instead of hide()'ing the
           // whole tooltip — the old behavior fully tore the card down, and
           // since the mouse was usually still sitting right over the same
@@ -3086,6 +3567,11 @@
     noteValue = ""; // a genuinely different element — don't carry the last one's note over
     cardDragOffset = null; // new element — start at the natural computed position again
     snapshotCapture(el, tagInfo);
+    // Prefetch Figma converter while the user reads the tooltip — Collect
+    // bake / Copy then start warm with no fidelity change.
+    if (tagInfo && tagInfo.type === "component" && window.AcopioFigmaClipboard) {
+      AcopioFigmaClipboard.ensureLoaded().catch(() => {});
+    }
     render();
     // Some sites (Pinterest's own "GIF" pins are the clearest real case)
     // lazily swap in the real <video>/media element several hundred ms
@@ -3102,7 +3588,13 @@
     const initialFingerprint = captureFingerprint(recheckEl, tagInfo);
     setTimeout(() => {
       if (currentTarget !== recheckEl) return; // moved on to something else already
-      if (noteFieldHasFocus || isSaving || folderMenuOpen) return; // don't yank the tooltip away mid-interaction
+      // isCopying covers the async copy operation itself; copyFeedbackActive
+      // covers the checkmark still being shown afterward — a rebuild during
+      // either destroys the very button displaying that feedback (confirmed
+      // live: the checkmark needed several Copy clicks before it would
+      // reliably show, because this recheck kept firing mid-flash and
+      // replacing the card before the 1200ms display finished).
+      if (noteFieldHasFocus || isSaving || folderMenuOpen || isCopying || copyFeedbackActive) return; // don't yank the tooltip away mid-interaction
       if (recheckEl.tagName.toLowerCase() === "iframe") return;
       const freshTagInfo = Acopio.detectTag(recheckEl);
       const freshFingerprint = captureFingerprint(recheckEl, freshTagInfo);
@@ -3210,14 +3702,24 @@
     "click",
     (e) => {
       if (!isVisible()) return;
-      const realTarget = e.composedPath()[0];
+      const path = e.composedPath();
+      const realTarget = path[0];
       // Folder menu is portaled onto documentElement (not inside cardEl).
-      if (folderMenuEl && folderMenuEl.contains(realTarget)) return;
-      if (realTarget && realTarget.closest && realTarget.closest("[data-acopio-folder-menu]")) return;
+      // Walk composedPath so SVG children inside the + button still count.
+      const inFolderMenu =
+        Boolean(folderMenuEl) &&
+        path.some(
+          (n) =>
+            n === folderMenuEl ||
+            (n && n.nodeType === 1 && (folderMenuEl.contains(n) || (n.closest && n.closest("[data-acopio-folder-menu]"))))
+        );
+      if (inFolderMenu) return;
       if (cardEl && cardEl.contains(realTarget)) {
         // Clicking elsewhere on the card (not the folder control) closes
         // an open folder menu without dismissing the tooltip.
-        if (folderMenuOpen && !realTarget.closest(".folder-btn")) closeFolderMenu();
+        if (folderMenuOpen && !(realTarget && realTarget.closest && realTarget.closest(".folder-btn"))) {
+          closeFolderMenu();
+        }
         return;
       }
       if (folderMenuOpen) {
@@ -3229,12 +3731,286 @@
     true
   );
 
+  // --- First-run walkthrough page preview --------------------------------
+  // Side panel step 1 asks the page to show a ghost collect tooltip on a
+  // real element so "turn on hover-capture → tooltip appears here" is
+  // concrete, not a vague instruction. Separate from the live hover card.
+  let walkPreviewHost = null;
+  let walkPreviewOutline = null;
+  let walkPreviewResizeObserver = null;
+  let walkPreviewAnchorEl = null;
+
+  function onWalkPreviewViewportChange() {
+    positionWalkthroughPreview();
+    placeWalkthroughCaption();
+  }
+
+  let walkCaptionEl = null;
+  function placeWalkthroughCaption() {
+    if (!walkCaptionEl) return;
+    if (!walkPreviewAnchorEl) {
+      walkCaptionEl.style.left = "24px";
+      walkCaptionEl.style.top = "24px";
+      return;
+    }
+    const r = walkPreviewAnchorEl.getBoundingClientRect();
+    walkCaptionEl.style.left = `${Math.max(16, r.left)}px`;
+    walkCaptionEl.style.top = `${Math.max(16, r.top - 36)}px`;
+  }
+
+  function findWalkthroughDemoEl() {
+    const selectors = [
+      "a.button",
+      "button",
+      "[role='button']",
+      "a[href]",
+      "input[type='submit']",
+      "h1",
+      "h2",
+    ];
+    for (const sel of selectors) {
+      const nodes = document.querySelectorAll(sel);
+      for (const el of nodes) {
+        if (Acopio.isOwnNode(el)) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) {
+          continue;
+        }
+        const r = el.getBoundingClientRect();
+        if (r.width < 48 || r.height < 20) continue;
+        if (r.top < 48 || r.bottom > window.innerHeight - 24) continue;
+        if (r.left < 8 || r.right > window.innerWidth - 8) continue;
+        return el;
+      }
+    }
+    return null;
+  }
+
+  function hideWalkthroughPreview() {
+    if (walkPreviewResizeObserver) {
+      walkPreviewResizeObserver.disconnect();
+      walkPreviewResizeObserver = null;
+    }
+    window.removeEventListener("scroll", onWalkPreviewViewportChange, true);
+    window.removeEventListener("resize", onWalkPreviewViewportChange, true);
+    if (walkPreviewOutline && walkPreviewOutline.parentNode) walkPreviewOutline.remove();
+    walkPreviewOutline = null;
+    if (walkPreviewHost && walkPreviewHost.parentNode) walkPreviewHost.remove();
+    walkPreviewHost = null;
+    walkPreviewAnchorEl = null;
+    walkCaptionEl = null;
+  }
+
+  function positionWalkthroughPreview() {
+    if (!walkPreviewHost || !walkPreviewAnchorEl) return;
+    const r = walkPreviewAnchorEl.getBoundingClientRect();
+    if (walkPreviewOutline) {
+      walkPreviewOutline.style.top = `${Math.max(0, r.top - 4)}px`;
+      walkPreviewOutline.style.left = `${Math.max(0, r.left - 4)}px`;
+      walkPreviewOutline.style.width = `${r.width + 8}px`;
+      walkPreviewOutline.style.height = `${r.height + 8}px`;
+    }
+    const card = walkPreviewHost.shadowRoot && walkPreviewHost.shadowRoot.querySelector(".walk-card");
+    if (!card) return;
+    const cardW = 240;
+    const cardH = card.offsetHeight || 160;
+    let left = r.right + 16;
+    let top = r.top;
+    if (left + cardW > window.innerWidth - 16) left = Math.max(16, r.left - cardW - 16);
+    if (top + cardH > window.innerHeight - 16) top = Math.max(16, window.innerHeight - cardH - 16);
+    if (top < 16) top = 16;
+    card.style.left = `${left}px`;
+    card.style.top = `${top}px`;
+  }
+
+  function showWalkthroughPreview() {
+    hideWalkthroughPreview();
+    const el = findWalkthroughDemoEl();
+    walkPreviewAnchorEl = el;
+
+    walkPreviewOutline = document.createElement("div");
+    walkPreviewOutline.setAttribute("data-acopio", "walkthrough-outline");
+    Object.assign(walkPreviewOutline.style, {
+      position: "fixed",
+      zIndex: "2147483646",
+      border: "2px dashed #1D3461",
+      borderRadius: "8px",
+      pointerEvents: "none",
+      boxSizing: "border-box",
+    });
+    document.documentElement.appendChild(walkPreviewOutline);
+    Acopio.registerOwnRoot(walkPreviewOutline);
+
+    walkPreviewHost = document.createElement("div");
+    walkPreviewHost.setAttribute("data-acopio", "walkthrough-preview");
+    Object.assign(walkPreviewHost.style, {
+      position: "fixed",
+      inset: "0",
+      zIndex: "2147483647",
+      pointerEvents: "none",
+    });
+    Acopio.registerOwnRoot(walkPreviewHost);
+    const shadow = walkPreviewHost.attachShadow({ mode: "open" });
+    const label = el
+      ? (el.innerText || el.textContent || el.getAttribute("aria-label") || "Button").trim().slice(0, 40)
+      : "Get started";
+    const hostLabel = (() => {
+      try {
+        return location.hostname || "this page";
+      } catch (_) {
+        return "this page";
+      }
+    })();
+    shadow.innerHTML = `
+      <style>
+        :host { all: initial; }
+        * { box-sizing: border-box; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        .walk-caption {
+          position: fixed; z-index: 1; pointer-events: none;
+          font-size: 12px; font-weight: 650; color: #1D3461;
+          background: rgba(255,255,255,0.92); padding: 4px 8px; border-radius: 8px;
+          border: 1px solid rgba(23,24,26,0.09);
+          max-width: 220px; line-height: 1.35;
+        }
+        .walk-card {
+          position: fixed; width: 240px; pointer-events: auto;
+          background: #fff; color: #17181A; border-radius: 20px;
+          border: 1px solid rgba(23,24,26,0.09);
+          box-shadow: 0 8px 24px rgba(23,24,26,0.14), 0 24px 48px rgba(23,24,26,0.16);
+          padding: 16px;
+        }
+        .walk-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+        .walk-badge {
+          font-size: 12px; font-weight: 650; padding: 4px 8px; border-radius: 8px;
+          background: #FBF0DC; color: #B07D1F;
+        }
+        .walk-title { font-size: 16px; font-weight: 650; margin: 0 0 4px; }
+        .walk-meta { font-size: 12px; color: #6B6E76; margin: 0 0 16px; }
+        .walk-collect {
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+          width: 100%; border: none; border-radius: 8px; padding: 10px 16px;
+          background: #1D3461; color: #fff; font: inherit; font-size: 14px; font-weight: 650;
+          cursor: pointer;
+        }
+        .walk-collect:hover { filter: brightness(1.08); }
+        .walk-hint { font-size: 12px; color: #6B6E76; margin: 8px 0 0; text-align: center; }
+      </style>
+      <div class="walk-caption" id="walk-caption">Appears on the page after you turn this on ↓</div>
+      <div class="walk-card" role="dialog" aria-label="Preview of the collect tooltip">
+        <div class="walk-head"><span class="walk-badge">Button</span></div>
+        <p class="walk-title"></p>
+        <p class="walk-meta"></p>
+        <button type="button" class="walk-collect" id="walk-collect">+ Collect</button>
+        <p class="walk-hint">Preview — turn on hover-capture to use this for real</p>
+      </div>
+    `;
+    shadow.querySelector(".walk-title").textContent = label || "Get started";
+    shadow.querySelector(".walk-meta").textContent = hostLabel;
+    walkCaptionEl = shadow.getElementById("walk-caption");
+    const collectBtn = shadow.getElementById("walk-collect");
+    collectBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        chrome.storage.local.set({ acopioActive: true, acopioNotesActive: false });
+        chrome.runtime.sendMessage({ type: "WALKTHROUGH_PREVIEW_ACTIVATE" }).catch(() => {});
+      } catch (_) {}
+      hideWalkthroughPreview();
+    });
+    document.documentElement.appendChild(walkPreviewHost);
+
+    positionWalkthroughPreview();
+    placeWalkthroughCaption();
+    window.addEventListener("scroll", onWalkPreviewViewportChange, true);
+    window.addEventListener("resize", onWalkPreviewViewportChange, true);
+    if (el && typeof ResizeObserver !== "undefined") {
+      walkPreviewResizeObserver = new ResizeObserver(onWalkPreviewViewportChange);
+      walkPreviewResizeObserver.observe(el);
+    }
+
+    // No good page target (blank/chrome page) — still show a floating
+    // preview card so step 1 is never empty.
+    if (!el) {
+      const card = shadow.querySelector(".walk-card");
+      card.style.left = "24px";
+      card.style.top = "96px";
+      if (walkPreviewOutline) walkPreviewOutline.style.display = "none";
+      if (walkCaptionEl) {
+        walkCaptionEl.style.left = "24px";
+        walkCaptionEl.style.top = "64px";
+      }
+    }
+  }
+
+  function showWalkthroughToolbarHint() {
+    try {
+      hideWalkthroughPreview();
+      walkPreviewHost = document.createElement("div");
+      walkPreviewHost.setAttribute("data-acopio", "walkthrough-toolbar-hint");
+      Object.assign(walkPreviewHost.style, {
+        position: "fixed",
+        inset: "0",
+        zIndex: "2147483647",
+        pointerEvents: "none",
+      });
+      Acopio.registerOwnRoot(walkPreviewHost);
+      const shadow = walkPreviewHost.attachShadow({ mode: "open" });
+      const panelIcon = Acopio.ICONS.panel || "";
+      const cursorIcon = Acopio.ICONS.cursor || "";
+      shadow.innerHTML = `
+      <style>
+        :host { all: initial; }
+        * { box-sizing: border-box; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        .hint-wrap {
+          position: fixed; right: 16px; bottom: 16px;
+          display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+          pointer-events: none;
+        }
+        .hint-caption {
+          font-size: 12px; font-weight: 650; color: #1D3461;
+          background: rgba(255,255,255,0.96); padding: 4px 8px; border-radius: 8px;
+          border: 1px solid rgba(23,24,26,0.09); max-width: 200px; line-height: 1.35;
+          text-align: right;
+        }
+        .hint-pill {
+          display: flex; align-items: center; gap: 4px;
+          background: #fff; border: 1px solid rgba(23,24,26,0.18);
+          border-radius: 999px; padding: 4px; box-shadow: 0 8px 24px rgba(23,24,26,0.14);
+        }
+        .hint-btn {
+          width: 32px; height: 32px; border-radius: 999px; border: none; background: transparent;
+          color: #6B6E76; display: flex; align-items: center; justify-content: center;
+        }
+        .hint-btn svg { width: 15px; height: 15px; }
+        .hint-btn.is-focus {
+          background: rgba(29,52,97,0.10); color: #1D3461;
+          box-shadow: 0 0 0 3px #fff, 0 0 0 5px #1D3461, 0 0 0 8px rgba(29,52,97,0.12);
+        }
+      </style>
+      <div class="hint-wrap">
+        <div class="hint-caption">After Collapse — click this to expand the panel again</div>
+        <div class="hint-pill" role="img" aria-label="Floating toolbar preview">
+          <span class="hint-btn" aria-hidden="true">${cursorIcon}</span>
+          <span class="hint-btn is-focus" aria-hidden="true">${panelIcon}</span>
+        </div>
+      </div>
+    `;
+      document.documentElement.appendChild(walkPreviewHost);
+    } catch (_) {
+      // Extension reload mid-tour invalidates chrome APIs — never leave a half-built hint.
+      hideWalkthroughPreview();
+    }
+  }
+
   Acopio.overlay = {
     showFor,
     hide,
     isVisible,
     isMovingTowardCard,
     showToast,
+    showWalkthroughPreview,
+    showWalkthroughToolbarHint,
+    hideWalkthroughPreview,
     // Any tooltip sub-state where losing the current card mid-decision
     // would be surprising/destructive (editing a note, deciding on an
     // oversize-capture confirmation, or an in-flight save) — content.js's
@@ -3248,6 +4024,13 @@
     // the outside that looks exactly like "clicked Collect, tooltip
     // vanished, nothing happened," even though the save may have gone
     // through. Blocking hover during the save closes that gap.
-    isBusy: () => noteFieldHasFocus || isSaving || folderMenuOpen,
+    isBusy: () =>
+      noteFieldHasFocus ||
+      isSaving ||
+      isCopying ||
+      isCollectingPreview ||
+      rootsHideCount > 0 ||
+      folderMenuOpen ||
+      Boolean(walkPreviewHost),
   };
 })();

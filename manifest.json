@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Acopio — Gather. Connect. Simplify",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Hover any element on any site to collect colors, fonts, images, and components into a per-site design research library.",
   "permissions": [
     "activeTab",
@@ -12,7 +12,8 @@
     "sidePanel",
     "favicon",
     "identity",
-    "clipboardWrite"
+    "clipboardWrite",
+    "scripting"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -61,6 +62,7 @@
         "src/content/shared.js",
         "src/content/sanitize.js",
         "src/content/tagger.js",
+        "src/content/figma-clipboard.js",
         "src/content/overlay.js",
         "src/content/toolbar.js",
         "src/content/notes.js",

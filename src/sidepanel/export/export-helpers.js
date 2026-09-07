@@ -410,23 +410,95 @@
     canvas.width = 320;
     canvas.height = 200;
     const ctx = canvas.getContext("2d");
-    ctx.fillStyle = data.hex || "#cccccc";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const w = canvas.width;
+    const h = canvas.height;
+    const css =
+      data && data.isGradient && typeof data.gradientStops === "string" ? data.gradientStops : "";
+    const stops =
+      css && typeof Acopio.parseGradientStops === "function" ? Acopio.parseGradientStops(css) : [];
+    if (stops.length >= 2) {
+      const dir =
+        typeof Acopio.parseGradientDirection === "function"
+          ? Acopio.parseGradientDirection(css)
+          : "right";
+      let grad;
+      if (dir === "down") grad = ctx.createLinearGradient(0, 0, 0, h);
+      else if (dir === "up") grad = ctx.createLinearGradient(0, h, 0, 0);
+      else if (dir === "left") grad = ctx.createLinearGradient(w, 0, 0, 0);
+      else grad = ctx.createLinearGradient(0, 0, w, 0);
+      stops.forEach((hex, i) => {
+        grad.addColorStop(i / (stops.length - 1), hex);
+      });
+      ctx.fillStyle = grad;
+    } else {
+      ctx.fillStyle = (data && data.hex) || "#cccccc";
+    }
+    ctx.fillRect(0, 0, w, h);
     return H.canvasToPngBlob(canvas);
   };
 
+  H.colorSwatchSvgBlob = function colorSwatchSvgBlob(data) {
+    const markup = Acopio.colorSwatchSvgMarkup(data);
+    return new Blob([markup], { type: "image/svg+xml" });
+  };
+
+  H.colorsSwatchSvgBlob = function colorsSwatchSvgBlob(colorDatas) {
+    const markup = Acopio.colorsSwatchSvgMarkup(colorDatas);
+    return new Blob([markup], { type: "image/svg+xml" });
+  };
+
   H.fontSamplePngBlob = function fontSamplePngBlob(data) {
+    const sample = (data.sampleText || data.family || "Aa").trim() || "Aa";
+    const size = Math.min(Math.max(data.sizePx || 32, 12), 72);
+    const weight = data.weight || 400;
+    const family = data.fallbackStack || "sans-serif";
+    const fontCss = `${weight} ${size}px ${family}`;
+    const metrics = Acopio.fontMetricsLine(data);
+    const color = Acopio.fontColorHex(data);
+    const metaFont = "500 12px Inter, Helvetica, Arial, sans-serif";
+    const padX = 16;
+    const maxW = 1600;
+    const natural = Acopio.measureTextWidthPx(sample, fontCss);
+    const contentW = Math.min(Math.max(natural, 448), maxW - padX * 2);
+    const lines = Acopio.wrapTextToWidth(sample, contentW, fontCss);
+    const lineH = Math.round(data.lineHeightPx || size * 1.25);
+    let width = Math.ceil(
+      Math.max(
+        480,
+        ...lines.map((l) => Acopio.measureTextWidthPx(l, fontCss)),
+        metrics ? Acopio.measureTextWidthPx(metrics, metaFont) : 0,
+        color ? Acopio.measureTextWidthPx(color, metaFont) + 20 : 0
+      ) + padX * 2
+    );
+    width = Math.min(width, maxW);
+    const metaBlock = (metrics ? 18 : 0) + (color ? 22 : 0);
+    const height = Math.max(120, 24 + lines.length * lineH + 12 + metaBlock + 24);
     const canvas = document.createElement("canvas");
-    canvas.width = 480;
-    canvas.height = 160;
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#17181A";
-    const size = Math.min(data.sizePx || 32, 72);
-    ctx.font = `${data.weight || 400} ${size}px ${data.fallbackStack || "sans-serif"}`;
-    ctx.textBaseline = "middle";
-    ctx.fillText((data.sampleText || data.family || "Aa").slice(0, 24) || "Aa", 16, canvas.height / 2);
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = data.colorHex || "#17181A";
+    ctx.font = fontCss;
+    ctx.textBaseline = "top";
+    lines.forEach((line, i) => {
+      ctx.fillText(line, padX, 24 + i * lineH);
+    });
+    let y = 24 + lines.length * lineH + 12;
+    ctx.font = metaFont;
+    ctx.fillStyle = "#6B6E76";
+    if (metrics) {
+      ctx.fillText(metrics, padX, y);
+      y += 18;
+    }
+    if (color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(padX, y + 1, 12, 12);
+      ctx.fillStyle = "#17181A";
+      ctx.font = "650 12px Inter, Helvetica, Arial, sans-serif";
+      ctx.fillText(color, padX + 20, y);
+    }
     return H.canvasToPngBlob(canvas);
   };
 
@@ -488,35 +560,86 @@
   };
 
   H.inlineImageUrl = async function inlineImageUrl(node) {
-    if (!node.url) return;
+    if (!node || !node.url) return;
+    if (node.inlineDataUrl) return;
     try {
-      const resp = await fetch(node.url);
-      if (!resp.ok) return;
-      const contentType = resp.headers.get("content-type") || "";
-      if (contentType.includes("svg") || /\.svg(\?|#|$)/i.test(node.url)) {
-        const svgText = await resp.text();
-        const dataUrl = await H.svgMarkupToPngDataUrl(svgText, null, node.width, node.height);
-        if (dataUrl) node.inlineDataUrl = dataUrl;
+      // data: URLs are already portable — keep them without a network fetch
+      if (String(node.url).startsWith("data:")) {
+        node.inlineDataUrl = node.url;
         return;
       }
-      const blob = await resp.blob();
-      node.inlineDataUrl = await H.blobToDataUrl(blob);
+      const resp = await fetch(node.url);
+      if (resp.ok) {
+        const contentType = resp.headers.get("content-type") || "";
+        if (contentType.includes("svg") || /\.svg(\?|#|$)/i.test(node.url)) {
+          const svgText = await resp.text();
+          const dataUrl = await H.svgMarkupToPngDataUrl(svgText, null, node.width, node.height);
+          if (dataUrl) node.inlineDataUrl = dataUrl;
+          return;
+        }
+        const blob = await resp.blob();
+        node.inlineDataUrl = await H.blobToDataUrl(blob);
+        return;
+      }
     } catch (_) {
-      // fall through — plugin falls back to a placeholder for this leaf
+      // try canvas decode below
+    }
+    // CORS-friendly CDN images: decode via <img crossOrigin> + canvas.
+    try {
+      const dataUrl = await new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        const done = (v) => resolve(v);
+        img.onload = () => {
+          try {
+            const c = document.createElement("canvas");
+            const maxEdge = 1024;
+            const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+            c.width = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
+            c.height = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
+            c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+            done(c.toDataURL("image/png"));
+          } catch (_) {
+            done(null);
+          }
+        };
+        img.onerror = () => done(null);
+        img.src = node.url;
+      });
+      if (dataUrl) node.inlineDataUrl = dataUrl;
+    } catch (_) {
+      // plugin falls back to placeholder / Collect screenshot
     }
   };
 
   H.inlineTreeAssets = async function inlineTreeAssets(node) {
     if (!node || typeof node !== "object") return;
-    if (node.kind === "image" && node.url) {
+    if (node.kind === "image" && (node.url || node.inlineDataUrl)) {
       await H.inlineImageUrl(node);
     } else if (node.kind === "icon-placeholder" && node.svgMarkup) {
-      const dataUrl = await H.svgMarkupToPngDataUrl(node.svgMarkup, node.resolvedColor, node.width, node.height);
-      if (dataUrl) node.inlineDataUrl = dataUrl;
+      if (!node.inlineDataUrl) {
+        const dataUrl = await H.svgMarkupToPngDataUrl(node.svgMarkup, node.resolvedColor, node.width, node.height);
+        if (dataUrl) node.inlineDataUrl = dataUrl;
+      }
     }
     if (Array.isArray(node.children)) {
       await Promise.all(node.children.map(H.inlineTreeAssets));
     }
+  };
+
+  H.countTreeMediaHealth = function countTreeMediaHealth(node) {
+    let needed = 0;
+    let ready = 0;
+    function walk(n) {
+      if (!n || typeof n !== "object") return;
+      if (n.kind === "image" || n.kind === "icon-placeholder") {
+        needed += 1;
+        if (n.inlineDataUrl) ready += 1;
+      }
+      if (Array.isArray(n.children)) n.children.forEach(walk);
+    }
+    walk(node);
+    return { needed, ready };
   };
 
   window.AcopioExportHelpers = H;

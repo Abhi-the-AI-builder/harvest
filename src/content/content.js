@@ -119,10 +119,86 @@
     openTooltipFor(active);
   });
 
-  chrome.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message && message.type === "OPEN_TOOLTIP_AT_CONTEXT_TARGET") {
       if (lastContextTarget) openTooltipFor(lastContextTarget);
+      return undefined;
     }
+    if (message && message.type === "ACOPIO_WALKTHROUGH_PREVIEW") {
+      if (!Acopio.overlay) return undefined;
+      if (message.show) {
+        if (message.kind === "toolbar" && typeof Acopio.overlay.showWalkthroughToolbarHint === "function") {
+          Acopio.overlay.showWalkthroughToolbarHint();
+        } else if (typeof Acopio.overlay.showWalkthroughPreview === "function") {
+          Acopio.overlay.showWalkthroughPreview();
+        }
+      } else if (typeof Acopio.overlay.hideWalkthroughPreview === "function") {
+        Acopio.overlay.hideWalkthroughPreview();
+      }
+      return undefined;
+    }
+    if (message && message.type === "BAKE_FIGMA_CLIPBOARD") {
+      (async () => {
+        try {
+          const payload = message.payload || {};
+          let el = null;
+          if (payload.selector) {
+            try {
+              el = document.querySelector(payload.selector);
+            } catch (_) {}
+          }
+          if (!el || !el.isConnected) {
+            sendResponse({ ok: false, error: "Component not on this page — open the source tab and Copy again, or Collect again." });
+            return;
+          }
+          if (!window.AcopioFigmaClipboard) {
+            sendResponse({ ok: false, error: "Figma converter not loaded." });
+            return;
+          }
+          await AcopioFigmaClipboard.ensureLoaded();
+          const baked = await Promise.race([
+            AcopioFigmaClipboard.convertLiveToClipboardHtml(el, {
+              name: payload.name || "Component",
+              width: payload.width,
+              height: payload.height,
+              fontAssets: payload.fontAssets || [],
+            }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Figma bake timed out")), 20000)
+            ),
+          ]);
+          const html = typeof baked === "string" ? baked : baked && baked.html;
+          const fontAssets =
+            typeof baked === "object" && baked && baked.fontAssets ? baked.fontAssets : [];
+          if (!html) {
+            sendResponse({ ok: false, error: "Convert returned empty." });
+            return;
+          }
+          if (payload.itemId) {
+            try {
+              chrome.runtime.sendMessage({
+                type: "MERGE_ITEM_DATA",
+                payload: {
+                  id: payload.itemId,
+                  patch: {
+                    figmaClipboardHtml: html,
+                    ...(fontAssets.length ? { fontFaces: fontAssets } : {}),
+                  },
+                },
+              });
+            } catch (_) {}
+          }
+          sendResponse({ ok: true, html, fontAssets });
+        } catch (err) {
+          sendResponse({
+            ok: false,
+            error: String((err && err.message) || err || "Bake failed."),
+          });
+        }
+      })();
+      return true;
+    }
+    return undefined;
   });
 
   function openTooltipFor(el) {
@@ -191,8 +267,9 @@
   // already-computed final rect (getBoundingClientRect) rather than
   // interpreting flexbox/grid rules, so nothing here needs to understand
   // CSS layout — it just records where things already ended up.
-  const LAYER_SKIP_TAGS = new Set(["script", "style", "noscript", "iframe", "object", "embed", "template"]);
-  const MAX_TREE_NODES = 80;
+  const LAYER_SKIP_TAGS = new Set(["script", "style", "noscript", "template"]);
+  const LAYER_EMBED_TAGS = new Set(["iframe", "object", "embed"]);
+  const MAX_TREE_NODES = 500;
 
   function layerIsVisible(style, rect) {
     if (style.display === "none" || style.visibility === "hidden") return false;
@@ -264,13 +341,634 @@
   // first corner token is read (a "8px 8px 0 0" per-corner shorthand
   // collapses to one value) — an approximation, fine for a position
   // snapshot that isn't claiming pixel-perfect reconstruction anyway.
-  function resolveRadius(style, rect) {
-    const raw = (style.borderRadius || "0").split(" ")[0];
-    if (raw.endsWith("%")) {
-      const pct = parseFloat(raw) || 0;
+  function resolveRadiusToken(raw, rect) {
+    const token = (raw || "0").split(" ")[0];
+    if (token.endsWith("%")) {
+      const pct = parseFloat(token) || 0;
       return Math.round((pct / 100) * Math.min(rect.width, rect.height));
     }
-    return parseFloat(raw) || 0;
+    return parseFloat(token) || 0;
+  }
+  function resolveRadius(style, rect) {
+    return resolveRadiusToken(style.borderRadius, rect);
+  }
+  // Per-corner radii for Figma (topLeftRadius…); `radius` stays the max for
+  // older plugin builds that only read a single cornerRadius.
+  function resolveCornerRadii(style, rect) {
+    const tl = resolveRadiusToken(style.borderTopLeftRadius, rect);
+    const tr = resolveRadiusToken(style.borderTopRightRadius, rect);
+    const br = resolveRadiusToken(style.borderBottomRightRadius, rect);
+    const bl = resolveRadiusToken(style.borderBottomLeftRadius, rect);
+    return {
+      radius: Math.max(tl, tr, br, bl),
+      radiusTL: tl,
+      radiusTR: tr,
+      radiusBR: br,
+      radiusBL: bl,
+    };
+  }
+
+  // All box-shadows → Figma DROP_SHADOW / INNER_SHADOW (html.to.design keeps stacks;
+  // we previously kept only the first outer shadow).
+  function parseBoxShadowEffects(boxShadow) {
+    if (!boxShadow || boxShadow === "none") return [];
+    const parts = [];
+    let depth = 0;
+    let cur = "";
+    for (let i = 0; i < boxShadow.length; i++) {
+      const ch = boxShadow[i];
+      if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+      if (ch === "," && depth === 0) {
+        parts.push(cur.trim());
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    if (cur.trim()) parts.push(cur.trim());
+    const effects = [];
+    for (const part of parts) {
+      const inset = /\binset\b/i.test(part);
+      const colorMatch = part.match(/rgba?\([^)]+\)/);
+      const colorInfo = colorMatch ? Acopio.rgbToHex(colorMatch[0]) : null;
+      if (!colorInfo) continue;
+      const nums = part
+        .replace(/rgba?\([^)]+\)/g, "")
+        .replace(/\binset\b/gi, "")
+        .trim()
+        .split(/\s+/)
+        .map(parseFloat)
+        .filter((n) => Number.isFinite(n));
+      if (nums.length < 2) continue;
+      effects.push({
+        type: inset ? "INNER_SHADOW" : "DROP_SHADOW",
+        offsetX: nums[0] || 0,
+        offsetY: nums[1] || 0,
+        radius: nums[2] || 0,
+        spread: nums[3] || 0,
+        color: {
+          r: colorInfo.r / 255,
+          g: colorInfo.g / 255,
+          b: colorInfo.b / 255,
+          a: colorInfo.a,
+        },
+      });
+    }
+    return effects;
+  }
+
+  function parseFilterBlurEffect(filter) {
+    if (!filter || filter === "none") return null;
+    const m = String(filter).match(/blur\(\s*([0-9.]+)px\s*\)/i);
+    if (!m) return null;
+    const radius = parseFloat(m[1]);
+    if (!Number.isFinite(radius) || radius <= 0) return null;
+    return { type: "LAYER_BLUR", radius };
+  }
+
+  // ::before / ::after — SaaS CTAs (chevrons, badge dots, icon fonts) vanish
+  // without this. Approximate size/position from computed style (no pseudo rect API).
+  function extractPseudoLayers(el, elRect) {
+    const out = [];
+    for (const which of ["::before", "::after"]) {
+      let ps;
+      try {
+        ps = window.getComputedStyle(el, which);
+      } catch (_) {
+        continue;
+      }
+      const content = (ps.content || "").trim();
+      if (!content || content === "none" || content === "normal") continue;
+      if (ps.display === "none" || ps.visibility === "hidden") continue;
+      if (parseFloat(ps.opacity) === 0) continue;
+
+      let width = parseFloat(ps.width);
+      let height = parseFloat(ps.height);
+      const fontSize = parseFloat(ps.fontSize) || 12;
+      if (!Number.isFinite(width) || width <= 0) width = fontSize;
+      if (!Number.isFinite(height) || height <= 0) {
+        height = parseFloat(ps.lineHeight) || fontSize;
+      }
+      if (width < 1 && height < 1) continue;
+
+      const pos = ps.position;
+      let x = 0;
+      let y = 0;
+      if (pos === "absolute" || pos === "fixed") {
+        const left = parseFloat(ps.left);
+        const top = parseFloat(ps.top);
+        const right = parseFloat(ps.right);
+        const bottom = parseFloat(ps.bottom);
+        if (Number.isFinite(left)) x = Math.round(left);
+        else if (Number.isFinite(right)) x = Math.round(elRect.width - right - width);
+        if (Number.isFinite(top)) y = Math.round(top);
+        else if (Number.isFinite(bottom)) y = Math.round(elRect.height - bottom - height);
+      } else if (which === "::after") {
+        x = Math.max(0, Math.round(elRect.width - width));
+      }
+
+      const opacity = ownOpacity(ps);
+      const positioning =
+        pos === "absolute" || pos === "fixed" ? "ABSOLUTE" : undefined;
+      const urlMatch = content.match(/^url\(\s*["']?([^"')]+)["']?\s*\)$/i);
+      const quoted = content.match(/^["']([\s\S]*)["']$/);
+      const text = quoted ? quoted[1] : "";
+
+      if (urlMatch) {
+        out.push({
+          kind: "image",
+          x,
+          y,
+          width: Math.round(width),
+          height: Math.round(height),
+          url: urlMatch[1],
+          opacity,
+          sizing: MEDIA_SIZING,
+          positioning,
+          pseudo: which,
+        });
+        continue;
+      }
+
+      const bgImg = ps.backgroundImage;
+      if ((!text || text === "") && bgImg && bgImg !== "none" && !bgImg.includes("gradient")) {
+        const m = bgImg.match(/url\(["']?([^"')]+)["']?\)/);
+        if (m) {
+          out.push({
+            kind: "image",
+            x,
+            y,
+            width: Math.round(width),
+            height: Math.round(height),
+            url: m[1],
+            opacity,
+            sizing: { horizontal: "FILL", vertical: "FILL" },
+            backgroundSize: (ps.backgroundSize || "cover").split(",")[0].trim().toLowerCase(),
+            backgroundPosition: (ps.backgroundPosition || "center").split(",")[0].trim(),
+            positioning,
+            pseudo: which,
+          });
+          continue;
+        }
+      }
+
+      const bg = Acopio.rgbToHex(ps.backgroundColor);
+      const gradientDesc = Acopio.parseGradientDescriptor(ps.backgroundImage);
+      const isGradient = Boolean(gradientDesc);
+      if ((!text || text === "") && isGradient) {
+        out.push({
+          kind: "frame",
+          x,
+          y,
+          width: Math.round(width),
+          height: Math.round(height),
+          fill: null,
+          fillOpacity: 1,
+          gradientStops: gradientDesc.stops,
+          gradientDirection: gradientDesc.direction,
+          gradientType: gradientDesc.type,
+          opacity,
+          children: [],
+          layout: null,
+          positioning,
+          pseudo: which,
+        });
+        continue;
+      }
+      if ((!text || text === "") && bg && bg.a > 0.02) {
+        out.push({
+          kind: "frame",
+          x,
+          y,
+          width: Math.round(width),
+          height: Math.round(height),
+          fill: bg.hex,
+          fillOpacity: bg.a,
+          opacity,
+          children: [],
+          layout: null,
+          positioning,
+          pseudo: which,
+        });
+        continue;
+      }
+
+      if (text) {
+        const colorInfo = Acopio.rgbToHex(ps.color);
+        const typo = textTypoExtras(ps);
+        out.push({
+          kind: "text",
+          x,
+          y,
+          width: Math.round(Math.max(width, fontSize)),
+          height: Math.round(Math.max(height, fontSize)),
+          text: applyTextTransform(text.slice(0, 200), typo.textTransform),
+          fontFamily: ps.fontFamily.split(",")[0].replace(/['"]/g, "").trim(),
+          fontWeight: ps.fontWeight,
+          fontSizePx: fontSize,
+          lineHeightPx: parseFloat(ps.lineHeight) || null,
+          color: colorInfo ? colorInfo.hex : "#000000",
+          textAlign: ps.textAlign,
+          opacity,
+          sizing: leafSizing(ps.display),
+          positioning,
+          pseudo: which,
+          ...typo,
+        });
+      }
+    }
+    return out;
+  }
+
+  function textTypoExtras(style) {
+    const letterSpacingPx = style.letterSpacing === "normal" ? 0 : parseFloat(style.letterSpacing) || 0;
+    const fontStyle = /italic/i.test(style.fontStyle || "") ? "italic" : "normal";
+    const deco = (style.textDecorationLine || "").toLowerCase();
+    let textDecoration = "none";
+    if (deco.includes("underline")) textDecoration = "underline";
+    else if (deco.includes("line-through")) textDecoration = "line-through";
+    const tt = (style.textTransform || "none").toLowerCase();
+    const textTransform =
+      tt === "uppercase" || tt === "lowercase" || tt === "capitalize" ? tt : "none";
+    return { letterSpacingPx, fontStyle, textDecoration, textTransform };
+  }
+
+  function applyTextTransform(text, textTransform) {
+    if (!text || !textTransform || textTransform === "none") return text;
+    if (textTransform === "uppercase") return text.toUpperCase();
+    if (textTransform === "lowercase") return text.toLowerCase();
+    if (textTransform === "capitalize") {
+      return text.replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+    return text;
+  }
+
+  function parseTextShadowEffects(textShadow) {
+    if (!textShadow || textShadow === "none") return [];
+    // Reuse box-shadow parser shape: "offsetX offsetY blur color"
+    return parseBoxShadowEffects(textShadow).map((e) => ({
+      ...e,
+      type: "DROP_SHADOW",
+    }));
+  }
+
+  function captureBorderStroke(style) {
+    const sides = ["Top", "Right", "Bottom", "Left"];
+    const parsed = [];
+    for (const side of sides) {
+      const width = parseFloat(style[`border${side}Width`]) || 0;
+      const borderStyle = style[`border${side}Style`];
+      const color = Acopio.rgbToHex(style[`border${side}Color`]);
+      if (width > 0 && borderStyle !== "none" && color && color.a > 0.02) {
+        parsed.push({ side: side.toLowerCase(), width: Math.round(width), hex: color.hex, a: color.a });
+      }
+    }
+    if (!parsed.length) return { stroke: undefined, strokeWeight: undefined, borders: undefined };
+    const uniform =
+      parsed.length === 4 &&
+      parsed.every(
+        (p) => p.width === parsed[0].width && p.hex === parsed[0].hex && Math.abs(p.a - parsed[0].a) < 0.01
+      );
+    if (uniform || parsed.length === 1) {
+      const p = parsed[0];
+      return {
+        stroke: { hex: p.hex, a: p.a },
+        strokeWeight: p.width,
+        borders: parsed.length === 4 && !uniform ? parsed : undefined,
+      };
+    }
+    // Prefer the visually dominant side (max width) as the single stroke
+    // Figma can apply today; keep full `borders` for future per-side rebuild.
+    const dominant = parsed.reduce((a, b) => (b.width > a.width ? b : a));
+    return {
+      stroke: { hex: dominant.hex, a: dominant.a },
+      strokeWeight: dominant.width,
+      borders: parsed,
+    };
+  }
+
+  function textStyleSnapshot(style) {
+    const colorInfo = Acopio.rgbToHex(style.color);
+    return {
+      fontFamily: style.fontFamily.split(",")[0].replace(/['"]/g, "").trim(),
+      fontWeight: style.fontWeight,
+      fontSizePx: parseFloat(style.fontSize) || 14,
+      color: colorInfo ? colorInfo.hex : "#000000",
+      ...textTypoExtras(style),
+    };
+  }
+
+  // Same-line only: mixed inline spans keep per-span styles as Figma text
+  // ranges. Multi-line mixed styling still flattens to one uniform style
+  // (Range tops diverge once wrapping starts — separate absolutely-placed
+  // runs would overlap under font substitution).
+  function clientRectsSameLine(rects, tolerancePx) {
+    const tops = [];
+    for (const r of rects) {
+      if (!r || (r.width < 0.5 && r.height < 0.5)) continue;
+      tops.push(r.top);
+    }
+    if (tops.length <= 1) return true;
+    return Math.max(...tops) - Math.min(...tops) <= tolerancePx;
+  }
+
+  function styleSnapKey(snap) {
+    return [
+      snap.fontFamily,
+      snap.fontWeight,
+      snap.fontSizePx,
+      snap.color,
+      snap.letterSpacingPx,
+      snap.fontStyle,
+      snap.textDecoration,
+    ].join("\0");
+  }
+
+  // Collapse whitespace the same way the flatten path does, while mapping
+  // each original index onto the collapsed string (for range remapping).
+  function collapseTextWithIndexMap(raw) {
+    const map = new Int32Array(raw.length + 1);
+    let out = "";
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+      if (ch === " " || ch === "\t") {
+        if (out.length > 0 && out[out.length - 1] === " ") {
+          map[i] = out.length - 1;
+          continue;
+        }
+        map[i] = out.length;
+        out += " ";
+      } else {
+        map[i] = out.length;
+        out += ch;
+      }
+    }
+    map[raw.length] = out.length;
+
+    // / *\n+ */g → "\n"
+    let out2 = "";
+    const map2 = new Int32Array(out.length + 1);
+    let i = 0;
+    while (i < out.length) {
+      if (out[i] === " " || out[i] === "\n") {
+        let j = i;
+        let sawNl = false;
+        while (j < out.length && (out[j] === " " || out[j] === "\n")) {
+          if (out[j] === "\n") sawNl = true;
+          j++;
+        }
+        if (sawNl) {
+          for (let k = i; k < j; k++) map2[k] = out2.length;
+          map2[j] = out2.length + 1;
+          out2 += "\n";
+          i = j;
+          continue;
+        }
+      }
+      map2[i] = out2.length;
+      out2 += out[i];
+      i++;
+    }
+    map2[out.length] = out2.length;
+
+    const trimStart = out2.length - out2.trimStart().length;
+    const trimmed = out2.trim();
+    const trimEndExclusive = trimStart + trimmed.length;
+
+    function mapRawIndex(rawIndex, asExclusiveEnd) {
+      const clamped = Math.max(0, Math.min(rawIndex, raw.length));
+      let mid = map[clamped];
+      let dest = map2[Math.min(mid, out.length)];
+      if (asExclusiveEnd && clamped > 0) {
+        const prevMid = map[clamped - 1];
+        const prevDest = map2[Math.min(prevMid, Math.max(0, out.length - 1))];
+        dest = Math.max(dest, prevDest + 1);
+      }
+      dest = Math.max(trimStart, Math.min(dest, trimEndExclusive)) - trimStart;
+      return Math.max(0, Math.min(trimmed.length, dest));
+    }
+
+    return { text: trimmed, mapRawIndex };
+  }
+
+  // Walk direct content (text + nested inline tags + <br>) into one string
+  // with optional per-span ranges when every text fragment shares a line.
+  function extractFlattenedInlineText(el, style) {
+    const pieces = [];
+    const allRects = [];
+
+    function visit(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const owner = node.parentElement || el;
+        const st = owner === el ? style : window.getComputedStyle(owner);
+        const raw = node.textContent || "";
+        if (!raw) return;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const rects = Array.from(range.getClientRects());
+        range.detach && range.detach();
+        for (const r of rects) allRects.push(r);
+        pieces.push({ raw, snap: textStyleSnapshot(st) });
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      const tag = node.tagName.toLowerCase();
+      if (tag === "br") {
+        pieces.push({ raw: "\n", snap: textStyleSnapshot(style) });
+        return;
+      }
+      if (LAYER_SKIP_TAGS.has(tag)) return;
+      for (const child of node.childNodes) visit(child);
+    }
+    for (const child of el.childNodes) visit(child);
+
+    const raw = pieces.map((p) => p.raw).join("");
+    const { text, mapRawIndex } = collapseTextWithIndexMap(raw);
+    if (!text) return null;
+
+    const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) || 16;
+    const sameLine = clientRectsSameLine(allRects, Math.max(4, lineHeight * 0.55));
+
+    let ranges = null;
+    if (pieces.length > 0) {
+      const built = [];
+      let rawAt = 0;
+      for (const p of pieces) {
+        const rawStart = rawAt;
+        const rawEnd = rawAt + p.raw.length;
+        rawAt = rawEnd;
+        if (!p.raw || p.raw === "\n") continue;
+        const start = mapRawIndex(rawStart, false);
+        const end = mapRawIndex(rawEnd, true);
+        if (end <= start) continue;
+        const prev = built[built.length - 1];
+        if (prev && prev.end === start && styleSnapKey(prev) === styleSnapKey(p.snap)) {
+          prev.end = end;
+        } else {
+          built.push({ start, end, ...p.snap });
+        }
+      }
+      const keys = new Set(built.map(styleSnapKey));
+      // Always record mixed runs when styles differ. layoutTree only attaches
+      // them when sameLine (absolute Figma runs break across wraps); font
+      // clipboard uses them as SVG tspans either way.
+      if (built.length > 0 && keys.size > 1) {
+        ranges = built
+          .map((r) => ({
+            start: r.start,
+            end: Math.min(r.end, 500),
+            fontFamily: r.fontFamily,
+            fontWeight: r.fontWeight,
+            fontSizePx: r.fontSizePx,
+            color: r.color,
+            letterSpacingPx: r.letterSpacingPx,
+            fontStyle: r.fontStyle,
+            textDecoration: r.textDecoration,
+          }))
+          .filter((r) => r.end > r.start && r.start < 500);
+        if (ranges.length < 2) ranges = null;
+      }
+    }
+
+    return { text: text.slice(0, 500), ranges, sameLine };
+  }
+
+  /**
+   * Multi-line mixed styles: one absolutely placed TEXT leaf per client-rect
+   * run so wraps don't lose bold/color (uniform flatten was the old path).
+   */
+  function extractAbsoluteMixedTextRuns(el, style, containerRect) {
+    const runs = [];
+    function visit(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const owner = node.parentElement || el;
+        const st = owner === el ? style : window.getComputedStyle(owner);
+        const raw = (node.textContent || "").replace(/\s+/g, " ");
+        if (!raw.trim()) return;
+        const snap = textStyleSnapshot(st);
+        const typo = textTypoExtras(st);
+        const range = document.createRange();
+        try {
+          range.selectNodeContents(node);
+          const rects = Array.from(range.getClientRects());
+          range.detach && range.detach();
+          // Distribute characters across rects roughly by width share
+          const widths = rects.map((r) => Math.max(0.5, r.width));
+          const totalW = widths.reduce((a, b) => a + b, 0) || 1;
+          let cursor = 0;
+          const chars = applyTextTransform(raw.trim(), typo.textTransform);
+          for (let i = 0; i < rects.length; i++) {
+            const r = rects[i];
+            if (r.width < 0.5 && r.height < 0.5) continue;
+            const share = Math.max(1, Math.round((chars.length * widths[i]) / totalW));
+            const slice = chars.slice(cursor, i === rects.length - 1 ? chars.length : cursor + share);
+            cursor += share;
+            if (!slice) continue;
+            const colorInfo = Acopio.rgbToHex(st.color);
+            const textEffects = parseTextShadowEffects(st.textShadow);
+            runs.push({
+              kind: "text",
+              x: Math.round(r.left - containerRect.left),
+              y: Math.round(r.top - containerRect.top),
+              width: Math.round(Math.max(1, r.width)),
+              height: Math.round(Math.max(1, r.height)),
+              text: slice.slice(0, 500),
+              fontFamily: snap.fontFamily,
+              fontWeight: snap.fontWeight,
+              fontSizePx: snap.fontSizePx,
+              lineHeightPx: parseFloat(st.lineHeight) || null,
+              color: colorInfo ? colorInfo.hex : snap.color,
+              textAlign: st.textAlign,
+              opacity: ownOpacity(st),
+              sizing: { horizontal: "FIXED", vertical: "HUG" },
+              positioning: "ABSOLUTE",
+              ...(textEffects.length ? { effects: textEffects, effect: textEffects[0] } : {}),
+              ...typo,
+            });
+          }
+        } catch (_) {}
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      const tag = node.tagName.toLowerCase();
+      if (tag === "br" || LAYER_SKIP_TAGS.has(tag)) return;
+      for (const child of node.childNodes) visit(child);
+    }
+    for (const child of el.childNodes) visit(child);
+    return runs;
+  }
+
+  // Simple rotate(Ndeg|rad|turn) only — ignore matrix(...) / compound
+  // transforms for v1. Prefer computed string, then inline style, then
+  // computedStyleMap()'s CSSRotate when the browser exposes it.
+  function parseSimpleRotationDeg(style, el) {
+    function fromRotateString(value) {
+      if (!value || value === "none") return null;
+      const cleaned = String(value).trim();
+      const m = cleaned.match(/^rotate\(\s*(-?[\d.]+)(deg|rad|turn)\s*\)$/i);
+      if (!m) return null;
+      let deg = parseFloat(m[1]);
+      if (!Number.isFinite(deg)) return null;
+      const unit = m[2].toLowerCase();
+      if (unit === "rad") deg = (deg * 180) / Math.PI;
+      else if (unit === "turn") deg *= 360;
+      return deg;
+    }
+    let deg = fromRotateString(style && style.transform);
+    if (deg != null) return deg;
+    if (el && el.style) {
+      deg = fromRotateString(el.style.transform);
+      if (deg != null) return deg;
+    }
+    try {
+      if (el && typeof el.computedStyleMap === "function") {
+        const list = el.computedStyleMap().get("transform");
+        if (list && list.length === 1) {
+          const item = list[0];
+          if (item && item.angle && typeof item.angle.value === "number") {
+            const unit = String(item.angle.unit || "deg").toLowerCase();
+            let v = item.angle.value;
+            if (unit === "rad") v = (v * 180) / Math.PI;
+            else if (unit === "turn") v *= 360;
+            if (Number.isFinite(v)) return v;
+          }
+        }
+      }
+    } catch (e) {
+      /* computedStyleMap / CSSRotate not available */
+    }
+    return null;
+  }
+
+  // Full CSS transform (rotate/scale/skew/matrix) for Figma rebuild.
+  function attachTransform(node, style, el) {
+    const t = Acopio.parseCssTransform(style, el);
+    if (t) {
+      node.transform = t;
+      if (t.rotationDeg != null && Math.abs(t.rotationDeg) > 0.01) {
+        node.rotationDeg = t.rotationDeg;
+      }
+      return node;
+    }
+    const rotationDeg = parseSimpleRotationDeg(style, el);
+    if (rotationDeg != null && rotationDeg !== 0) node.rotationDeg = rotationDeg;
+    return node;
+  }
+
+  // Back-compat alias
+  function attachRotation(node, style, el) {
+    return attachTransform(node, style, el);
+  }
+
+  // Light DOM children plus open shadow roots (web components). Same
+  // visibility/clip filters apply at the probe/walk call sites.
+  function directChildElements(el) {
+    const out = Array.from(el.children);
+    if (el.shadowRoot) {
+      for (const child of Array.from(el.shadowRoot.children)) out.push(child);
+    }
+    return out;
   }
 
   function relRectOf(el, rootRect) {
@@ -302,13 +1000,15 @@
   // what actually catches it, the same way a real browser's own hit-
   // testing does.
   function elementClips(style) {
+    // Include auto/scroll: partial content still sits behind a clip window
+    // (marquees, horizontal carousels, overflow lists). Treating only
+    // hidden/clip left scrolled-away siblings in the tree as if visible.
+    const clipLike = (v) =>
+      v === "hidden" || v === "clip" || v === "auto" || v === "scroll";
     return (
-      style.overflow === "hidden" ||
-      style.overflow === "clip" ||
-      style.overflowX === "hidden" ||
-      style.overflowX === "clip" ||
-      style.overflowY === "hidden" ||
-      style.overflowY === "clip"
+      clipLike(style.overflow) ||
+      clipLike(style.overflowX) ||
+      clipLike(style.overflowY)
     );
   }
   function intersectRects(a, b) {
@@ -437,6 +1137,8 @@
     "flex-end": "MAX", end: "MAX", right: "MAX",
     center: "CENTER",
     "space-between": "SPACE_BETWEEN",
+    "space-around": "SPACE_BETWEEN",
+    "space-evenly": "SPACE_BETWEEN",
   };
   const ALIGN_TO_COUNTER = {
     "flex-start": "MIN", start: "MIN",
@@ -455,23 +1157,17 @@
   // keeps this safe: anything that doesn't clearly qualify falls back to
   // the original fixed-position behavior untouched, rather than risking a
   // WRONG auto-layout guess, which would be a worse bug than today's.
-  // Gap is measured from the REAL rendered positions of the children, not
-  // read off `style.gap`/`rowGap`/`columnGap` — confirmed live this is a
-  // real, common gap (no pun intended): a flex column with no CSS `gap`
-  // property at all (computed style reports the literal string "normal",
-  // which `parseFloat` turns into NaN and this used to silently coerce to
-  // 0) can still have real, deliberate spacing between its children via
-  // plain `margin-top` on each one instead — exactly what a real hero
-  // section on refold.ai does (paragraph margin-top:24px, button row
-  // margin-top:40px, gap:normal) — and reading only `style.gap` is blind
-  // to that entirely, collapsing every child flush against the next
-  // regardless of how much real space separated them on the page. The
-  // median empirical gap between consecutive children's own rects is
-  // correct either way: it naturally reflects a real CSS `gap` value
-  // exactly (nothing else could have produced that spacing) AND correctly
-  // captures margin-driven spacing that `gap` can't see at all.
-  function medianGapAlongAxis(childRects, isColumn) {
-    if (childRects.length < 2) return 0;
+  // Gap prefers real CSS `gap`/`rowGap`/`columnGap` when parseable (not
+  // the literal "normal"), else the median empirical gap between
+  // consecutive children's rects — that median still catches margin-driven
+  // spacing when CSS gap is absent (a real hero section with margin-top
+  // between siblings and gap:normal).
+  function parseCssGap(value) {
+    if (!value || value === "normal") return null;
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? Math.max(0, Math.round(n)) : null;
+  }
+  function gapsAlongAxis(childRects, isColumn) {
     const gaps = [];
     for (let i = 1; i < childRects.length; i++) {
       gaps.push(
@@ -480,27 +1176,128 @@
           : childRects[i].x - (childRects[i - 1].x + childRects[i - 1].width)
       );
     }
-    gaps.sort((a, b) => a - b);
+    return gaps;
+  }
+  function medianGapAlongAxis(childRects, isColumn) {
+    if (childRects.length < 2) return 0;
+    const gaps = gapsAlongAxis(childRects, isColumn).slice().sort((a, b) => a - b);
     return Math.max(0, Math.round(gaps[Math.floor(gaps.length / 2)]));
   }
+  // A single Auto Layout `itemSpacing` can only ever hold ONE number for
+  // every gap in the frame. When real consecutive gaps actually differ
+  // (an eyebrow→media gap of 20 next to a media→body gap of 24, both very
+  // ordinary in real designs), collapsing them to one median doesn't
+  // average out — every child after the first mismatch inherits that
+  // step's error AND every error before it, so the drift compounds
+  // downward through the whole subtree (confirmed live: a real card with
+  // non-uniform gaps showed an identical, growing y-offset — 12, 12, 12px
+  // — at every single descendant, not scattered noise). This is strictly
+  // worse than the "don't risk a wrong guess" principle this file already
+  // applies to layout-mode eligibility itself (see the comment above
+  // JUSTIFY_TO_PRIMARY) — so the same principle applies here: only trust
+  // an INFERRED (non-CSS) gap when the real gaps actually agree with each
+  // other. A real explicit CSS `gap`/`row-gap`/`column-gap` value is never
+  // subject to this check — the browser already enforces it uniformly by
+  // definition, so callers only run this against the medianGapAlongAxis
+  // fallback path, not the parsed-CSS one.
+  function gapsAreUniform(childRects, isColumn) {
+    if (childRects.length < 3) return true; // one gap can't be "non-uniform" with itself
+    const gaps = gapsAlongAxis(childRects, isColumn);
+    const sorted = gaps.slice().sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const tolerance = Math.max(2, Math.abs(median) * 0.15);
+    return gaps.every((g) => Math.abs(g - median) <= tolerance);
+  }
 
-  function detectFlexLayout(style, childRects) {
-    const display = style.display;
-    if (display !== "flex" && display !== "inline-flex") return null;
-    if (style.flexWrap && style.flexWrap !== "nowrap") return null; // wrapping flex not modeled — safe fallback
-    const direction = style.flexDirection || "row";
-    if (direction.endsWith("reverse")) return null; // visual order would differ from DOM order — safe fallback rather than risk reversing content
-    const isColumn = direction.startsWith("column");
+  function flexPaddingFields(style) {
     return {
-      mode: isColumn ? "VERTICAL" : "HORIZONTAL",
-      gap: medianGapAlongAxis(childRects, isColumn),
-      primaryAlign: JUSTIFY_TO_PRIMARY[style.justifyContent] || "MIN",
-      counterAlign: ALIGN_TO_COUNTER[style.alignItems] || "MIN",
       paddingTop: Math.round(parseFloat(style.paddingTop) || 0),
       paddingRight: Math.round(parseFloat(style.paddingRight) || 0),
       paddingBottom: Math.round(parseFloat(style.paddingBottom) || 0),
       paddingLeft: Math.round(parseFloat(style.paddingLeft) || 0),
     };
+  }
+
+  function detectFlexLayout(style, childRects) {
+    const display = style.display;
+    if (display !== "flex" && display !== "inline-flex") return null;
+    const direction = style.flexDirection || "row";
+    const isReverse = direction.endsWith("reverse");
+    const isColumn = direction.startsWith("column");
+    const wrap = style.flexWrap === "wrap" || style.flexWrap === "wrap-reverse";
+    const mainCss = parseCssGap(isColumn ? style.rowGap : style.columnGap) ?? parseCssGap(style.gap);
+    const crossCss = parseCssGap(isColumn ? style.columnGap : style.rowGap) ?? parseCssGap(style.gap);
+    if (mainCss == null && !gapsAreUniform(childRects, isColumn)) return null; // can't infer one safe number — fall back to fixed positions
+    const gap = mainCss != null ? mainCss : medianGapAlongAxis(childRects, isColumn);
+    const stretch = style.alignItems === "stretch";
+    const layout = {
+      mode: isColumn ? "VERTICAL" : "HORIZONTAL",
+      gap,
+      primaryAlign: JUSTIFY_TO_PRIMARY[style.justifyContent] || "MIN",
+      counterAlign: ALIGN_TO_COUNTER[style.alignItems] || "MIN",
+      ...flexPaddingFields(style),
+    };
+    if (isReverse) layout.reverseChildren = true;
+    if (wrap) {
+      if (crossCss == null && !gapsAreUniform(childRects, !isColumn)) return null;
+      layout.wrap = true;
+      layout.counterGap = crossCss != null ? crossCss : medianGapAlongAxis(childRects, !isColumn);
+    }
+    if (stretch) layout.stretchChildren = true;
+    return layout;
+  }
+
+  // Equal-ish CSS Grid → HORIZONTAL Auto Layout with wrap (same class of
+  // approximation html.to.design uses for simple card grids). Named areas
+  // or irregular track sizes stay absolute (layout null).
+  function looksLikeEqualGridColumns(templateColumns) {
+    const cols = (templateColumns || "").trim();
+    if (!cols || cols === "none") return false;
+    if (/repeat\(/i.test(cols)) return true;
+    const tracks = cols.split(/\s+(?![^(]*\))/).filter(Boolean);
+    if (tracks.length < 1) return false;
+    if (tracks.every((t) => t === tracks[0])) return true;
+    // equal fr tracks: 1fr 1fr 1fr
+    const trimmed = tracks.map((t) => t.trim());
+    return (
+      trimmed.length >= 2 &&
+      trimmed.every((t) => /^\d*\.?\d+fr$/i.test(t)) &&
+      trimmed.every((t) => t.toLowerCase() === trimmed[0].toLowerCase())
+    );
+  }
+  function childrenShareSimilarWidths(childRects) {
+    if (childRects.length < 2) return childRects.length === 1;
+    const widths = childRects.map((r) => r.width).filter((w) => w > 0);
+    if (widths.length < 2) return false;
+    const avg = widths.reduce((a, b) => a + b, 0) / widths.length;
+    if (avg < 1) return false;
+    return widths.every((w) => Math.abs(w - avg) / avg <= 0.35);
+  }
+  function detectGridLayout(style, childRects) {
+    if (style.display !== "grid" && style.display !== "inline-grid") return null;
+    const areas = (style.gridTemplateAreas || "").trim();
+    if (areas && areas !== "none" && /"[^".\s]+/.test(areas)) return null; // named regions → irregular
+    const equalCols =
+      looksLikeEqualGridColumns(style.gridTemplateColumns) || childrenShareSimilarWidths(childRects);
+    if (!equalCols) return null;
+    const colGapCss = parseCssGap(style.columnGap) ?? parseCssGap(style.gap);
+    const rowGapCss = parseCssGap(style.rowGap) ?? parseCssGap(style.gap);
+    if (colGapCss == null && !gapsAreUniform(childRects, false)) return null;
+    if (rowGapCss == null && !gapsAreUniform(childRects, true)) return null;
+    const colGap = colGapCss != null ? colGapCss : medianGapAlongAxis(childRects, false);
+    const rowGap = rowGapCss != null ? rowGapCss : medianGapAlongAxis(childRects, true);
+    const stretch = style.alignItems === "stretch";
+    const layout = {
+      mode: "HORIZONTAL",
+      wrap: true,
+      gap: colGap,
+      counterGap: rowGap,
+      primaryAlign: "MIN",
+      counterAlign: ALIGN_TO_COUNTER[style.alignItems] || "MIN",
+      ...flexPaddingFields(style),
+    };
+    if (stretch) layout.stretchChildren = true;
+    return layout;
   }
 
   // Plain block flow (a card that's just "heading, then paragraph, then
@@ -516,15 +1313,16 @@
     for (let i = 1; i < childRects.length; i++) {
       if (childRects[i].y < childRects[i - 1].y + childRects[i - 1].height - 1) return null; // overlap or out-of-order — not a simple stack
     }
+    // Block stack has no real CSS gap property at all — this number is
+    // ALWAYS inferred from margins, so the uniformity gate always applies
+    // here (unlike flex/grid, which can trust a real CSS gap outright).
+    if (!gapsAreUniform(childRects, true)) return null;
     return {
       mode: "VERTICAL",
       gap: medianGapAlongAxis(childRects, true),
       primaryAlign: "MIN",
       counterAlign: "MIN",
-      paddingTop: Math.round(parseFloat(style.paddingTop) || 0),
-      paddingRight: Math.round(parseFloat(style.paddingRight) || 0),
-      paddingBottom: Math.round(parseFloat(style.paddingBottom) || 0),
-      paddingLeft: Math.round(parseFloat(style.paddingLeft) || 0),
+      ...flexPaddingFields(style),
     };
   }
 
@@ -589,10 +1387,158 @@
         return null;
       }
 
-      if (tag === "img" || tag === "video") {
-        const url = tag === "img" ? Acopio.resolveImgSrc(el) : Acopio.resolveVideoOrPoster(el).url;
-        if (!url) return null;
-        return { kind: "image", x: rect.x, y: rect.y, width: rect.width, height: rect.height, url, opacity, sizing: MEDIA_SIZING };
+      if (tag === "img") {
+        const url = Acopio.resolveImgSrc(el);
+        if (!url) {
+          // Broken/lazy img with no resolved src — keep the box so layout holds.
+          return attachRotation(
+            {
+              kind: "frame",
+              x: rect.x,
+              y: rect.y,
+              width: Math.max(1, rect.width),
+              height: Math.max(1, rect.height),
+              fill: "#E8E8E8",
+              fillOpacity: 1,
+              opacity,
+              children: [],
+              layout: null,
+            },
+            style,
+            el
+          );
+        }
+        const inlineDataUrl = Acopio.rasterizeImgElement(el) || undefined;
+        return attachRotation(
+          {
+            kind: "image",
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            url,
+            inlineDataUrl,
+            opacity,
+            sizing: MEDIA_SIZING,
+            radius: resolveRadius(style, { width: rect.width, height: rect.height }),
+          },
+          style,
+          el
+        );
+      }
+
+      // Video: prefer a frozen current frame (works offline in Figma); else poster/src URL.
+      if (tag === "video") {
+        let inlineDataUrl = null;
+        try {
+          if (el.readyState >= 2 && el.videoWidth > 0 && el.videoHeight > 0) {
+            const c = document.createElement("canvas");
+            c.width = el.videoWidth;
+            c.height = el.videoHeight;
+            c.getContext("2d").drawImage(el, 0, 0);
+            inlineDataUrl = c.toDataURL("image/png");
+          }
+        } catch (_) {
+          inlineDataUrl = null;
+        }
+        const url = inlineDataUrl || Acopio.resolveVideoOrPoster(el).url;
+        if (!url) {
+          return attachRotation(
+            {
+              kind: "frame",
+              x: rect.x,
+              y: rect.y,
+              width: Math.max(1, rect.width),
+              height: Math.max(1, rect.height),
+              fill: "#E8E8E8",
+              fillOpacity: 1,
+              opacity,
+              children: [],
+              layout: null,
+            },
+            style,
+            el
+          );
+        }
+        return attachRotation(
+          {
+            kind: "image",
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            url,
+            inlineDataUrl: inlineDataUrl || undefined,
+            opacity,
+            sizing: MEDIA_SIZING,
+          },
+          style,
+          el
+        );
+      }
+
+      // Canvas bitmaps are opaque to the DOM tree — snapshot pixels when untainted.
+      if (tag === "canvas") {
+        let inlineDataUrl = null;
+        try {
+          if (el.width > 0 && el.height > 0) inlineDataUrl = el.toDataURL("image/png");
+        } catch (_) {
+          inlineDataUrl = null;
+        }
+        if (!inlineDataUrl) {
+          // Tainted / empty — keep layout space so the parent doesn't collapse.
+          return attachRotation(
+            {
+              kind: "frame",
+              x: rect.x,
+              y: rect.y,
+              width: Math.max(1, rect.width),
+              height: Math.max(1, rect.height),
+              fill: "#E8E8E8",
+              fillOpacity: 1,
+              opacity,
+              children: [],
+              layout: null,
+            },
+            style,
+            el
+          );
+        }
+        return attachRotation(
+          {
+            kind: "image",
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            url: inlineDataUrl,
+            inlineDataUrl,
+            opacity,
+            sizing: MEDIA_SIZING,
+          },
+          style,
+          el
+        );
+      }
+
+      // Cross-origin embeds can't be walked — preserve the box so surrounding layout holds.
+      if (LAYER_EMBED_TAGS.has(tag)) {
+        return attachRotation(
+          {
+            kind: "frame",
+            x: rect.x,
+            y: rect.y,
+            width: Math.max(1, rect.width),
+            height: Math.max(1, rect.height),
+            fill: "#EEEEEE",
+            fillOpacity: 1,
+            opacity,
+            children: [],
+            layout: null,
+          },
+          style,
+          el
+        );
       }
 
       // SVGs commonly used here are small decorative icons (or occasionally
@@ -605,17 +1551,21 @@
       if (tag === "svg") {
         if (rect.width < 4 || rect.height < 4) return null;
         const resolvedColorInfo = Acopio.rgbToHex(style.color);
-        return {
-          kind: "icon-placeholder",
-          x: rect.x,
-          y: rect.y,
-          width: rect.width,
-          height: rect.height,
-          opacity,
-          sizing: MEDIA_SIZING,
-          svgMarkup: resolveSvgMarkup(el),
-          resolvedColor: resolvedColorInfo ? resolvedColorInfo.hex : undefined,
-        };
+        return attachRotation(
+          {
+            kind: "icon-placeholder",
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            opacity,
+            sizing: MEDIA_SIZING,
+            svgMarkup: resolveSvgMarkup(el),
+            resolvedColor: resolvedColorInfo ? resolvedColorInfo.hex : undefined,
+          },
+          style,
+          el
+        );
       }
 
       // This element's own background becomes the FRAME's own fill below
@@ -625,19 +1575,39 @@
       // on the box, not a synthetic child sitting behind it).
       const bg = Acopio.rgbToHex(style.backgroundColor);
       const bgImageRaw = style.backgroundImage;
-      const isGradient = Boolean(bgImageRaw && bgImageRaw.includes("gradient"));
+      const gradientDesc = Acopio.parseGradientDescriptor(bgImageRaw);
+      const isGradient = Boolean(gradientDesc);
       const hasSolidBg = Boolean(bg && bg.a > 0.02);
       const fill = hasSolidBg && !isGradient ? bg.hex : null;
-      // WithAlpha, not the plain hex-only version — this is the frame the
-      // Figma plugin actually builds from; a transparent fade stop losing
-      // its alpha here is what previously turned a legibility scrim into a
-      // flat black rectangle (see parseGradientStopsWithAlpha in shared.js).
-      const gradientStops = isGradient ? Acopio.parseGradientStopsWithAlpha(bgImageRaw) : undefined;
-      const gradientDirection = isGradient ? Acopio.parseGradientDirection(bgImageRaw) : undefined;
+      const gradientStops = gradientDesc ? gradientDesc.stops : undefined;
+      const gradientDirection = gradientDesc ? gradientDesc.direction : undefined;
+      const gradientType = gradientDesc ? gradientDesc.type : undefined;
       const fillOpacity = hasSolidBg ? bg.a : 1;
-      const radius = resolveRadius(style, rect);
+      const corners = resolveCornerRadii(style, rect);
+      const radius = corners.radius;
+      const borderStroke = captureBorderStroke(style);
+      const stroke = borderStroke.stroke;
+      const strokeWeight = borderStroke.strokeWeight;
+      const shadowEffects = parseBoxShadowEffects(style.boxShadow);
+      const blurEffect = parseFilterBlurEffect(style.filter);
+      const effects = shadowEffects.slice();
+      if (blurEffect) effects.push(blurEffect);
+      // Back-compat single effect (first drop shadow) for older plugin builds
+      const effect = shadowEffects.find((e) => e.type === "DROP_SHADOW") || shadowEffects[0] || null;
 
       const children = [];
+
+      // Pseudos first (painted under / over real children depending on which)
+      const pseudoLayers = extractPseudoLayers(el, {
+        width: rect.width,
+        height: rect.height,
+      });
+      const beforePseudos = pseudoLayers.filter((n) => n.pseudo === "::before");
+      const afterPseudos = pseudoLayers.filter((n) => n.pseudo === "::after");
+      for (const n of beforePseudos) {
+        delete n.pseudo;
+        children.push(n);
+      }
 
       // A decorative/hero photo set as a CSS background-image on a plain
       // div (extremely common — card thumbnails, hero illustrations)
@@ -650,6 +1620,7 @@
         const match = bgImageRaw.match(/url\(["']?([^"')]+)["']?\)/);
         const bgUrl = match && match[1];
         if (bgUrl && rect.width >= 4 && rect.height >= 4) {
+          const bgSize = (style.backgroundSize || "cover").split(",")[0].trim().toLowerCase();
           children.push({
             kind: "image",
             x: 0,
@@ -659,6 +1630,13 @@
             url: bgUrl,
             opacity: 1,
             sizing: { horizontal: "FILL", vertical: "FILL" },
+            backgroundSize: bgSize,
+            backgroundPosition: (style.backgroundPosition || "center").split(",")[0].trim(),
+            radius: corners.radius,
+            radiusTL: corners.radiusTL,
+            radiusTR: corners.radiusTR,
+            radiusBR: corners.radiusBR,
+            radiusBL: corners.radiusBL,
           });
         }
       }
@@ -667,13 +1645,15 @@
       for (const { text, rect: textRect } of directTextNodeLayers(el, elRect, style)) {
         hasOwnText = true;
         const colorInfo = Acopio.rgbToHex(style.color);
+        const typo = textTypoExtras(style);
+        const textEffects = parseTextShadowEffects(style.textShadow);
         children.push({
           kind: "text",
           x: textRect.x,
           y: textRect.y,
           width: textRect.width,
           height: textRect.height,
-          text: text.slice(0, 500),
+          text: applyTextTransform(text.slice(0, 500), typo.textTransform),
           fontFamily: style.fontFamily.split(",")[0].replace(/['"]/g, "").trim(),
           fontWeight: style.fontWeight,
           fontSizePx: parseFloat(style.fontSize) || 14,
@@ -682,6 +1662,8 @@
           textAlign: style.textAlign,
           opacity,
           sizing: leafSizing(style.display),
+          ...(textEffects.length ? { effects: textEffects, effect: textEffects[0] } : {}),
+          ...typo,
         });
       }
 
@@ -689,9 +1671,10 @@
       // this walk, which already calls getComputedStyle per element)
       // purely to decide the layout mode BEFORE recursing for real —
       // detection needs every child's rect/position/float up front, not
-      // discovered one at a time mid-recursion.
+      // discovered one at a time mid-recursion. Includes open shadowRoot
+      // children so web-component content is layout-detected, not skipped.
       const childProbe = [];
-      for (const child of Array.from(el.children)) {
+      for (const child of directChildElements(el)) {
         if (LAYER_SKIP_TAGS.has(child.tagName.toLowerCase())) continue;
         if (Acopio.isOwnNode(child)) continue;
         const cStyle = window.getComputedStyle(child);
@@ -706,7 +1689,10 @@
         if (nextClipRect && !rectsOverlap(child.getBoundingClientRect(), nextClipRect)) continue;
         childProbe.push({ el: child, style: cStyle, rect: cRect });
       }
-      const hasPositionedChild = childProbe.some((p) => p.style.position === "absolute" || p.style.position === "fixed");
+      const isPositionedStyle = (s) => s.position === "absolute" || s.position === "fixed";
+      const inFlowProbe = childProbe.filter((p) => !isPositionedStyle(p.style));
+      const hasPositionedChild = childProbe.some((p) => isPositionedStyle(p.style));
+      const allChildrenPositioned = childProbe.length > 0 && inFlowProbe.length === 0;
       const hasFloatedChild = childProbe.some((p) => p.style.float && p.style.float !== "none");
 
       // A run of inline text-flow content — either literal mixed text+span
@@ -735,10 +1721,9 @@
       // own textContent, in its own single box) sidesteps both: Figma
       // hugs/wraps it with its own substituted font, the same safe pattern
       // every plain <h3>/<p> text leaf elsewhere in this file already
-      // uses. This costs per-run styling (the grey/dark two-tone on
-      // "Stop rebuilding."/"Start compounding." is lost) — a deliberate
-      // trade for never producing overlapping text, the same trade this
-      // project already made for CSS Grid and wrapping flexbox.
+      // uses. Same-line mixed spans keep per-span styles via `ranges`;
+      // multi-line mixed styling still loses per-run style deliberately
+      // so wrapped runs never overlap under font substitution.
       // A confirmed, real regression this same flatten fix introduced:
       // `node.children` only ever sees LIGHT DOM — a web component with
       // real content living in its shadow root (or simply not yet
@@ -769,26 +1754,47 @@
         );
       const isInlineTextRun = allChildrenInline && childProbe.every((p) => isPureTextSubtree(p.el));
       if ((hasOwnText || isInlineTextRun) && childProbe.length > 0 && rect.width >= 1 && rect.height >= 1) {
-        // <br> carries real, intentional line-break meaning here (Glean's
-        // own word-split heading uses one between each sentence) — a plain
-        // el.textContent silently drops it entirely, running two sentences
-        // together with no space at all ("faster.Glean"). Swapping every
-        // <br> for a real newline on a clone (never mutate the live page)
-        // before reading textContent keeps that break; the collapse below
-        // still normalizes runs of spaces/tabs same as everywhere else, it
-        // just no longer erases intentional newlines along with them.
-        const textClone = el.cloneNode(true);
-        textClone.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
-        const flatText = (textClone.textContent || "").replace(/[ \t]+/g, " ").replace(/ *\n+ */g, "\n").trim();
-        if (flatText) {
+        // Prefer one text node with per-span `ranges` when every fragment
+        // shares roughly the same line. Multi-line mixed styling keeps the
+        // uniform flatten (lose per-span style) so wrapped runs don't
+        // overlap under font substitution.
+        const extracted = extractFlattenedInlineText(el, style);
+        if (extracted && extracted.text) {
+          // Multi-line mixed styles → absolute runs (keeps bold/color per wrap).
+          if (
+            extracted.ranges &&
+            extracted.ranges.length >= 2 &&
+            !extracted.sameLine
+          ) {
+            const absRuns = extractAbsoluteMixedTextRuns(el, style, elRect);
+            if (absRuns.length >= 1) {
+              return attachTransform(
+                {
+                  kind: "frame",
+                  x: rect.x,
+                  y: rect.y,
+                  width: rect.width,
+                  height: rect.height,
+                  fill: null,
+                  opacity,
+                  children: absRuns,
+                  layout: null,
+                },
+                style,
+                el
+              );
+            }
+          }
           const colorInfo = Acopio.rgbToHex(style.color);
-          return {
+          const typo = textTypoExtras(style);
+          const textEffects = parseTextShadowEffects(style.textShadow);
+          const textNode = {
             kind: "text",
             x: rect.x,
             y: rect.y,
             width: rect.width,
             height: rect.height,
-            text: flatText.slice(0, 500),
+            text: applyTextTransform(extracted.text, typo.textTransform),
             fontFamily: style.fontFamily.split(",")[0].replace(/['"]/g, "").trim(),
             fontWeight: style.fontWeight,
             fontSizePx: parseFloat(style.fontSize) || 14,
@@ -797,7 +1803,11 @@
             textAlign: style.textAlign,
             opacity,
             sizing: leafSizing(style.display),
+            ...(textEffects.length ? { effects: textEffects, effect: textEffects[0] } : {}),
+            ...typo,
           };
+          if (extracted.ranges && extracted.sameLine) textNode.ranges = extracted.ranges;
+          return attachTransform(textNode, style, el);
         }
       }
 
@@ -822,12 +1832,28 @@
       // child via getBoundingClientRect) already carries its own accurate
       // real position, which is exactly what absolute mode uses directly,
       // regardless of array order.
+      // Abs/fixed children no longer force the whole parent to layout:null
+      // — in-flow siblings still get flex/grid/block Auto Layout; only when
+      // EVERY child is positioned (or mixed text+elements / floats) do we
+      // fall back to absolute for the container.
       const hasMixedTextAndElements = hasOwnText && childProbe.length > 0;
       let layout = null;
-      if (!hasPositionedChild && !hasMixedTextAndElements) {
-        layout = detectFlexLayout(style, childProbe.map((p) => p.rect));
+      // Irregular/named CSS Grid cannot be honest Auto Layout — wrapping
+      // equal columns would smash cell positions. Flag for Collect screenshot.
+      let irregularGrid = false;
+      if (!allChildrenPositioned && !hasMixedTextAndElements) {
+        const inFlowRects = inFlowProbe.map((p) => p.rect);
+        layout = detectFlexLayout(style, inFlowRects);
+        if (!layout) layout = detectGridLayout(style, inFlowRects);
+        if (
+          !layout &&
+          (style.display === "grid" || style.display === "inline-grid") &&
+          inFlowRects.length >= 2
+        ) {
+          irregularGrid = true;
+        }
         if (!layout && !hasFloatedChild) {
-          layout = detectBlockStackLayout(style, childProbe.map((p) => p.rect));
+          layout = detectBlockStackLayout(style, inFlowRects);
         }
       }
       // A text-only leaf (<h3>, <p> — no element children at all, just its
@@ -902,10 +1928,42 @@
         });
       }
 
-      for (const p of childProbe) {
+      const orderedProbe =
+        layout && layout.reverseChildren ? childProbe.slice().reverse() : childProbe;
+
+      let walkedElementKids = 0;
+      for (const p of orderedProbe) {
         if (truncated) break;
         const childNode = walk(p.el, elRect, nextClipRect);
-        if (childNode) children.push(childNode);
+        if (childNode) {
+          walkedElementKids += 1;
+          // Keep parent Auto Layout for in-flow siblings; abs/fixed kids
+          // escape via Figma layoutPositioning ABSOLUTE + captured x/y.
+          if (isPositionedStyle(p.style)) childNode.positioning = "ABSOLUTE";
+          const flexGrow = parseFloat(p.style.flexGrow);
+          if (Number.isFinite(flexGrow) && flexGrow > 0) {
+            childNode.layoutGrow = 1;
+            // Primary-axis FILL hint when parent is a known flex/stack —
+            // plugin prefers layoutGrow; sizing helps older plugin builds.
+            if (layout && childNode.positioning !== "ABSOLUTE") {
+              const base = childNode.sizing || { horizontal: "FIXED", vertical: "FIXED" };
+              childNode.sizing =
+                layout.mode === "HORIZONTAL"
+                  ? { horizontal: "FILL", vertical: base.vertical || "FIXED" }
+                  : { horizontal: base.horizontal || "FIXED", vertical: "FILL" };
+            }
+          }
+          children.push(childNode);
+        }
+      }
+
+      // Visible DOM kids existed but every walk() returned null (clip /
+      // truncation / visibility) — mark truncated so Figma can prefer screenshot.
+      if (childProbe.length > 0 && walkedElementKids === 0) truncated = true;
+
+      for (const n of afterPseudos) {
+        delete n.pseudo;
+        children.push(n);
       }
 
       // Whether this frame's own primary (stacking) axis should hug its
@@ -934,36 +1992,98 @@
         layout.primarySizing = layout.mode === "VERTICAL" || children.some(subtreeHasText) ? "AUTO" : "FIXED";
       }
 
+      return attachRotation(
+        {
+          kind: "frame",
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          fill,
+          // Kept separate on purpose, not multiplied together: fillOpacity is
+          // the background COLOR's own alpha (rgba(0,0,0,0.5) — a
+          // translucent overlay) and only ever paints the fill itself in
+          // real CSS. opacity is the element's own whole-box CSS opacity,
+          // which fades the element AND everything inside it. A frame now
+          // genuinely has children nested inside it (unlike the old flat
+          // layer list), so collapsing these into one number would
+          // incorrectly fade a frame's children by its background's alpha
+          // too — e.g. a solid black rgba(0,0,0,0.9) card background would
+          // wrongly wash out the text sitting on top of it.
+          fillOpacity,
+          gradientStops,
+          gradientDirection,
+          gradientType,
+          opacity,
+          radius,
+          radiusTL: corners.radiusTL,
+          radiusTR: corners.radiusTR,
+          radiusBR: corners.radiusBR,
+          radiusBL: corners.radiusBL,
+          clipsContent: elementClips(style),
+          stroke,
+          strokeWeight,
+          borders: borderStroke.borders,
+          effect,
+          effects: effects.length ? effects : undefined,
+          layout,
+          sizing: ownSizing,
+          children,
+          preferScreenshotHint: irregularGrid && !layout ? true : undefined,
+        },
+        style,
+        el
+      );
+    }
+
+    function countUsefulLeaves(node) {
+      if (!node || typeof node !== "object") return 0;
+      if (node.kind === "text") return node.text ? 1 : 0;
+      if (node.kind === "image" || node.kind === "icon-placeholder") return 1;
+      if (node.kind === "frame") {
+        let n = 0;
+        const kids = Array.isArray(node.children) ? node.children : [];
+        for (const ch of kids) n += countUsefulLeaves(ch);
+        if (n === 0 && (node.fill || (node.gradientStops && node.gradientStops.length))) return 1;
+        return n;
+      }
+      return 0;
+    }
+
+    function minimalRootFrame(r) {
       return {
         kind: "frame",
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-        fill,
-        // Kept separate on purpose, not multiplied together: fillOpacity is
-        // the background COLOR's own alpha (rgba(0,0,0,0.5) — a
-        // translucent overlay) and only ever paints the fill itself in
-        // real CSS. opacity is the element's own whole-box CSS opacity,
-        // which fades the element AND everything inside it. A frame now
-        // genuinely has children nested inside it (unlike the old flat
-        // layer list), so collapsing these into one number would
-        // incorrectly fade a frame's children by its background's alpha
-        // too — e.g. a solid black rgba(0,0,0,0.9) card background would
-        // wrongly wash out the text sitting on top of it.
-        fillOpacity,
-        gradientStops,
-        gradientDirection,
-        opacity,
-        radius,
-        layout,
-        sizing: ownSizing,
-        children,
+        x: 0,
+        y: 0,
+        width: Math.max(1, Math.round(r.width)),
+        height: Math.max(1, Math.round(r.height)),
+        fill: null,
+        fillOpacity: 1,
+        opacity: 1,
+        children: [],
+        layout: null,
+        preferScreenshot: true,
       };
     }
 
     const rootRect = rootEl.getBoundingClientRect();
-    const tree = walk(rootEl, rootRect, null); // null: no ancestor clip above the capture root itself
+    let tree = walk(rootEl, rootRect, null); // null: no ancestor clip above the capture root itself
+    // Dual collect path (always):
+    //   layoutTree  → Export to Figma (editable Auto Layout)
+    //   previewImage → Copy / ZIP (attached later in overlay) + last-resort Figma fallback
+    // Prefer screenshot ONLY when the tree has nothing useful to rebuild —
+    // never because images failed CORS or a grid was irregular (those stay
+    // editable with placeholders / absolute children).
+    if (!tree) {
+      truncated = true;
+      tree = minimalRootFrame(rootRect);
+    } else {
+      const useful = countUsefulLeaves(tree);
+      if (useful === 0) {
+        tree.preferScreenshot = true;
+        truncated = true;
+      }
+    }
     return { tree, truncated };
   }
 
@@ -994,6 +2114,7 @@
       // family can be corrected after the fact (see the family pills) and
       // shouldn't require re-hovering to pick this up.
       const rect = el.getBoundingClientRect();
+      const textColor = Acopio.rgbToHex(style.color);
       const bgParsed = Acopio.rgbToHex(style.backgroundColor);
       const hasSolidBg = Boolean(bgParsed && bgParsed.a > 0.02);
       const bgGradientStops = Acopio.parseGradientStops(style.backgroundImage);
@@ -1002,7 +2123,14 @@
       const hasVisibleBorder = Boolean(
         borderWidthPx > 0 && style.borderTopStyle !== "none" && borderParsed && borderParsed.a > 0.02
       );
-      return {
+      // Preserve mixed bold/regular (and color) runs inside one sentence —
+      // plain textContent + root fontWeight was flattening everything to one
+      // weight on Copy → Figma. Reuse the component layoutTree extractor.
+      const extracted = extractFlattenedInlineText(el, style);
+      const sampleText =
+        (extracted && extracted.text) ||
+        (el.textContent || "").trim().slice(0, 500);
+      const out = {
         family,
         fallbackStack: style.fontFamily,
         weight: style.fontWeight,
@@ -1010,8 +2138,12 @@
         lineHeightPx: parseFloat(style.lineHeight) || null,
         letterSpacingPx: style.letterSpacing === "normal" ? 0 : parseFloat(style.letterSpacing),
         source: detectFontSource(family),
-        sampleText: (el.textContent || "").trim().slice(0, 80),
+        sampleText,
         fontMayStillBeLoading: !fontsReady,
+        // Text fill (tooltip already shows this live; previously never saved).
+        colorHex: textColor ? textColor.hex : null,
+        colorRgb: textColor ? { r: textColor.r, g: textColor.g, b: textColor.b } : null,
+        colorAlpha: textColor ? textColor.a : 1,
         boundingBoxWidth: Math.round(rect.width),
         boundingBoxHeight: Math.round(rect.height),
         backgroundHex: hasSolidBg ? bgParsed.hex : null,
@@ -1021,6 +2153,10 @@
         borderColorHex: hasVisibleBorder ? borderParsed.hex : null,
         borderWidthPx: hasVisibleBorder ? borderWidthPx : 0,
       };
+      if (extracted && extracted.ranges && extracted.ranges.length >= 2) {
+        out.ranges = extracted.ranges;
+      }
+      return out;
     }
     if (tagInfo.type === "image") {
       // el itself might be a decorated wrapper (gradient tint, hover scrim)
@@ -1082,21 +2218,35 @@
     }
     // component
     const sanitized = Acopio.sanitizeCaptureElement(el);
+    const painted =
+      typeof Acopio.measurePaintedBounds === "function"
+        ? Acopio.measurePaintedBounds(el)
+        : null;
     const rect = el.getBoundingClientRect();
+    const boxW = painted && painted.width > 0 ? painted.width : rect.width;
+    const boxH = painted && painted.height > 0 ? painted.height : rect.height;
     // Tree extraction reads the LIVE element's computed styles/rects —
     // must run before sanitizeCaptureElement's clone is the only copy left,
     // and independent of it: sanitized.html stays the "paste as HTML"
     // representation, layoutTree is the "real editable Figma nodes,
     // reflow-safe" one.
     const { tree, truncated: layersTruncated } = extractComponentLayers(el);
+    // Style-frozen HTML for Library → Figma clipboard. Bare outerHTML loses
+    // page CSS on remount (padding/gap collapse to 0). Built from the live
+    // tree while computed styles are still available.
+    const figmaHtml =
+      (typeof Acopio.buildFigmaStyledHtml === "function" && Acopio.buildFigmaStyledHtml(el)) ||
+      "";
     return {
       __sanitizeResult: sanitized, // consumed by buildCaptureData's caller, stripped before storage
       outerHTML: sanitized.html,
-      scopedCss: "", // full computed-style scoping lands in Phase 2 when the Library renders components
-      boundingBoxWidth: Math.round(rect.width),
-      boundingBoxHeight: Math.round(rect.height),
+      figmaHtml: figmaHtml || undefined,
+      scopedCss: "", // Library preview CSS still deferred; figmaHtml covers Copy→Figma spacing
+      boundingBoxWidth: Math.round(boxW),
+      boundingBoxHeight: Math.round(boxH),
       layoutTree: tree,
       layersTruncated,
+      preferScreenshot: Boolean(tree && tree.preferScreenshot),
     };
   }
 
@@ -1181,19 +2331,32 @@
     try {
       chrome.runtime.sendMessage({ type: "CAPTURE_ITEM", payload: item }, (response) => {
         if (chrome.runtime.lastError) {
-          finish({ ok: false, error: chrome.runtime.lastError.message });
+          const errMsg = chrome.runtime.lastError.message;
+          if (Acopio.isContextInvalidatedError(errMsg) || !Acopio.isRuntimeAlive()) {
+            Acopio.reloadPageForStaleExtension();
+            finish({ ok: false, error: "Reconnecting Acopio — refreshing this page…" });
+            return;
+          }
+          finish({ ok: false, error: errMsg });
           return;
         }
         if (!response || !response.ok) {
           finish({ ok: false, error: (response && response.error) || "Unknown error." });
           return;
         }
-        finish({ ok: true, item, hostname: item.hostname, count: response.count });
+        finish({
+          ok: true,
+          item: response.item || item,
+          hostname: item.hostname,
+          count: response.count,
+          updated: Boolean(response.updated),
+        });
       });
     } catch (err) {
+      Acopio.reloadPageForStaleExtension();
       finish({
         ok: false,
-        error: "Acopio was reloaded — refresh this page to keep collecting.",
+        error: "Reconnecting Acopio — refreshing this page…",
       });
     }
   };

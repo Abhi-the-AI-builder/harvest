@@ -8,7 +8,8 @@
 
   function itemHasImage(item) {
     const data = item.data || {};
-    if (item.type === "color" || item.type === "font") return true;
+    // Color/font are typography/swatch artifacts — PNG is ZIP-only, not Copy.
+    if (item.type === "color" || item.type === "font") return false;
     if (item.type === "image") return Boolean(data.inlineDataUrl || data.url);
     if (item.type === "component") {
       return Boolean(data.previewImage || data.inlineDataUrl || componentMediaUrlFromOuterHtml(data.outerHTML, item.sourceUrl));

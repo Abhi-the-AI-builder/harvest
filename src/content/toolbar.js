@@ -193,6 +193,11 @@
     let timer = null;
     return function flash() {
       clearTimeout(timer);
+      if (!Acopio.ensureRuntimeOrReload()) {
+        btn.innerHTML = Acopio.ICONS.warning;
+        btn.title = "Reconnecting Acopio — refreshing this page…";
+        return;
+      }
       btn.innerHTML = Acopio.ICONS.warning;
       btn.title = "Acopio was reloaded — refresh this page to reconnect";
       timer = setTimeout(() => {
@@ -307,10 +312,9 @@
         });
       } catch (_) {
         // Extension context invalidated (reloaded while this page was
-        // already open) — without this the click would do nothing at all,
-        // not even the error flash, since the throw happens before the
-        // callback ever gets a chance to run.
+        // already open) — reconnect by refreshing this tab.
         flashPanelBtnError();
+        Acopio.reloadPageForStaleExtension();
       }
     });
     pillEl.appendChild(panelBtn);

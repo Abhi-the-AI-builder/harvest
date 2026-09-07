@@ -125,6 +125,19 @@
       return item;
     },
 
+    // Replace capture payload on an existing item (font sample refresh, etc.).
+    async updateItemData(id, data) {
+      const t = await tx([ITEMS_STORE], "readwrite");
+      const store = t.objectStore(ITEMS_STORE);
+      const item = await promisifyRequest(store.get(id));
+      if (!item) return null;
+      item.data = data;
+      stamp(item);
+      await promisifyRequest(store.put(item));
+      notifyCloud();
+      return item;
+    },
+
     async getItemsByHostname(hostname) {
       const t = await tx([ITEMS_STORE], "readonly");
       const idx = t.objectStore(ITEMS_STORE).index("hostname");

@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Acopio layout fidelity — no early wrap</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #1c1a22;
+      font-family: "IBM Plex Sans", system-ui, sans-serif;
+      color: #14121a;
+      padding: 48px 24px;
+    }
+    #status {
+      position: fixed; left: 16px; top: 16px; right: 16px; max-width: 560px;
+      background: rgba(12,10,16,.94); color: #f4efe8;
+      border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
+      padding: 12px 16px; font: 11px/1.45 ui-monospace, Menlo, monospace;
+      white-space: pre-wrap; z-index: 9; max-height: 48vh; overflow: auto;
+    }
+    #status.pass { outline: 2px solid #3dba7a; }
+    #status.fail { outline: 2px solid #e85d4c; }
+
+    /* Fixed content box — paste root must match this, not grow/shrink */
+    #target {
+      width: 400px;
+      padding: 24px;
+      border-radius: 16px;
+      background: #f7f4ef;
+      box-shadow: 0 16px 32px rgba(0,0,0,.35);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .eyebrow {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #6b6575;
+      /* Must stay one line */
+      white-space: nowrap;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 600;
+      line-height: 28px;
+      color: #14121a;
+      /* Fits exactly in 352px content width — must not wrap early */
+      white-space: nowrap;
+    }
+
+    .body {
+      margin: 0;
+      font-size: 14px;
+      line-height: 20px;
+      color: #5c5668;
+      /* Exactly 2 lines at 352px — third line = early wrap failure */
+      width: 100%;
+    }
+
+    /* Row that must NOT wrap: 4 equal chips + fixed gap */
+    .chip-row {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+    .chip {
+      flex: 1 1 0;
+      min-width: 0;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      background: #ebe4da;
+      font-size: 12px;
+      font-weight: 600;
+      color: #3a3544;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    /* CTA row: primary grows, secondary fixed — one line */
+    .cta-row {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: stretch;
+      gap: 12px;
+      width: 100%;
+    }
+    .cta-primary {
+      flex: 1 1 auto;
+      height: 40px;
+      border: 0;
+      border-radius: 12px;
+      background: #e85d4c;
+      color: #fff;
+      font: 600 14px/1 "IBM Plex Sans", sans-serif;
+      white-space: nowrap;
+    }
+    .cta-ghost {
+      flex: 0 0 88px;
+      width: 88px;
+      height: 40px;
+      border: 1px solid rgba(20,18,26,.14);
+      border-radius: 12px;
+      background: #fff;
+      font: 600 14px/1 "IBM Plex Sans", sans-serif;
+      white-space: nowrap;
+    }
+
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 16px;
+      width: 100%;
+    }
+    .meta .label {
+      font-size: 12px;
+      color: #8a8494;
+      white-space: nowrap;
+    }
+    .meta .value {
+      font-size: 16px;
+      font-weight: 600;
+      color: #14121a;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <pre id="status">Measuring layout…</pre>
+
+  <article id="target" aria-label="Layout fidelity card" data-testid="layout-target">
+    <p class="eyebrow" data-probe="eyebrow">Spacing probe</p>
+    <h1 class="title" data-probe="title">Exact width one-line title here</h1>
+    <p class="body" data-probe="body">Two lines of body sit in a fixed width. If Figma wraps early, this becomes three lines.</p>
+    <div class="chip-row" data-probe="chip-row">
+      <div class="chip" data-probe="chip-a">Alpha</div>
+      <div class="chip" data-probe="chip-b">Bravo</div>
+      <div class="chip" data-probe="chip-c">Charlie</div>
+      <div class="chip" data-probe="chip-d">Delta</div>
+    </div>
+    <div class="cta-row" data-probe="cta-row">
+      <button type="button" class="cta-primary" data-probe="cta-primary">Continue with plan</button>
+      <button type="button" class="cta-ghost" data-probe="cta-ghost">Skip</button>
+    </div>
+    <div class="meta" data-probe="meta">
+      <span class="label" data-probe="meta-label">Content width</span>
+      <span class="value" data-probe="meta-value">352 px</span>
+    </div>
+  </article>
+
+  <script src="../../vendor/dom-to-figma.js"></script>
+  <script>
+    window.Acopio = window.Acopio || {};
+    Acopio.isOwnNode = () => false;
+    Acopio.materializePseudosForCapture = function () { return () => {}; };
+
+    Acopio.normalizeDisplayWhitespaceForCapture = function normalizeDisplayWhitespaceForCapture(root) {
+      const restores = [];
+      if (!root || root.nodeType !== 1) return () => {};
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+      let node = walker.nextNode();
+      while (node) {
+        const parent = node.parentElement;
+        const raw = node.nodeValue;
+        if (!parent || raw == null || !/\s/.test(raw)) { node = walker.nextNode(); continue; }
+        const tag = parent.tagName;
+        if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEXTAREA" || tag === "PRE" || tag === "CODE") {
+          node = walker.nextNode(); continue;
+        }
+        let ws = "normal";
+        try { ws = getComputedStyle(parent).whiteSpace || "normal"; } catch (_) {}
+        let next = raw;
+        if (ws === "pre" || ws === "pre-wrap") { node = walker.nextNode(); continue; }
+        if (ws === "pre-line") next = raw.replace(/[^\S\n]+/g, " ");
+        else next = raw.replace(/\s+/g, " ");
+        if (next !== raw) {
+          restores.push({ node, value: raw });
+          node.nodeValue = next;
+        }
+        node = walker.nextNode();
+      }
+      return () => {
+        for (let i = restores.length - 1; i >= 0; i--) {
+          try { restores[i].node.nodeValue = restores[i].value; } catch (_) {}
+        }
+      };
+    };
+
+    function setStatus(text, cls) {
+      const el = document.getElementById("status");
+      el.textContent = text;
+      el.className = cls || "";
+    }
+
+    function round1(n) { return Math.round(Number(n) * 10) / 10; }
+
+    function measureProbes(root) {
+      const rootRect = root.getBoundingClientRect();
+      const probes = {};
+      root.querySelectorAll("[data-probe]").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        const cs = getComputedStyle(el);
+        probes[el.getAttribute("data-probe")] = {
+          x: round1(r.left - rootRect.left),
+          y: round1(r.top - rootRect.top),
+          w: round1(r.width),
+          h: round1(r.height),
+          lines: Math.round(r.height / (parseFloat(cs.lineHeight) || r.height || 1)),
+          text: (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim(),
+          whiteSpace: cs.whiteSpace,
+          display: cs.display,
+          gap: cs.gap || cs.columnGap,
+        };
+      });
+      return {
+        root: { w: round1(rootRect.width), h: round1(rootRect.height) },
+        probes,
+      };
+    }
+
+    function indexFigmaScene(nodeChanges) {
+      const byName = new Map();
+      const texts = [];
+      for (const ch of nodeChanges || []) {
+        if (ch.name) {
+          if (!byName.has(ch.name)) byName.set(ch.name, []);
+          byName.get(ch.name).push(ch);
+        }
+        if (ch.type === "TEXT" && ch.characters != null) {
+          texts.push({
+            name: ch.name,
+            characters: String(ch.characters),
+            size: ch.size,
+            transform: ch.transform,
+            fontSize: ch.fontSize,
+            textAutoResize: ch.textAutoResize,
+            textAlignHorizontal: ch.textAlignHorizontal,
+          });
+        }
+      }
+      return { byName, texts, all: nodeChanges || [] };
+    }
+
+    function findText(scene, needle) {
+      return scene.texts.find((t) => t.characters.replace(/\s+/g, " ").trim() === needle)
+        || scene.texts.find((t) => t.characters.includes(needle.slice(0, 12)));
+    }
+
+    function nodeBox(ch) {
+      if (!ch) return null;
+      const t = ch.transform || {};
+      return {
+        x: round1(t.m02 || 0),
+        y: round1(t.m12 || 0),
+        w: round1(ch.size?.x || 0),
+        h: round1(ch.size?.y || 0),
+        layoutMode: ch.layoutMode || "NONE",
+        primaryAxis: ch.stackMode || ch.layoutMode,
+        padding: {
+          t: ch.stackPadding?.top ?? ch.paddingTop,
+          r: ch.stackPadding?.right ?? ch.paddingRight,
+          b: ch.stackPadding?.bottom ?? ch.paddingBottom,
+          l: ch.stackPadding?.left ?? ch.paddingLeft,
+        },
+        itemSpacing: ch.stackSpacing ?? ch.itemSpacing,
+      };
+    }
+
+    async function convert(layout) {
+      const target = document.getElementById("target");
+      const api = AcopioDomToFigma;
+      const rect = target.getBoundingClientRect();
+      const cleanupWs = Acopio.normalizeDisplayWhitespaceForCapture(target);
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const figma = api.createFigmaConverter({
+        layout,
+        imageLoader: api.createDirectImageLoader(),
+        fontLoader: api.createFontsourceLoader(),
+      });
+      const result = await figma.convert({
+        element: target,
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        name: "Layout fidelity card",
+      });
+      const html = await result.toClipboardHtml();
+      cleanupWs();
+      return {
+        layout,
+        htmlLen: html.length,
+        scene: indexFigmaScene(result.document.nodeChanges),
+        rootFrame: (result.document.nodeChanges || []).find(
+          (c) => c.type === "FRAME" && c.name === "Layout fidelity card"
+        ),
+        container: (result.document.nodeChanges || []).find(
+          (c) => c.type === "FRAME" && c.name === "Container" && c.size &&
+            Math.abs((c.size.x || 0) - rect.width) < 2
+        ),
+      };
+    }
+
+    function analyze(dom, converted) {
+      const fails = [];
+      const warns = [];
+      const notes = [];
+
+      const root = nodeBox(converted.rootFrame) || nodeBox(converted.container);
+      if (!root) {
+        fails.push("No root frame matching Layout fidelity card");
+      } else {
+        const dw = Math.abs(root.w - dom.root.w);
+        const dh = Math.abs(root.h - dom.root.h);
+        notes.push(`root DOM ${dom.root.w}×${dom.root.h} vs Figma ${root.w}×${root.h} (Δ ${round1(dw)}×${round1(dh)}) layout=${root.layoutMode}`);
+        // Root must not shrink (would force early wrap) or grow wildly
+        if (root.w + 0.5 < dom.root.w) {
+          fails.push(`Root frame narrower than DOM (${root.w} < ${dom.root.w}) — will wrap early on paste`);
+        }
+        if (root.w > dom.root.w + 8) {
+          warns.push(`Root frame wider than DOM by ${round1(root.w - dom.root.w)}px`);
+        }
+        if (root.h + 1 < dom.root.h) {
+          fails.push(`Root frame shorter than DOM (${root.h} < ${dom.root.h}) — clipped or crushed`);
+        }
+        if (root.h > dom.root.h + 12) {
+          fails.push(`Root frame taller than DOM by ${round1(root.h - dom.root.h)}px — likely early wrap / extra lines`);
+        }
+      }
+
+      // Title: must remain single-line nowrap in Figma
+      const titleDom = dom.probes.title;
+      const titleFig = findText(converted.scene, titleDom.text);
+      if (!titleFig) {
+        fails.push(`Title text missing in scene: "${titleDom.text}"`);
+      } else {
+        const th = titleFig.size?.y || 0;
+        const tw = titleFig.size?.x || 0;
+        notes.push(`title DOM ${titleDom.w}×${titleDom.h} vs Figma ${round1(tw)}×${round1(th)}`);
+        if (th > titleDom.h + 6) {
+          fails.push(`Title wrapped early in Figma (h ${round1(th)} > DOM ${titleDom.h})`);
+        }
+        if (/\n/.test(titleFig.characters)) {
+          fails.push("Title contains newline in Figma characters — wrap against design");
+        }
+        if (tw + 1 < titleDom.w * 0.92) {
+          fails.push(`Title frame too narrow (${round1(tw)} vs DOM ${titleDom.w}) — forces wrap`);
+        }
+      }
+
+      // Body: DOM is exactly 2 lines — Figma must not become 3+
+      const bodyDom = dom.probes.body;
+      const bodyFig = findText(converted.scene, bodyDom.text.slice(0, 40));
+      // Body may be split into multiple TEXT nodes — sum heights of matching runs
+      const bodyRuns = converted.scene.texts.filter((t) =>
+        bodyDom.text.includes(t.characters.replace(/\s+/g, " ").trim().slice(0, 20)) ||
+        t.characters.replace(/\s+/g, " ").includes("Two lines of body")
+      );
+      if (!bodyRuns.length && !bodyFig) {
+        fails.push("Body text missing from scene");
+      } else {
+        const run = bodyFig || bodyRuns[0];
+        const bh = run.size?.y || 0;
+        notes.push(`body DOM lines≈${bodyDom.lines} h=${bodyDom.h}; Figma text h=${round1(bh)} chars=${JSON.stringify((run.characters || "").slice(0, 60))}`);
+        if (bh > bodyDom.h + 10) {
+          fails.push(`Body taller in Figma (${round1(bh)} > ${bodyDom.h}) — early wrap`);
+        }
+        // Soft fail: internal newlines that aren't in DOM visual (whitespace collapse)
+        if (/\n\s{2,}/.test(run.characters || "")) {
+          warns.push("Body Figma text preserved source indentation newlines — may look like wrap");
+        }
+      }
+
+      // Chip row: 4 chips must stay one row (same y, not stacked)
+      const chips = ["chip-a", "chip-b", "chip-c", "chip-d"].map((k) => dom.probes[k]);
+      const chipYs = chips.map((c) => c.y);
+      const chipYSpread = Math.max(...chipYs) - Math.min(...chipYs);
+      if (chipYSpread > 2) {
+        fails.push(`DOM chip row already wrapped (y spread ${chipYSpread}) — fixture broken`);
+      }
+      const chipTexts = chips.map((c) => findText(converted.scene, c.text));
+      if (chipTexts.some((t) => !t)) {
+        fails.push("One or more chip labels missing in Figma scene");
+      } else {
+        for (let i = 0; i < chipTexts.length; i++) {
+          const th = chipTexts[i].size?.y || 0;
+          if (th > 20) {
+            fails.push(`Chip "${chips[i].text}" text height ${th} — wrapped inside`);
+          }
+        }
+      }
+
+      // Chip FRAMES (not glyph boxes) must keep row geometry: ~82px wide, 8px gaps
+      const chipFrames = converted.scene.all
+        .filter(
+          (c) =>
+            c.type === "FRAME" &&
+            c.size &&
+            Math.abs((c.size.y || 0) - 32) < 2 &&
+            Math.abs((c.size.x || 0) - chips[0].w) < 8
+        )
+        .sort((a, b) => (a.transform?.m02 || 0) - (b.transform?.m02 || 0));
+      notes.push(`chip DOM y-spread=${chipYSpread}; matched chip frames: ${chipFrames.length}`);
+      if (chipFrames.length >= 4) {
+        const top = chipFrames.slice(0, 4);
+        for (let i = 0; i < 4; i++) {
+          const w = round1(top[i].size.x);
+          if (Math.abs(w - chips[i].w) > 3) {
+            fails.push(`Chip frame ${i} width ${w} vs DOM ${chips[i].w}`);
+          }
+        }
+        for (let i = 0; i < 3; i++) {
+          const gap =
+            round1(top[i + 1].transform?.m02 || 0) -
+            round1((top[i].transform?.m02 || 0) + (top[i].size?.x || 0));
+          if (Math.abs(gap - 8) > 2) {
+            fails.push(`Chip gap ${i}→${i + 1} is ${gap}px (expected 8)`);
+          }
+        }
+        const ySpread =
+          Math.max(...top.map((f) => round1(f.transform?.m12 || 0))) -
+          Math.min(...top.map((f) => round1(f.transform?.m12 || 0)));
+        if (ySpread > 2) {
+          fails.push(`Chip frames not on one row (y spread ${ySpread})`);
+        }
+        notes.push(`chip frames w=[${top.map((f) => round1(f.size.x)).join(",")}]`);
+      } else {
+        fails.push(`Expected 4 chip frames, found ${chipFrames.length}`);
+      }
+
+      // Indentation newlines (pretty-printed HTML) → wrap fight on paste/edit
+      for (const t of converted.scene.texts) {
+        if (/\n\s{2,}/.test(t.characters || "")) {
+          fails.push(`Text has indent newline (wrap fight): ${JSON.stringify(t.characters.slice(0, 48))}`);
+        }
+      }
+
+      // CTA: ghost must stay 88px-ish; primary and ghost same row
+      const ghostDom = dom.probes["cta-ghost"];
+      const ghostFig = findText(converted.scene, "Skip");
+      const primaryFig = findText(converted.scene, "Continue with plan");
+      if (ghostFig && primaryFig) {
+        // Prefer button frames
+        const buttons = converted.scene.all.filter((c) => c.type === "FRAME" && c.name === "Button");
+        notes.push(`CTA button frames: ${buttons.length}; ghost DOM w=${ghostDom.w}`);
+        if (buttons.length >= 2) {
+          const widths = buttons.map((b) => round1(b.size?.x || 0)).sort((a, b) => a - b);
+          const ghostW = widths[0];
+          if (Math.abs(ghostW - ghostDom.w) > 6) {
+            warns.push(`Ghost button width ${ghostW} vs DOM ${ghostDom.w}`);
+          }
+          const ys = buttons.map((b) => round1(b.transform?.m12 || 0));
+          if (Math.max(...ys) - Math.min(...ys) > 20) {
+            fails.push(`CTA buttons stacked (y spread ${Math.max(...ys) - Math.min(...ys)}) — row wrapped`);
+          }
+        }
+        if (/\n/.test(primaryFig.characters) || /\n/.test(ghostFig.characters)) {
+          fails.push("CTA label contains newline — wrap against nowrap design");
+        }
+      } else {
+        fails.push("CTA labels missing from scene");
+      }
+
+      // Typography + color: must match painted CSS (html.to.design bar)
+      function parseRgb(css) {
+        const m = String(css || "").match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
+        if (!m) return null;
+        return [Number(m[1]) / 255, Number(m[2]) / 255, Number(m[3]) / 255];
+      }
+      function near(a, b, tol) {
+        return Math.abs(a - b) <= tol;
+      }
+      function colorNear(css, fill) {
+        const d = parseRgb(css);
+        if (!d || !fill || !fill.color) return false;
+        return (
+          near(d[0], fill.color.r, 0.05) &&
+          near(d[1], fill.color.g, 0.05) &&
+          near(d[2], fill.color.b, 0.05)
+        );
+      }
+
+      const typoProbes = ["eyebrow", "title", "body", "meta-value"];
+      for (const key of typoProbes) {
+        const probeEl = document.querySelector(`[data-probe="${key}"]`);
+        const domP = dom.probes[key];
+        if (!probeEl || !domP) continue;
+        const cs = getComputedStyle(probeEl);
+        const fig = findText(converted.scene, domP.text) ||
+          findText(converted.scene, domP.text.slice(0, 24));
+        if (!fig) {
+          fails.push(`Typo probe missing in scene: ${key}`);
+          continue;
+        }
+        const liveNode = converted.scene.all.find(
+          (c) => c.type === "TEXT" && c.characters === fig.characters
+        );
+        if (!liveNode) continue;
+        const domFs = parseFloat(cs.fontSize);
+        const figFs = Number(liveNode.fontSize);
+        if (Number.isFinite(domFs) && Number.isFinite(figFs) && Math.abs(domFs - figFs) > 1.1) {
+          fails.push(`${key} font-size DOM ${domFs} vs Figma ${figFs}`);
+        }
+        const domLh = parseFloat(cs.lineHeight);
+        const figLh = Number(liveNode.lineHeight?.value ?? liveNode.lineHeight);
+        if (
+          Number.isFinite(domLh) &&
+          Number.isFinite(figLh) &&
+          cs.lineHeight !== "normal" &&
+          Math.abs(domLh - figLh) > 2
+        ) {
+          fails.push(`${key} line-height DOM ${domLh} vs Figma ${figLh}`);
+        }
+        const domLs = parseFloat(cs.letterSpacing);
+        const figLs = Number(
+          liveNode.letterSpacing?.value ?? liveNode.letterSpacing
+        );
+        if (
+          Number.isFinite(domLs) &&
+          Number.isFinite(figLs) &&
+          cs.letterSpacing !== "normal" &&
+          Math.abs(domLs - figLs) > 0.6
+        ) {
+          fails.push(`${key} letter-spacing DOM ${domLs} vs Figma ${figLs}`);
+        }
+        const fill = (liveNode.fillPaints || []).find((p) => p.type === "SOLID");
+        if (fill && !colorNear(cs.color, fill)) {
+          fails.push(
+            `${key} color mismatch DOM ${cs.color} vs Figma fill`
+          );
+        } else if (fill) {
+          notes.push(`${key} type ok: ${figFs}px / color matched`);
+        }
+      }
+
+      return { fails, warns, notes, root };
+    }
+
+    async function run() {
+      await document.fonts.ready.catch(() => {});
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const target = document.getElementById("target");
+      const dom = measureProbes(target);
+
+      // Sanity: title/chips are single-line in DOM
+      if (dom.probes.title.lines > 1) {
+        throw new Error("Fixture title wrapped in DOM — widen title or font");
+      }
+      if (dom.probes.body.lines > 2) {
+        throw new Error(`Fixture body is ${dom.probes.body.lines} lines — tune copy`);
+      }
+
+      const auto = await convert("auto");
+      const absolute = await convert("absolute");
+
+      const autoReport = analyze(dom, auto);
+      const absReport = analyze(dom, absolute);
+
+      // Prefer whichever layout mode preserves geometry better
+      const autoScore = autoReport.fails.length * 10 + autoReport.warns.length;
+      const absScore = absReport.fails.length * 10 + absReport.warns.length;
+      const winner = autoScore <= absScore ? "auto" : "absolute";
+      const best = winner === "auto" ? autoReport : absReport;
+
+      const report = {
+        ok: best.fails.length === 0,
+        winner,
+        scores: { auto: autoScore, absolute: absScore },
+        dom,
+        auto: {
+          fails: autoReport.fails,
+          warns: autoReport.warns,
+          notes: autoReport.notes,
+          root: autoReport.root,
+          htmlLen: auto.htmlLen,
+          textCount: auto.scene.texts.length,
+        },
+        absolute: {
+          fails: absReport.fails,
+          warns: absReport.warns,
+          notes: absReport.notes,
+          root: absReport.root,
+          htmlLen: absolute.htmlLen,
+          textCount: absolute.scene.texts.length,
+        },
+      };
+      window.__ACOPIO_LAYOUT_FIDELITY__ = report;
+
+      const lines = [
+        report.ok ? "PASS — no early wrap / size fight" : "FAIL — layout fights paste",
+        `winner layout mode: ${winner} (scores auto=${autoScore} abs=${absScore})`,
+        `DOM root: ${dom.root.w}×${dom.root.h}`,
+        `title lines=${dom.probes.title.lines} body lines=${dom.probes.body.lines}`,
+        "",
+        "--- layout:auto ---",
+        ...autoReport.fails.map((f) => `FAIL: ${f}`),
+        ...autoReport.warns.map((w) => `WARN: ${w}`),
+        ...autoReport.notes,
+        "",
+        "--- layout:absolute ---",
+        ...absReport.fails.map((f) => `FAIL: ${f}`),
+        ...absReport.warns.map((w) => `WARN: ${w}`),
+        ...absReport.notes,
+      ];
+      setStatus(lines.join("\n"), report.ok ? "pass" : "fail");
+      return report;
+    }
+
+    window.__runLayoutFidelity = run;
+    document.fonts.ready.then(() => run()).catch((err) => {
+      setStatus("FAIL: " + (err && err.stack ? err.stack : err), "fail");
+      window.__ACOPIO_LAYOUT_FIDELITY__ = { ok: false, error: String(err) };
+    });
+  </script>
+</body>
+</html>
