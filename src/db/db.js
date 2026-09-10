@@ -86,6 +86,28 @@
     }
   }
 
+  // A delete/restore made here (background service worker or side panel)
+  // is invisible to a content script's own in-memory session-capture stack
+  // — that cache is seeded once per page load and never re-fetched on its
+  // own, so deleting a folder in the side panel and then recollecting on
+  // an already-open tab left its tooltip showing the old, pre-delete stack
+  // forever (confirmed live: sidepanel correctly showed "1 item" while the
+  // tooltip's stack still showed 3 stale thumbnails from before the
+  // delete). chrome.storage.onChanged reaches every context — background,
+  // side panel, AND content scripts — with no per-tab relay needed, the
+  // same mechanism already used for acopioActive (content.js/toolbar.js/
+  // notes.js). A plain write is enough; content scripts react to the key
+  // changing, not to any particular value in it.
+  function notifyLibraryChanged() {
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ acopioLibraryChangedAt: Date.now() });
+      }
+    } catch (_) {
+      /* tests / plain pages — no extension runtime */
+    }
+  }
+
   async function readTombstones(store) {
     const row = await promisifyRequest(store.get("cloudTombstones"));
     return row && Array.isArray(row.entries) ? row.entries : [];
@@ -122,6 +144,7 @@
       const store = t.objectStore(ITEMS_STORE);
       await promisifyRequest(store.add(item));
       notifyCloud();
+      notifyLibraryChanged();
       return item;
     },
 
@@ -268,6 +291,7 @@
         }
       }
       notifyCloud();
+      notifyLibraryChanged();
       return { item, affectedCollections };
     },
 
@@ -293,6 +317,7 @@
         col.lastUpdatedAt = new Date().toISOString();
         await promisifyRequest(collectionsStore.put(col));
       }
+      notifyLibraryChanged();
     },
 
     /**
@@ -445,6 +470,7 @@
     async deleteCollection(id) {
       const t = await tx([COLLECTIONS_STORE], "readwrite");
       await promisifyRequest(t.objectStore(COLLECTIONS_STORE).delete(id));
+      notifyLibraryChanged();
     },
 
     async addItemsToCollection(collectionId, itemRefs) {

@@ -27,6 +27,11 @@
     return bytes && bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   };
 
+  // Real magic-byte sniff (any 2xx response can still be a non-image
+  // body) — defined once in shared.js since both the content script
+  // (Collect-time inlining) and this sidepanel context (export) need it.
+  H.isRecognizableImageBytes = Acopio.isRecognizableImageBytes;
+
   H.dataUrlMime = function dataUrlMime(dataUrl) {
     const match = /^data:([^;,]+)/.exec(String(dataUrl || ""));
     return match ? match[1] : "";
@@ -132,6 +137,47 @@
     }
   };
 
+  // A raw CSS selector ("a.framer-9bdXY") makes an unreadable filename — it
+  // identifies the DOM node, not what a design-handoff recipient would
+  // recognize. Prefer real content: the component's own heading/alt text,
+  // falling back to the selector only when nothing readable exists at all.
+  H.componentLabelFromOuterHtml = function componentLabelFromOuterHtml(outerHTML) {
+    if (!outerHTML) return "";
+    try {
+      const doc = new DOMParser().parseFromString(outerHTML, "text/html");
+      const heading = doc.querySelector("h1, h2, h3, h4, h5, h6, [role=heading]");
+      const headingText = heading && heading.textContent && heading.textContent.trim();
+      if (headingText) return headingText.slice(0, 40);
+      const media = doc.querySelector("img[alt], [aria-label]");
+      const mediaLabel =
+        media && (media.getAttribute("alt") || media.getAttribute("aria-label") || "").trim();
+      if (mediaLabel) return mediaLabel.slice(0, 40);
+      const anyText = doc.body && doc.body.textContent && doc.body.textContent.trim();
+      if (anyText) return anyText.slice(0, 40);
+    } catch (_) {
+      // fall through
+    }
+    return "";
+  };
+
+  H.imageLabelFromItem = function imageLabelFromItem(item) {
+    const data = (item && item.data) || {};
+    const alt = data.alt && String(data.alt).trim();
+    if (alt) return alt.slice(0, 40);
+    const url = data.url && String(data.url);
+    if (url && !url.startsWith("data:")) {
+      try {
+        const path = new URL(url).pathname;
+        const base = path.split("/").filter(Boolean).pop() || "";
+        const name = decodeURIComponent(base).replace(/\.[a-z0-9]+$/i, "");
+        if (name && !/^[0-9a-f]{16,}$/i.test(name)) return name.slice(0, 40);
+      } catch (_) {
+        // fall through
+      }
+    }
+    return "";
+  };
+
   H.imageUrlFetchCandidates = function imageUrlFetchCandidates(url) {
     if (!url || String(url).startsWith("data:") || String(url).startsWith("blob:")) return [];
     const candidates = [];
@@ -155,6 +201,7 @@
       });
       if (!resp || !resp.ok || !resp.bytes || !resp.bytes.length) return null;
       const bytes = new Uint8Array(resp.bytes);
+      if (!H.isRecognizableImageBytes(bytes)) return null;
       const png = await H.ensurePngBytes(bytes, resp.contentType || H.mimeFromBytes(bytes));
       return png || bytes;
     } catch (_) {
@@ -167,16 +214,26 @@
     for (const tryUrl of candidates) {
       try {
         const resp = await fetch(tryUrl);
+        // resp.ok only means "got an HTTP 2xx" — a cross-origin fetch
+        // returning a login/error page (still 200) used to be accepted
+        // here as if it were a real image, because `raw` (a Uint8Array)
+        // is always truthy even when its bytes aren't an image at all.
+        // That garbage then got written into the ZIP as "image-*.png",
+        // which the catalog dutifully referenced — a broken-image icon in
+        // the exported HTML, confirmed live. Only accept it once the
+        // bytes are actually recognizable as some real image format.
         if (resp.ok) {
           const raw = await H.blobToBytes(await resp.blob());
-          const png = await H.ensurePngBytes(raw);
-          if (png || raw) return png || raw;
+          if (H.isRecognizableImageBytes(raw)) {
+            const png = await H.ensurePngBytes(raw);
+            return png || raw;
+          }
         }
       } catch (_) {
         // try next candidate or background fetch
       }
       const bgBytes = await H.fetchImageViaBackground(tryUrl);
-      if (bgBytes && bgBytes.length) return bgBytes;
+      if (bgBytes && bgBytes.length && H.isRecognizableImageBytes(bgBytes)) return bgBytes;
     }
     return null;
   };
@@ -447,11 +504,90 @@
     return new Blob([markup], { type: "image/svg+xml" });
   };
 
-  H.fontSamplePngBlob = function fontSamplePngBlob(data) {
+  // Best-matching harvested face for a given weight/style — a captured
+  // element can carry more than one (a bold run inside otherwise-regular
+  // text), so this picks the one actually needed for THIS render.
+  H.pickFontAsset = function pickFontAsset(fontAssets, wantWeight, wantStyle) {
+    const list = Array.isArray(fontAssets) ? fontAssets : [];
+    if (!list.length) return null;
+    const wantW = parseInt(wantWeight, 10) || 400;
+    const wantS = String(wantStyle || "normal").toLowerCase();
+    let best = null;
+    let bestScore = -Infinity;
+    for (const asset of list) {
+      if (!asset || !asset.dataUrl) continue;
+      const aw = parseInt(asset.weight, 10) || 400;
+      let score = -Math.abs(aw - wantW);
+      if (String(asset.style || "normal").toLowerCase() === wantS) score += 1000;
+      if (score > bestScore) {
+        bestScore = score;
+        best = asset;
+      }
+    }
+    return best;
+  };
+
+  H.fontFormatFromMime = function fontFormatFromMime(mimeType) {
+    const m = String(mimeType || "").toLowerCase();
+    if (m.includes("woff2")) return "woff2";
+    if (m.includes("woff")) return "woff";
+    if (m.includes("truetype") || m.includes("ttf")) return "truetype";
+    if (m.includes("opentype") || m.includes("otf")) return "opentype";
+    return "woff2";
+  };
+
+  // Real @font-face rules for every harvested face — so a standalone HTML
+  // export renders the font actually collected, not its name (a browser
+  // with no idea what "Rebond Grotesque" is silently falls back to a
+  // generic font otherwise). `safeFamily` is a per-item, collision-free
+  // name (the real family name isn't unique enough across items/exports).
+  H.fontFaceStyleBlock = function fontFaceStyleBlock(fontAssets, safeFamily) {
+    const list = Array.isArray(fontAssets) ? fontAssets : [];
+    const rules = list
+      .filter((a) => a && a.dataUrl)
+      .map(
+        (a) =>
+          `@font-face{font-family:'${safeFamily}';src:url(${a.dataUrl}) format('${H.fontFormatFromMime(a.mimeType)}');font-weight:${parseInt(a.weight, 10) || 400};font-style:${a.style || "normal"};font-display:swap;}`
+      );
+    return rules.length ? `<style>${rules.join("")}</style>` : "";
+  };
+
+  // Loads a harvested face into THIS document (the sidepanel's own page,
+  // separate from the source page it was captured from) so canvas text
+  // measurement/drawing — fontSamplePngBlob below — paints the real font
+  // instead of silently falling back the same way a standalone HTML export
+  // would without an embedded @font-face.
+  H.loadFontAssetIntoDocument = async function loadFontAssetIntoDocument(
+    fontAssets,
+    wantWeight,
+    wantStyle,
+    targetFamily
+  ) {
+    const asset = H.pickFontAsset(fontAssets, wantWeight, wantStyle);
+    if (!asset || !asset.dataUrl || typeof FontFace === "undefined") return false;
+    try {
+      const face = new FontFace(targetFamily, `url(${asset.dataUrl})`, {
+        weight: String(parseInt(asset.weight, 10) || 400),
+        style: asset.style || "normal",
+      });
+      await face.load();
+      document.fonts.add(face);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+
+  H.fontSamplePngBlob = async function fontSamplePngBlob(data) {
     const sample = (data.sampleText || data.family || "Aa").trim() || "Aa";
     const size = Math.min(Math.max(data.sizePx || 32, 12), 72);
     const weight = data.weight || 400;
-    const family = data.fallbackStack || "sans-serif";
+    let family = data.fallbackStack || "sans-serif";
+    if (Array.isArray(data.fontAssets) && data.fontAssets.length) {
+      const safeFamily = `acopio-embed-${(data.family || "font").replace(/[^a-z0-9]/gi, "").slice(0, 24) || "font"}`;
+      const loaded = await H.loadFontAssetIntoDocument(data.fontAssets, weight, data.style, safeFamily);
+      if (loaded) family = `'${safeFamily}', ${data.fallbackStack || "sans-serif"}`;
+    }
     const fontCss = `${weight} ${size}px ${family}`;
     const metrics = Acopio.fontMetricsLine(data);
     const color = Acopio.fontColorHex(data);

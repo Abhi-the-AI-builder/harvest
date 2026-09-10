@@ -6,15 +6,15 @@
   const Acopio = window.Acopio;
   const ACCENT = "#1D3461"; // deep navy — calmer, more premium than the earlier orange
 
-  // Off for this deploy, per direct instruction — the HTML/CSS→Figma-layer
-  // conversion path (AcopioFigmaClipboard, figma-clipboard.js) still has
-  // open, confirmed fidelity bugs (missing content on video/complex-image
-  // components) that need more work before shipping. Component Copy falls
-  // straight to the plain-image path below instead — same code, same
-  // pattern as sidepanel.js's own ENABLE_FIGMA_EXPORT/ENABLE_FIGMA_PLUGIN_
-  // COPY flags. Text (font) and color copies are entirely separate code
-  // paths above and are never touched by this flag. Nothing here is
-  // deleted — flip back to true once the conversion pipeline is solid.
+  // Off again per direct instruction, ahead of deployment — Component
+  // Copy falls straight to the plain-image path below instead of the
+  // HTML/CSS→Figma-layer (Auto Layout) conversion, same as the earlier
+  // pre-deployment pass. Nothing about the conversion pipeline itself was
+  // touched or removed (still real, still tested — see the fidelity work
+  // this flag's own history in the codebase records); this only changes
+  // which path Component Copy takes. Text (font) and color copies are
+  // entirely separate code paths above and are never affected by this
+  // flag either way. Flip back to true when the feature is ready to ship.
   const ENABLE_FIGMA_LAYER_CONVERSION = false;
 
   // Bundled locally (fonts/Inter-var.woff2, SIL Open Font License) and
@@ -244,9 +244,10 @@
       font-size: 11px; color: var(--color-text-muted);
     }
     .already-collected svg { color: var(--color-accent); flex: none; width: 12px; height: 12px; }
-    /* Match card bottom padding (--space-3): note→divider, divider→stack, and
-       stack→card bottom all read as the same 12px gap. */
-    .divider { height: 1px; background: var(--color-border); margin: var(--space-3) 0; }
+    /* note→divider gap reduced 4px (12px -> 8px) per direct request —
+       divider→stack and stack→card bottom stay at the original --space-3
+       (12px) to match card bottom padding. */
+    .divider { height: 1px; background: var(--color-border); margin: var(--space-2) 0 var(--space-3); }
     .row { display: flex; align-items: center; gap: var(--space-2); }
     /* Small inline icon directly in the headline row — not a floating
        badge over a decorative band. Matches the reference tooltip exactly:
@@ -603,7 +604,7 @@
     .collect-fab:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
     .collect-fab.is-collected { transform: scale(1.12); }
     .note-field {
-      margin-top: var(--space-3); width: 100%; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+      margin-top: var(--space-3); width: 100%; border: 1px solid var(--color-border-strong); border-radius: var(--radius-xs);
       padding: var(--space-2) var(--space-3); font-size: var(--text-caption); outline: none; color: var(--color-text); background: var(--color-surface);
       transition: border-color var(--ease-fast);
       /* A textarea now, not a single-line input — grows with what you type
@@ -623,18 +624,48 @@
        image doesn't need the notch/mask (there's no caption+value text
        sitting underneath it the way color/font have), just the same
        "this is a deliberate card, not a raw thumbnail" frame. */
-    .image-swatch-card { margin-top: var(--space-2); border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg); }
-    .thumb { display: block; width: 100%; max-height: 160px; object-fit: cover; }
-    /* Component Preview must show the FULL selection — cover was cropping
-       wide heroes (e.g. 934×533) into a misleading zoomed strip. */
+    /* A genuinely FIXED height, not aspect-ratio-derived and not just a
+       max-height ceiling — every image/component preview is this same
+       size regardless of the source's own dimensions (a tall Pinterest
+       pin at 236x419 previously computed a ~500px box from its own aspect
+       ratio, which read as "the preview exploded"; before that, no
+       reserved height at all meant a slow-loading high-res swap visibly
+       grew the whole tooltip the instant it arrived). object-fit:cover
+       crops any shape to fill this box consistently, the same way a
+       photo grid thumbnail would. */
+    .image-swatch-card { margin-top: var(--space-2); border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg); height: 140px; }
+    /* Same fixed height as the plain image preview, per direct request —
+       one consistent constant across every preview, image or component. */
+    .image-swatch-card-component { height: 140px; }
+    .thumb { display: block; width: 100%; height: 100%; object-fit: cover; transition: opacity 180ms ease-out; }
+    /* Loading state while the real src — for images, often a much bigger,
+       slower-loading full-resolution original than the page's own grid
+       thumbnail (Pinterest) — is still in flight. The box is already its
+       final fixed size before this class is even added, so clearing it on
+       load never moves anything outside the preview area itself. */
+    .image-swatch-card-pending {
+      background: linear-gradient(90deg, var(--color-bg) 0%, #eceef2 50%, var(--color-bg) 100%);
+      background-size: 200% 100%;
+      animation: preview-shimmer 1.1s ease-in-out infinite;
+    }
+    .image-swatch-card-pending .thumb { opacity: 0; }
+    /* Was object-fit:contain ("show the FULL selection, never crop") —
+       reversed per direct instruction after seeing it live: contain
+       letterboxes anything that isn't the exact box ratio, which reads as
+       empty white space inside the preview (confirmed live: a
+       942x544 component in a 140px-tall box left visible gaps above/
+       below the screenshot). cover crops instead, same as the plain image
+       preview already did — no empty space, at the cost of not always
+       showing literally every edge pixel. object-position:top center
+       keeps whichever crop happens biased toward the top (most components
+       lead with their most identifying content there) and centered
+       horizontally. */
     .thumb.component-preview-thumb {
-      object-fit: contain;
+      object-fit: cover;
       object-position: top center;
-      max-height: 180px;
       background: #fff;
     }
     .thumb.component-preview-pending {
-      min-height: 96px;
       background: linear-gradient(90deg, var(--color-bg) 0%, #eceef2 50%, var(--color-bg) 100%);
       background-size: 200% 100%;
       animation: preview-shimmer 1.1s ease-in-out infinite;
@@ -766,6 +797,13 @@
   let folderMenuOpen = false;
   let folderMenuLoadId = 0;
   let stackLoadGeneration = 0;
+  // Set whenever a delete/restore made elsewhere (the side panel, or a
+  // different tab entirely) touched the library — see the
+  // chrome.storage.onChanged listener below. sessionCaptures is otherwise
+  // seeded once per page load and never re-checked against the real DB, so
+  // without this a folder deleted in the side panel left this tab's
+  // tooltip showing the old, pre-delete stack until the page reloaded.
+  let stackDirty = false;
 
   function siteFolderLabel() {
     return Acopio.hostname() || "This site";
@@ -1157,6 +1195,26 @@
       }
     );
   }, 0);
+
+  // A delete/restore made in the side panel (or a different tab on this
+  // same site) never touches this tab's own sessionCaptures cache — it's
+  // seeded once above and otherwise only ever grows via a local push on
+  // this tab's own successful Collect. db.js writes acopioLibraryChangedAt
+  // on every add/delete/restore precisely so every open tab can react to
+  // that here, the same chrome.storage.onChanged mechanism already used
+  // for acopioActive (content.js/toolbar.js/notes.js) — reaches every
+  // context including content scripts, no per-tab relay needed. If the
+  // tooltip is open right now, refresh it immediately since the user is
+  // actively looking at what's now a stale stack; otherwise just mark it
+  // dirty so the next render() (see there) refreshes before showing it.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes.acopioLibraryChangedAt) return;
+    stackDirty = true;
+    if (cardEl && currentTarget) {
+      stackDirty = false;
+      loadStackForCurrentFolder(() => refreshActionsInPlace());
+    }
+  });
   // Set right after a successful collect, consumed the next time
   // buildStackPreview() runs (see there) so the newly-added card plays its
   // spring entrance exactly once, on the next tooltip that shows it.
@@ -1196,6 +1254,21 @@
   // (count back to zero) actually applies it.
   let rootsHideCount = 0;
   let rootsTrueVisibility = null;
+  // Same race, same fix, for the dashed hover outline painted directly on
+  // the target element (not a separate own-root, so rootsHideCount above
+  // never covered it). Confirmed live: a "button" family item calls
+  // captureElementPreview on every render() (buildTypeBody), and clicking
+  // the family-tag pill while hovering re-renders the SAME element —
+  // firing a second overlapping captureElementScreenshot before the
+  // first's chrome.tabs.captureVisibleTab round trip finishes. The first
+  // call's restore ran (real outline visible again) while the second
+  // call's own capture was still in flight, so its screenshot — and
+  // whatever it baked into, since captureElementPreview inserts this
+  // straight into the tooltip's own preview thumb — showed the dashed
+  // selection outline as if it were part of the page.
+  let outlineHideCount = 0;
+  let outlineTrueValue = null;
+  let outlineTrueOffset = null;
 
   // A full snapshot of what Collect would need to save — tagInfo, the
   // extracted data, oversize info — taken the moment the tooltip opens
@@ -1264,10 +1337,6 @@
   }
 
   function applyOutline(el) {
-    clearOutline();
-    outlinedEl = el;
-    prevOutline = el.style.outline;
-    prevOutlineOffset = el.style.outlineOffset;
     // Painted-bounds overlay so overflow:visible captions / descenders
     // aren't visually cropped by a border-box-only CSS outline.
     ensureHost();
@@ -1275,6 +1344,36 @@
       typeof Acopio.measurePaintedBounds === "function"
         ? Acopio.measurePaintedBounds(el)
         : null;
+    // Re-render for the SAME already-outlined element (family-tag click,
+    // font-compare toggle, any render() re-run that doesn't change the
+    // hover target) — reposition the existing outline div instead of
+    // destroy+recreate. A freshly-created div here would be a brand-new
+    // own-root an in-flight captureElementScreenshot call could never
+    // know to hide, since it already computed its hide-list from the OLD
+    // element before this ran. Confirmed live: a "button" family item's
+    // captureElementPreview fires on every render, and clicking the
+    // family-tag pill while hovering baked the dashed selection outline
+    // directly into the preview thumbnail Collect ends up using — the
+    // in-flight capture was hiding a node that had just been swapped out
+    // from under it for an identical-looking replacement.
+    if (
+      outlinedEl === el &&
+      paintedOutlineEl &&
+      paintedOutlineEl.isConnected &&
+      painted &&
+      painted.width > 0 &&
+      painted.height > 0
+    ) {
+      paintedOutlineEl.style.left = `${Math.round(painted.left)}px`;
+      paintedOutlineEl.style.top = `${Math.round(painted.top)}px`;
+      paintedOutlineEl.style.width = `${Math.round(painted.width)}px`;
+      paintedOutlineEl.style.height = `${Math.round(painted.height)}px`;
+      return;
+    }
+    clearOutline();
+    outlinedEl = el;
+    prevOutline = el.style.outline;
+    prevOutlineOffset = el.style.outlineOffset;
     if (painted && painted.width > 0 && painted.height > 0) {
       paintedOutlineEl = document.createElement("div");
       paintedOutlineEl.setAttribute("data-acopio", "painted-outline");
@@ -1636,10 +1735,22 @@
     });
     // Dashed hover outline is painted ON the element — strip it for the
     // capture frame or it shows up in Preview / Collect screenshots.
+    // Reference-counted the same way roots below are: only the FIRST
+    // concurrent hide records the true original value, and only the LAST
+    // matching restore (count back to zero) writes it back. Without this,
+    // two overlapping captures for the same element (e.g. a "button"
+    // family item re-renders on every family-tag click, and
+    // captureElementPreview fires again each time) could have the first
+    // call's restore put the real outline back while the second call's
+    // own native screenshot was still in flight — baking the dashed
+    // selection outline into that second capture.
     const outlineEl = outlinedEl === el ? el : null;
-    const savedOutline = outlineEl ? outlineEl.style.outline : "";
-    const savedOutlineOffset = outlineEl ? outlineEl.style.outlineOffset : "";
     if (outlineEl) {
+      if (outlineHideCount === 0) {
+        outlineTrueValue = outlineEl.style.outline;
+        outlineTrueOffset = outlineEl.style.outlineOffset;
+      }
+      outlineHideCount += 1;
       outlineEl.style.outline = "none";
       outlineEl.style.outlineOffset = "";
     }
@@ -1668,8 +1779,13 @@
         rootsTrueVisibility = null;
       }
       if (outlineEl) {
-        outlineEl.style.outline = savedOutline;
-        outlineEl.style.outlineOffset = savedOutlineOffset;
+        outlineHideCount = Math.max(0, outlineHideCount - 1);
+        if (outlineHideCount === 0) {
+          outlineEl.style.outline = outlineTrueValue || "";
+          outlineEl.style.outlineOffset = outlineTrueOffset || "";
+          outlineTrueValue = null;
+          outlineTrueOffset = null;
+        }
       }
     };
     return new Promise((resolve) => {
@@ -1809,7 +1925,7 @@
         // get, inserted at the top of the body content, same spot the
         // existing-img case already uses.
         const swatchCard = document.createElement("div");
-        swatchCard.className = "image-swatch-card";
+        swatchCard.className = "image-swatch-card image-swatch-card-component";
         swatchCard.style.marginTop = "var(--space-3)";
         swatchCard.appendChild(freshImg);
         const bodyEl = cardEl.querySelector(".type-body");
@@ -2077,8 +2193,13 @@
       const videoResolved = isVideoTag ? Acopio.resolveVideoOrPoster(mediaEl) : null;
       const isVideo = videoResolved ? videoResolved.isVideo : false;
       const svgRect = isSvgImageTag ? mediaEl.getBoundingClientRect() : null;
+      // Preview-sized, not full-resolution — this is a live throwaway
+      // thumbnail in a 140px box, not the saved item (Collect independently
+      // re-resolves the real URL at full resolution via buildTypeData).
+      // Requesting Pinterest's often-multi-megabyte /originals/ file just
+      // to shrink it into a small preview was the actual latency here.
       const src = isImgTag
-        ? Acopio.resolveImgSrc(mediaEl) || ""
+        ? Acopio.resolveImgSrcForPreview(mediaEl) || ""
         : videoResolved
           ? videoResolved.url || ""
           : isSvgImageTag
@@ -2114,9 +2235,15 @@
       // as safe markup to splice into an HTML string, and video attributes
       // (autoplay/muted/loop) are easy to get subtly wrong when serialized
       // as text anyway. Set as real DOM properties/attributes instead.
+      // .image-swatch-card is a fixed height (see SHEET) regardless of the
+      // source's own dimensions — the real src below can be a much bigger,
+      // slower-loading file than the page's own thumbnail (Pinterest's
+      // grid preview vs. the full-resolution original Acopio upgrades it
+      // to), and a fixed box means that swap never changes anything
+      // outside the preview area itself, whatever shape it turns out to be.
       if (src && isVideo) {
         const swatchCard = document.createElement("div");
-        swatchCard.className = "image-swatch-card";
+        swatchCard.className = "image-swatch-card image-swatch-card-pending";
         const video = document.createElement("video");
         video.className = "thumb";
         video.src = src;
@@ -2124,17 +2251,19 @@
         video.loop = true;
         video.muted = true;
         video.playsInline = true;
+        video.addEventListener("loadeddata", () => swatchCard.classList.remove("image-swatch-card-pending"), { once: true });
         swatchCard.appendChild(video);
         frag.appendChild(swatchCard);
       } else if (src) {
         const swatchCard = document.createElement("div");
-        swatchCard.className = "image-swatch-card";
+        swatchCard.className = "image-swatch-card image-swatch-card-pending";
         const img = document.createElement("img");
         img.className = "thumb";
         img.src = src;
         Acopio.withPinterestFallback(img, src);
         const myGeneration = generation;
         img.addEventListener("load", () => {
+          swatchCard.classList.remove("image-swatch-card-pending");
           if (myGeneration !== generation || !headlineMetaEl.isConnected) return;
           if (img.naturalWidth && img.naturalHeight) {
             headlineMetaEl.textContent = `${img.naturalWidth}×${img.naturalHeight}px`;
@@ -2166,10 +2295,14 @@
       // this gives a component one too when it actually contains one,
       // instead of describing it in words only.
       const previewImg = el.querySelector("img, video");
+      // Preview-sized, same reasoning as the plain "image" type branch
+      // above — this is an instant placeholder, quickly replaced by the
+      // real screenshot below, so there's no reason to wait on a
+      // full-resolution fetch just to show it briefly.
       const previewSrc = previewImg
         ? previewImg.tagName.toLowerCase() === "video"
           ? Acopio.videoSrcFor(previewImg)
-          : Acopio.resolveImgSrc(previewImg)
+          : Acopio.resolveImgSrcForPreview(previewImg)
         : null;
       // Only use an inner <img> as the instant placeholder when it actually
       // dominates the component. A logo strip inside a 934px hero made the
@@ -2185,7 +2318,7 @@
         }
       }
       const swatchCard = document.createElement("div");
-      swatchCard.className = "image-swatch-card";
+      swatchCard.className = "image-swatch-card image-swatch-card-component";
       swatchCard.style.marginTop = "var(--space-3)";
       if (useInnerMediaPlaceholder) {
         const thumb = document.createElement(previewImg.tagName.toLowerCase() === "video" ? "video" : "img");
@@ -2831,6 +2964,17 @@
     ensureHost();
     generation++;
     closeFolderMenu();
+    // Something changed the library since sessionCaptures was last loaded
+    // (see the chrome.storage.onChanged listener above) while the tooltip
+    // was closed — render once now with whatever's on hand so opening the
+    // tooltip isn't blocked on a network round-trip, then refresh in place
+    // the moment the real, current stack comes back.
+    if (stackDirty) {
+      stackDirty = false;
+      loadStackForCurrentFolder(() => {
+        if (cardEl && currentTarget) refreshActionsInPlace();
+      });
+    }
     if (cardEl) cardEl.remove();
     isSaving = false;
     if (!selectedCollectionId) selectedFolderName = folderDisplayName(siteFolderLabel());
@@ -2841,6 +2985,16 @@
 
     const el = currentTarget;
     const style = window.getComputedStyle(el);
+    // MUST run before buildTypeBody below — a "button" family item's
+    // preview screenshot (captureElementPreview, inside buildTypeBody)
+    // starts an async capture whose hide-list is a synchronous snapshot
+    // taken at call time. Applying the outline first means that snapshot
+    // always includes the CURRENT render's own outline element; applying
+    // it after (as this used to) meant the very first hover on a button
+    // captured before the outline even existed to be hidden — confirmed
+    // live: the dashed selection outline baked straight into the preview
+    // thumbnail.
+    applyOutline(el);
 
     if (el.tagName.toLowerCase() === "iframe") {
       cardEl.innerHTML = `
@@ -3155,7 +3309,6 @@
     // actually laid out in the document, matching what its own comment
     // always claimed but didn't actually do.
     autosizeNoteField();
-    applyOutline(el);
     positionCard(el.getBoundingClientRect());
   }
 
@@ -3205,6 +3358,40 @@
           const resp = await fetch(tryUrl);
           if (!resp.ok) continue;
           const blob = await resp.blob();
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          // A 200 response can still be a login/error page, not the image
+          // — same guard export-helpers.js's own fetch uses, so a bad
+          // response never gets saved as if it were the real file.
+          if (!Acopio.isRecognizableImageBytes(bytes)) continue;
+          data.inlineDataUrl = await blobToDataUrl(blob);
+          return;
+        } catch (_) {
+          // try next URL candidate
+        }
+      }
+      // Every direct fetch() above runs from THIS page's own origin, so a
+      // cross-origin image whose server doesn't grant CORS fails here no
+      // matter how many URL variants are tried — confirmed live: an image
+      // that displayed fine (a plain <img src> is never CORS-restricted)
+      // still couldn't be inlined at Collect, and the same restriction
+      // then blocked export too, since export tries the same kind of
+      // fetch again later. The background service worker's fetch is
+      // exempt from the TARGET server's CORS policy entirely — Chrome
+      // grants that once the extension holds host_permissions covering
+      // the URL (this extension declares <all_urls> in manifest.json) —
+      // so trying it here, at Collect time, lets many previously-
+      // unfetchable images get saved as real, fully self-contained files
+      // from the start, instead of depending on the source staying live
+      // and fetchable whenever export happens to run later.
+      for (const tryUrl of tryUrls) {
+        try {
+          const bg = await new Promise((resolve) => {
+            chrome.runtime.sendMessage({ type: "FETCH_IMAGE_BYTES", payload: { url: tryUrl } }, resolve);
+          });
+          if (chrome.runtime.lastError || !bg || !bg.ok || !bg.bytes || !bg.bytes.length) continue;
+          const bytes = new Uint8Array(bg.bytes);
+          if (!Acopio.isRecognizableImageBytes(bytes)) continue;
+          const blob = new Blob([bytes], { type: bg.contentType || "application/octet-stream" });
           data.inlineDataUrl = await blobToDataUrl(blob);
           return;
         } catch (_) {
@@ -3289,6 +3476,21 @@
         } else {
           await inlineImageUrlAtCapture(data);
         }
+      } else if (tagInfo.type === "font") {
+        // Only the family NAME was ever saved — meaningless outside this
+        // page's own document, where the real @font-face is already
+        // loaded. A standalone export (ZIP catalog, Notion) opened in a
+        // browser with no idea what "Rebond Grotesque" is silently falls
+        // back to a generic font. Harvest the real file bytes now, while
+        // still in the source page's document, the same way Copy→Figma
+        // already does for paste fidelity — so an export can embed a real
+        // @font-face and render the font actually collected, not its name.
+        try {
+          if (typeof Acopio.harvestFontBytesForElement === "function") {
+            const assets = await Acopio.harvestFontBytesForElement(el);
+            if (assets && assets.length) data.fontAssets = assets;
+          }
+        } catch (_) {}
       }
     } catch (_) {
       if (tagInfo.type === "component" && lastElementCapture && lastElementCapture.el === el && lastElementCapture.dataUrl) {

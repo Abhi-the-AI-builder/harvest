@@ -134,29 +134,32 @@ async function main() {
           };
         });
     }
+    // The real Kiwi clipboard wire format names this field `fillPaints`, not
+    // `fill` — confirmed by dumping an actual converted node (an "Image"
+    // ROUNDED_RECTANGLE) and finding `fillPaints: [{ type: "IMAGE", image:
+    // { hash, dataBlob } }]`. The old `n.fill` check never matched any real
+    // node, so `hasImage` silently returned false for every case in this
+    // whole matrix — case-mask's "pass" only ever came from the `||
+    // hasMaskStill` fallback, which masked that this assertion never worked.
+    function imagePaintsOf(n) {
+      return Array.isArray(n && n.fillPaints) ? n.fillPaints : [];
+    }
     function imagesOf(doc) {
       const changes = (doc && doc.nodeChanges) || [];
-      return changes.filter(
-        (n) =>
-          n &&
-          (n.type === "RECTANGLE" || n.type === "ELLIPSE" || n.type === "FRAME") &&
-          Array.isArray(n.fill) &&
-          n.fill.some((f) => f && (f.type === "IMAGE" || f.imageHash || f.image))
+      return changes.filter((n) =>
+        imagePaintsOf(n).some((f) => f && (f.type === "IMAGE" || f.imageHash || f.image))
       );
     }
     function hasImageFillSafe(doc) {
       const changes = (doc && doc.nodeChanges) || [];
-      return changes.some(
-        (n) =>
-          n &&
-          Array.isArray(n.fill) &&
-          n.fill.some(
-            (f) =>
-              f &&
-              (f.type === "IMAGE" ||
-                f.imageHash ||
-                (f.image && (f.image.hash || f.image.dataBlob)))
-          )
+      return changes.some((n) =>
+        imagePaintsOf(n).some(
+          (f) =>
+            f &&
+            (f.type === "IMAGE" ||
+              f.imageHash ||
+              (f.image && (f.image.hash || f.image.dataBlob)))
+        )
       );
     }
     function nodeSize(n) {

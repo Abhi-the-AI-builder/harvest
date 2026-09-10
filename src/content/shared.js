@@ -187,6 +187,74 @@
     return url;
   };
 
+  // The tooltip's own live preview only ever displays a small, fixed-size
+  // box (.image-swatch-card, overlay.js) — fetching the full /originals/
+  // file (often several megabytes) just to show it there was pure wasted
+  // latency, and is exactly what made the preview feel slow on a real
+  // Pinterest pin. /736x/ is comfortably larger than that box even at 2x
+  // DPI and is a size Pinterest already caches for virtually every pin
+  // (the same one .pinterestFallbackUrl above already falls back to), so
+  // it loads much faster with no visible quality loss in the preview.
+  // Collect/export still calls upgradeImageUrl (full resolution) — this
+  // only ever affects the live, throwaway preview thumbnail.
+  Acopio.upgradeImageUrlForPreview = function upgradeImageUrlForPreview(url) {
+    if (!url) return url;
+    const pinMatch = url.match(/^(https?:\/\/i\.pinimg\.com\/)\d+x\d*(\/.*)$/);
+    if (pinMatch) return pinMatch[1] + "736x" + pinMatch[2];
+    return url;
+  };
+
+  // Same idea as resolveImgSrc below, but for the tooltip's own preview
+  // thumbnail specifically — everything else about resolution (currentSrc/
+  // src, then the lazy-load attribute fallbacks) is identical; only the
+  // final upgrade step targets a preview-appropriate size instead of the
+  // full original.
+  Acopio.resolveImgSrcForPreview = function resolveImgSrcForPreview(img) {
+    const real = img.currentSrc || img.src;
+    if (real) return Acopio.upgradeImageUrlForPreview(real);
+    const lazyAttrs = ["data-src", "data-lazy-src", "data-original", "data-lazy", "data-srcset", "srcset"];
+    for (const attr of lazyAttrs) {
+      const val = img.getAttribute(attr);
+      if (val) return Acopio.upgradeImageUrlForPreview(val.split(",")[0].trim().split(/\s+/)[0]);
+    }
+    return null;
+  };
+
+  // A cross-origin fetch can return HTTP 200 with a body that isn't an
+  // image at all — an HTML error/login page, a plain-text "not found"
+  // message, an API's JSON error payload — and resp.ok alone can't tell
+  // the difference. Real magic-byte sniff for every format actually seen
+  // in the wild (PNG, JPEG, GIF, WEBP, BMP, plus a text sniff for SVG) so
+  // a genuinely non-image response never gets treated as a successfully-
+  // fetched image, whether at Collect time (inlineImageUrlAtCapture,
+  // overlay.js) or at export time (export-helpers.js) — shared here since
+  // both contexts load shared.js.
+  Acopio.isRecognizableImageBytes = function isRecognizableImageBytes(bytes) {
+    if (!bytes || bytes.length < 4) return false;
+    if (bytes[0] === 0x89 && bytes[1] === 0x50) return true; // PNG
+    if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return true; // JPEG
+    if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return true; // GIF87a/89a
+    if (
+      bytes.length > 11 &&
+      bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+    ) {
+      return true; // WEBP: "RIFF"....'WEBP'
+    }
+    if (bytes[0] === 0x42 && bytes[1] === 0x4d) return true; // BMP
+    // SVG is text, not a binary magic number — sniff the first bytes for
+    // an XML/SVG opening tag rather than assuming binary-only formats.
+    try {
+      const head = new TextDecoder("utf-8", { fatal: false })
+        .decode(bytes.subarray(0, Math.min(bytes.length, 256)))
+        .trimStart();
+      if (/^(<\?xml|<svg)/i.test(head)) return true;
+    } catch (_) {
+      /* not text-decodable — fall through */
+    }
+    return false;
+  };
+
   // The upgrade above is optimistic — not every pin actually has an
   // /originals/ file (older pins, or ones originally sourced from outside
   // Pinterest, may only ever have had a derivative size cached), so it can
@@ -2021,6 +2089,107 @@
   ];
 
   /**
+   * Resolve SVG <use href="#icon-x"> against its real target BEFORE
+   * conversion — confirmed live: a sprite-sheet icon (one hidden <svg>
+   * holding a <symbol>, referenced everywhere via <use>, the single most
+   * common real-world icon pattern) converts to a completely empty vector
+   * with zero fill geometry today. The browser resolves <use> fine when
+   * actually painting the live page — the target can live anywhere in the
+   * same document, not just inside the <use> element's own subtree — but
+   * the converter reads an SVG's own literal child elements structurally
+   * (its own <path>/<circle>/etc.), and a <use> element has none of its
+   * own: nothing to convert, regardless of what the browser would paint.
+   *
+   * Replaces each <use> with the real, inlined content of whatever it
+   * references — a <symbol>/<svg> target becomes a new <svg> carrying the
+   * <use>'s own x/y/width/height plus the target's viewBox (so it scales
+   * the same way the browser's own <use>+<symbol> rendering does); any
+   * other target (a <use> pointing straight at a <path> or <g>, valid but
+   * less common) becomes a <g> translated by the <use>'s x/y. Presentation
+   * attributes set directly on the <use> itself (fill, class, etc.) carry
+   * over, since those are meant to cascade into the referenced content per
+   * spec. Only same-document fragment references (#id) are resolvable at
+   * all — an external file reference (<use href="sprite.svg#icon-x">) is
+   * a genuinely different, cross-document case this does not attempt.
+   */
+  Acopio.materializeSvgUseForCapture = function materializeSvgUseForCapture(root) {
+    const restores = [];
+    if (!root || root.nodeType !== 1) return function cleanup() {};
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const XLINK_NS = "http://www.w3.org/1999/xlink";
+    const SKIP_ATTRS = new Set(["href", "xlink:href", "x", "y", "width", "height"]);
+
+    function resolveHref(useEl) {
+      const raw =
+        useEl.getAttributeNS(XLINK_NS, "href") || useEl.getAttribute("href") || "";
+      if (!raw.startsWith("#")) return null; // only same-document fragment refs are resolvable
+      try {
+        return document.getElementById(raw.slice(1));
+      } catch (_) {
+        return null;
+      }
+    }
+
+    const uses = Array.from(root.querySelectorAll("use"));
+    if (root.tagName && root.tagName.toLowerCase() === "use") uses.unshift(root);
+
+    for (const useEl of uses) {
+      try {
+        const target = resolveHref(useEl);
+        if (!target || !useEl.parentNode || target.contains(useEl)) continue; // guard against a direct self-reference cycle
+        const isSymbolLike = /^(symbol|svg)$/i.test(target.tagName);
+        let replacement;
+        if (isSymbolLike) {
+          replacement = document.createElementNS(SVG_NS, "svg");
+          replacement.setAttribute("x", useEl.getAttribute("x") || "0");
+          replacement.setAttribute("y", useEl.getAttribute("y") || "0");
+          replacement.setAttribute(
+            "width",
+            useEl.getAttribute("width") || target.getAttribute("width") || "100%"
+          );
+          replacement.setAttribute(
+            "height",
+            useEl.getAttribute("height") || target.getAttribute("height") || "100%"
+          );
+          const viewBox = target.getAttribute("viewBox");
+          if (viewBox) replacement.setAttribute("viewBox", viewBox);
+          for (const child of Array.from(target.childNodes)) {
+            replacement.appendChild(child.cloneNode(true));
+          }
+        } else {
+          replacement = document.createElementNS(SVG_NS, "g");
+          const x = parseFloat(useEl.getAttribute("x") || "0") || 0;
+          const y = parseFloat(useEl.getAttribute("y") || "0") || 0;
+          if (x || y) replacement.setAttribute("transform", `translate(${x}, ${y})`);
+          replacement.appendChild(target.cloneNode(true));
+        }
+        for (const attr of Array.from(useEl.attributes)) {
+          if (SKIP_ATTRS.has(attr.name)) continue;
+          try {
+            replacement.setAttribute(attr.name, attr.value);
+          } catch (_) {}
+        }
+        useEl.parentNode.insertBefore(replacement, useEl);
+        useEl.style.setProperty("display", "none", "important");
+        restores.push({ useEl, replacement });
+      } catch (_) {}
+    }
+
+    return function cleanup() {
+      for (let i = restores.length - 1; i >= 0; i--) {
+        const { useEl, replacement } = restores[i];
+        try {
+          if (replacement && replacement.parentNode) replacement.remove();
+        } catch (_) {}
+        try {
+          if (useEl) useEl.style.removeProperty("display");
+        } catch (_) {}
+      }
+      restores.length = 0;
+    };
+  };
+
+  /**
    * Replace <video> with a still <img> (current frame or poster) so Copy→Figma
    * gets the hero media html.to.design would show — figit cannot paint <video>.
    * Returns cleanup() that restores the original video nodes.
@@ -2125,6 +2294,96 @@
         } catch (_) {}
         try {
           if (video) video.style.removeProperty("display");
+        } catch (_) {}
+      }
+      restores.length = 0;
+    };
+  };
+
+  /**
+   * getComputedStyle never resolves a percentage border-radius to a pixel
+   * value — confirmed directly: both the shorthand and every per-corner
+   * longhand return the literal string "50%" regardless of the element's
+   * real size, on both a 64px and a 200px box identically. Border-radius
+   * is one of the few box-relative CSS properties CSSOM does not resolve
+   * this way (width/height/top/left all do). Anything downstream reading
+   * that string with a plain parseFloat("50%") silently gets 50 —
+   * confirmed producing an identically wrong, barely-rounded square for
+   * both a 64px and a 200px circular avatar. Runs AFTER
+   * materializeVideosForCapture so the synthesized video-still <img> (which
+   * copies the source video's own border-radius verbatim) gets corrected
+   * too, not just elements present before that step ran.
+   *
+   * Per CSS spec each corner takes up to two length-percentage components
+   * — horizontal (resolved against the box's own width) and vertical
+   * (resolved against its own height); a single value sets both. For a
+   * square box (the overwhelming common case — circular avatars) they're
+   * identical. For a non-square box (pill/stadium buttons) they differ —
+   * collapsing to the smaller of the two matches how a pill shape is
+   * actually built in Figma itself (cornerRadius = height/2), rather than
+   * attempting an elliptical corner Figma's single-scalar cornerRadius
+   * has no way to represent at all.
+   */
+  Acopio.materializeBorderRadiusForCapture = function materializeBorderRadiusForCapture(root) {
+    const restores = [];
+    if (!root || root.nodeType !== 1) return function cleanup() {};
+
+    const PROPS = [
+      "borderTopLeftRadius",
+      "borderTopRightRadius",
+      "borderBottomRightRadius",
+      "borderBottomLeftRadius",
+    ];
+
+    function resolveComponent(token, basisPx) {
+      const t = String(token || "").trim();
+      if (!t) return 0;
+      if (t.endsWith("%")) {
+        const pct = parseFloat(t);
+        return Number.isFinite(pct) ? (pct / 100) * basisPx : 0;
+      }
+      const px = parseFloat(t);
+      return Number.isFinite(px) ? px : 0;
+    }
+
+    const all = [root, ...Array.from(root.querySelectorAll("*"))];
+    for (const el of all) {
+      try {
+        if (Acopio.isOwnNode && Acopio.isOwnNode(el)) continue;
+        const cs = window.getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 1 || rect.height < 1) continue;
+
+        let touched = false;
+        const snapshot = {};
+        for (const prop of PROPS) {
+          const raw = cs[prop];
+          if (!raw || raw.indexOf("%") === -1) continue; // only percentages are unresolved — plain px is already correct
+          const parts = raw.split(/\s+/);
+          const hPx = resolveComponent(parts[0], rect.width);
+          const vPx = resolveComponent(parts[1] || parts[0], rect.height);
+          const resolvedPx = Math.round(Math.min(hPx, vPx));
+          snapshot[prop] = el.style[prop];
+          el.style.setProperty(
+            prop.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()),
+            `${resolvedPx}px`,
+            "important"
+          );
+          touched = true;
+        }
+        if (touched) restores.push({ el, snapshot });
+      } catch (_) {}
+    }
+
+    return function cleanup() {
+      for (let i = restores.length - 1; i >= 0; i--) {
+        const { el, snapshot } = restores[i];
+        try {
+          for (const prop of Object.keys(snapshot)) {
+            const cssProp = prop.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
+            if (snapshot[prop]) el.style.setProperty(cssProp, snapshot[prop]);
+            else el.style.removeProperty(cssProp);
+          }
         } catch (_) {}
       }
       restores.length = 0;
@@ -2541,6 +2800,134 @@
   };
 
   /**
+   * clip-path: circle()/ellipse() is the overwhelming real-world case
+   * (avatars, icon badges, decorative circular crops) and, when the shape is
+   * centered and sized to cover its own box, is visually identical to
+   * border-radius:50% + overflow:hidden — properties the pipeline already
+   * converts correctly for ANY content (image, gradient, text), not just
+   * <img> elements like the rasterization fallback below. Rewriting it as
+   * real CSS here means figit's own already-correct border-radius/clipsContent
+   * handling does the work, instead of needing a bitmap at all.
+   * Off-center or partial circle/ellipse, and inset()/polygon()/path(), are
+   * NOT handled here — approximating those as a plain rectangle crop would
+   * silently misplace content, which is worse than leaving them unclipped.
+   * They fall through to materializeMaskedClippedForCapture's image-only
+   * rasterization, or remain a known gap when no <img> is present.
+   * Returns cleanup() that restores original inline style.
+   */
+  Acopio.materializeClipPathForCapture = function materializeClipPathForCapture(root) {
+    const restores = [];
+    if (!root || root.nodeType !== 1) return function cleanup() {};
+
+    function toPx(token, basis) {
+      const t = String(token || "").trim();
+      if (!t) return null;
+      if (t === "center") return basis / 2;
+      if (t === "left" || t === "top") return 0;
+      if (t === "right" || t === "bottom") return basis;
+      if (t === "closest-side" || t === "farthest-side") return null;
+      if (t.endsWith("%")) {
+        const pct = parseFloat(t);
+        return Number.isFinite(pct) ? (pct / 100) * basis : null;
+      }
+      const px = parseFloat(t);
+      return Number.isFinite(px) ? px : null;
+    }
+
+    function parseCircleOrEllipse(clip, w, h) {
+      const circleMatch = clip.match(/circle\(\s*([^)]*?)\s*\)/i);
+      const ellipseMatch = !circleMatch && clip.match(/ellipse\(\s*([^)]*?)\s*\)/i);
+      const m = circleMatch || ellipseMatch;
+      if (!m) return null;
+      const body = m[1] || "";
+      const atIdx = body.toLowerCase().indexOf(" at ");
+      const shapePart = atIdx === -1 ? body : body.slice(0, atIdx);
+      const posPart = atIdx === -1 ? "center center" : body.slice(atIdx + 4);
+      const posTokens = posPart.trim().split(/\s+/);
+      const cx = toPx(posTokens[0] || "center", w);
+      const cy = toPx(posTokens[1] || "center", h);
+      if (cx == null || cy == null) return null;
+
+      if (circleMatch) {
+        const rToken = shapePart.trim() || "closest-side";
+        let r;
+        if (rToken === "closest-side") r = Math.min(cx, w - cx, cy, h - cy);
+        else if (rToken === "farthest-side") r = Math.max(cx, w - cx, cy, h - cy);
+        else r = toPx(rToken, Math.min(w, h));
+        if (r == null || !Number.isFinite(r)) return null;
+        return { rx: r, ry: r, cx, cy };
+      }
+      const parts = shapePart.trim().split(/\s+/);
+      const rxToken = parts[0] || "closest-side";
+      const ryToken = parts[1] || rxToken;
+      function radiusFor(token, near, far, basis) {
+        if (token === "closest-side") return Math.min(near, far);
+        if (token === "farthest-side") return Math.max(near, far);
+        return toPx(token, basis);
+      }
+      const rx = radiusFor(rxToken, cx, w - cx, w);
+      const ry = radiusFor(ryToken, cy, h - cy, h);
+      if (rx == null || ry == null || !Number.isFinite(rx) || !Number.isFinite(ry)) {
+        return null;
+      }
+      return { rx, ry, cx, cy };
+    }
+
+    const all = [root, ...Array.from(root.querySelectorAll("*"))];
+    for (const el of all) {
+      try {
+        if (Acopio.isOwnNode && Acopio.isOwnNode(el)) continue;
+        const cs = window.getComputedStyle(el);
+        const clip =
+          cs.clipPath ||
+          cs.getPropertyValue("clip-path") ||
+          cs.getPropertyValue("-webkit-clip-path") ||
+          "";
+        if (!clip || clip === "none") continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 2 || rect.height < 2) continue;
+
+        const shape = parseCircleOrEllipse(clip, rect.width, rect.height);
+        if (!shape) continue;
+
+        const { rx, ry, cx, cy } = shape;
+        const tolW = Math.max(2, rect.width * 0.05);
+        const tolH = Math.max(2, rect.height * 0.05);
+        const inscribed =
+          Math.abs(cx - rect.width / 2) < tolW &&
+          Math.abs(cy - rect.height / 2) < tolH &&
+          Math.abs(rx - rect.width / 2) < tolW &&
+          Math.abs(ry - rect.height / 2) < tolH;
+        if (!inscribed) continue; // off-center/partial — leave for the rasterization fallback
+
+        const snapshot = {
+          borderRadius: el.style.borderRadius,
+          overflow: el.style.overflow,
+          clipPath: el.style.clipPath,
+        };
+        el.style.setProperty("border-radius", "50%", "important");
+        if (!cs.overflow || cs.overflow === "visible") {
+          el.style.setProperty("overflow", "hidden", "important");
+        }
+        el.style.setProperty("clip-path", "none", "important");
+        restores.push({ el, snapshot });
+      } catch (_) {}
+    }
+
+    return function cleanup() {
+      for (let i = restores.length - 1; i >= 0; i--) {
+        const { el, snapshot } = restores[i];
+        try {
+          el.style.borderRadius = snapshot.borderRadius || "";
+          el.style.overflow = snapshot.overflow || "";
+          el.style.clipPath = snapshot.clipPath || "";
+        } catch (_) {}
+      }
+      restores.length = 0;
+    };
+  };
+
+  /**
    * Where figit cannot model CSS mask / clip-path, rasterize the painted
    * region to a PNG <img> (partial but correct paste). Only replaces when a
    * real bitmap is produced — never foreignObject SVG data URLs (figit drops
@@ -2822,6 +3209,176 @@
         } catch (_) {}
       }
       restores.length = 0;
+    };
+  };
+
+  /**
+   * List bullets and numbers are browser-rendered — not literal DOM text —
+   * so a plain capture of an <li>'s own text content silently drops the
+   * marker a reader actually sees. Unlike an author-set ::before/::after
+   * (materializePseudosForCapture below), the DEFAULT native marker for
+   * list-style-type:disc/decimal/etc. is never exposed through
+   * getComputedStyle(el, "::marker").content at all — that only reports
+   * something when a page explicitly overrides it via CSS (a real but
+   * much rarer case, already covered by the generic pseudo-materializer
+   * above since ::marker is just another pseudo-element to it). This
+   * covers the overwhelmingly common default-marker case those computed
+   * styles don't expose.
+   *
+   * Handles the marker glyph types real sites actually use — disc/circle/
+   * square bullets, decimal (with <ol start> support), lower/upper alpha,
+   * lower/upper roman — falling back to a plain bullet for anything more
+   * exotic (a custom @counter-style) rather than reimplementing the full
+   * CSS counter-style spec. Deliberately simplified vs. real layout: a
+   * marker is inserted as the item's first inline child rather than in
+   * its true hanging-indent position outside the content box, and a
+   * per-<li> `value` attribute override isn't honored — both are real,
+   * bounded gaps, not silent ones.
+   */
+  Acopio.materializeListMarkersForCapture = function materializeListMarkersForCapture(root) {
+    const inserted = [];
+    if (!root || root.nodeType !== 1) return function cleanup() {};
+
+    function toAlpha(n, upper) {
+      let s = "";
+      let num = n;
+      while (num > 0) {
+        const rem = (num - 1) % 26;
+        s = String.fromCharCode(97 + rem) + s;
+        num = Math.floor((num - 1) / 26);
+      }
+      return upper ? s.toUpperCase() : s;
+    }
+    function toRoman(n, upper) {
+      const table = [
+        [1000, "m"], [900, "cm"], [500, "d"], [400, "cd"],
+        [100, "c"], [90, "xc"], [50, "l"], [40, "xl"],
+        [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"],
+      ];
+      let num = n;
+      let s = "";
+      for (const [value, sym] of table) {
+        while (num >= value) {
+          s += sym;
+          num -= value;
+        }
+      }
+      return upper ? s.toUpperCase() : s;
+    }
+
+    function markerTextFor(type, ordinal) {
+      switch (type) {
+        case "disc":
+          return "•";
+        case "circle":
+          return "◦";
+        case "square":
+          return "▪";
+        case "decimal":
+          return `${ordinal}.`;
+        case "decimal-leading-zero":
+          return `${String(ordinal).padStart(2, "0")}.`;
+        case "lower-alpha":
+        case "lower-latin":
+          return `${toAlpha(ordinal, false)}.`;
+        case "upper-alpha":
+        case "upper-latin":
+          return `${toAlpha(ordinal, true)}.`;
+        case "lower-roman":
+          return `${toRoman(ordinal, false)}.`;
+        case "upper-roman":
+          return `${toRoman(ordinal, true)}.`;
+        case "none":
+          return null;
+        default:
+          return "•"; // exotic/custom counter-style — an honest generic bullet, not a spec reimplementation
+      }
+    }
+
+    const items = Array.from(root.querySelectorAll("li")).filter((el) => {
+      if (Acopio.isOwnNode && Acopio.isOwnNode(el)) return false;
+      try {
+        return window.getComputedStyle(el).display.indexOf("list-item") !== -1;
+      } catch (_) {
+        return false;
+      }
+    });
+    if (root.tagName === "LI") items.unshift(root);
+
+    // Group by real list owner so ordinals count correctly per-list, not
+    // globally across every <li> found anywhere in the captured subtree.
+    const byParent = new Map();
+    for (const li of items) {
+      const parent = li.parentElement;
+      if (!parent) continue;
+      if (!byParent.has(parent)) byParent.set(parent, []);
+      byParent.get(parent).push(li);
+    }
+
+    for (const [parent, kids] of byParent.entries()) {
+      const isOrdered = parent.tagName === "OL";
+      const start = isOrdered ? parseInt(parent.getAttribute("start") || "1", 10) || 1 : 1;
+      kids.forEach((li, i) => {
+        try {
+          const cs = window.getComputedStyle(li);
+          const listImage = cs.listStyleImage;
+          const type = (cs.listStyleType || "disc").toLowerCase();
+          const span = document.createElement("span");
+          span.setAttribute("data-acopio-marker", "1");
+          span.setAttribute("aria-hidden", "true");
+          span.style.cssText = [
+            "display:inline-block",
+            "margin-right:0.4em",
+            `color:${cs.color}`,
+            `font-size:${cs.fontSize}`,
+            `font-family:${cs.fontFamily}`,
+            "pointer-events:none",
+          ].join(";");
+
+          if (listImage && listImage !== "none") {
+            const urlMatch = listImage.match(/url\(\s*["']?([^"')]+)["']?\s*\)/i);
+            if (urlMatch) {
+              const img = document.createElement("img");
+              img.src = urlMatch[1];
+              img.alt = "";
+              img.style.cssText = "display:inline-block;width:1em;height:1em;object-fit:contain;vertical-align:-0.15em;";
+              span.appendChild(img);
+            } else {
+              return;
+            }
+          } else {
+            const text = markerTextFor(type, start + i);
+            if (text == null) return; // list-style-type:none — genuinely no marker to show
+            span.textContent = text;
+          }
+
+          // Wrap the li's ORIGINAL content in its own span too, rather
+          // than leaving it as bare text alongside the marker element —
+          // confirmed live that the converter this file hands elements to
+          // reorders a mix of element children + bare text-node children
+          // (element children come out first regardless of true DOM
+          // order), which put a correctly-DOM-first marker AFTER its own
+          // list item's text in the actual pasted result. Two sibling
+          // elements, no bare text node between them, avoids that
+          // reordering entirely — confirmed live afterward too.
+          const htmlBackup = li.innerHTML;
+          const contentWrap = document.createElement("span");
+          contentWrap.setAttribute("data-acopio-marker-content", "1");
+          while (li.firstChild) contentWrap.appendChild(li.firstChild);
+          li.appendChild(span);
+          li.appendChild(contentWrap);
+          inserted.push({ li, html: htmlBackup });
+        } catch (_) {}
+      });
+    }
+
+    return function cleanup() {
+      for (const { li, html } of inserted) {
+        try {
+          li.innerHTML = html;
+        } catch (_) {}
+      }
+      inserted.length = 0;
     };
   };
 

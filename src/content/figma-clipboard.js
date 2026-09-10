@@ -196,10 +196,32 @@
   // normalization export-helpers.js's ensurePngBytes already does for the
   // ZIP/clipboard export paths — this is the same fix for the paths that
   // load in the content-script world instead of the side panel.
+  async function rasterizeViaImgElement(blob) {
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = new Image();
+      const loaded = new Promise((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("img decode failed"));
+      });
+      img.src = url;
+      await loaded;
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || 1;
+      canvas.height = img.naturalHeight || 1;
+      canvas.getContext("2d").drawImage(img, 0, 0);
+      const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!pngBlob) return null;
+      return { bytes: await pngBlob.arrayBuffer(), mimeType: "image/png" };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
   async function normalizeImageBytesToPng(bytes, mimeType) {
     if (mimeType === "image/png") return { bytes, mimeType };
+    const blob = new Blob([bytes], { type: mimeType || "application/octet-stream" });
     try {
-      const blob = new Blob([bytes], { type: mimeType || "application/octet-stream" });
       const bitmap = await createImageBitmap(blob);
       const canvas = document.createElement("canvas");
       canvas.width = bitmap.width;
@@ -207,9 +229,19 @@
       canvas.getContext("2d").drawImage(bitmap, 0, 0);
       bitmap.close();
       const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (!pngBlob) return { bytes, mimeType };
+      if (!pngBlob) throw new Error("toBlob returned null");
       return { bytes: await pngBlob.arrayBuffer(), mimeType: "image/png" };
     } catch (_) {
+      // createImageBitmap reliably fails to decode some SVGs Chrome's own
+      // <img> tag decodes fine (observed: an inline SVG with an explicit
+      // width/height throws "InvalidStateError: The source image could not
+      // be decoded" from createImageBitmap specifically) — retry through an
+      // <img> element + canvas before giving up, since that path is already
+      // proven against real SVG data URIs elsewhere in this file.
+      try {
+        const viaImg = await rasterizeViaImgElement(blob);
+        if (viaImg) return viaImg;
+      } catch (_) {}
       // Genuinely undecodable by the browser too (corrupt/truncated fetch,
       // or a format neither the browser nor Figma supports) — return the
       // original bytes rather than dropping the image outright; whatever
@@ -812,6 +844,104 @@
   }
 
   /**
+   * A React/Vue modal, tooltip, or dropdown rendered as a sibling of
+   * <body> — nowhere near its logical parent in the DOM — is invisible to
+   * a plain subtree walk from the selected root, even though it visually
+   * belongs to whatever's being captured (a card whose open dropdown
+   * panel is portaled out for z-index/overflow reasons, but still reads,
+   * to a person looking at the screen, as part of that card). This scans
+   * the WHOLE document for real candidates and grafts correctly-
+   * positioned copies into the clone, rather than leaving the capture
+   * quietly incomplete.
+   *
+   * Deliberately conservative to avoid the opposite failure — pulling in
+   * unrelated page chrome (a sticky header, a cookie banner) that merely
+   * brushes the capture region: a candidate must be position:fixed or
+   * absolute, genuinely visible, and have at least 60% of its OWN area
+   * inside the capture root's real rect — a thin sticky bar clipping the
+   * top edge fails that; a tooltip/dropdown that actually belongs to the
+   * capture passes it easily. Only the outermost matching ancestor of a
+   * chain of nested portal candidates is cloned, never both it and its
+   * own children redundantly.
+   *
+   * Must run on the LIVE tree (real geometry) with its OWN independent
+   * live→clone style freeze per candidate — appending unmatched extra
+   * children into the MAIN clone before its own applyFrozenStyles call
+   * would corrupt that function's recursive live/clone child pairing, so
+   * this always runs after that call has already completed for the
+   * primary subtree.
+   */
+  function materializePortaledElementsForCapture(liveEl, clone) {
+    const appended = [];
+    if (!liveEl || !clone || !document.body) return function cleanup() {};
+    try {
+      const rootRect = liveEl.getBoundingClientRect();
+      if (rootRect.width < 1 || rootRect.height < 1) return function cleanup() {};
+
+      const candidates = [];
+      for (const el of Array.from(document.body.querySelectorAll("*"))) {
+        try {
+          if (el === liveEl || liveEl.contains(el) || el.contains(liveEl)) continue;
+          if (Acopio.isOwnNode && Acopio.isOwnNode(el)) continue;
+          const cs = window.getComputedStyle(el);
+          if (cs.position !== "fixed" && cs.position !== "absolute") continue;
+          if (cs.display === "none" || cs.visibility === "hidden") continue;
+          if (parseFloat(cs.opacity) === 0) continue;
+          const rect = el.getBoundingClientRect();
+          if (rect.width < 1 || rect.height < 1) continue;
+          const overlapW = Math.max(
+            0,
+            Math.min(rect.right, rootRect.right) - Math.max(rect.left, rootRect.left)
+          );
+          const overlapH = Math.max(
+            0,
+            Math.min(rect.bottom, rootRect.bottom) - Math.max(rect.top, rootRect.top)
+          );
+          const selfArea = rect.width * rect.height;
+          if (selfArea <= 0 || overlapW * overlapH / selfArea < 0.6) continue;
+          candidates.push({ el, rect });
+        } catch (_) {}
+      }
+
+      const outermost = candidates.filter(
+        (c) => !candidates.some((other) => other.el !== c.el && other.el.contains(c.el))
+      );
+
+      for (const { el, rect } of outermost) {
+        try {
+          const copy =
+            typeof Acopio !== "undefined" && Acopio.cloneWithOpenShadows
+              ? Acopio.cloneWithOpenShadows(el)
+              : el.cloneNode(true);
+          if (!copy) continue;
+          applyFrozenStyles(el, copy, "full");
+          copy.setAttribute("data-acopio-portal", "1");
+          copy.style.setProperty("position", "absolute", "important");
+          copy.style.setProperty("left", `${Math.round(rect.left - rootRect.left)}px`, "important");
+          copy.style.setProperty("top", `${Math.round(rect.top - rootRect.top)}px`, "important");
+          copy.style.setProperty("margin", "0", "important");
+          copy.style.setProperty("width", `${Math.round(rect.width)}px`, "important");
+          copy.style.setProperty("height", `${Math.round(rect.height)}px`, "important");
+          if (window.getComputedStyle(clone).position === "static") {
+            clone.style.setProperty("position", "relative", "important");
+          }
+          clone.appendChild(copy);
+          appended.push(copy);
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    return function cleanup() {
+      for (const node of appended) {
+        try {
+          node.remove();
+        } catch (_) {}
+      }
+      appended.length = 0;
+    };
+  }
+
+  /**
    * True when this element owns its line boxes (heading/paragraph with <br>
    * or soft-wrap). False for cards/sections that merely contain multiple
    * block children — flattening those destroys buttons, labels, images.
@@ -866,6 +996,96 @@
     } catch (_) {
       return false;
     }
+  }
+
+  /**
+   * text-overflow:ellipsis is a single-line sibling case to the multi-line
+   * clamp/wrap handling below: the element's own textContent is the FULL,
+   * untruncated string regardless of what's visually shown before the
+   * ellipsis — capturing it verbatim pastes text nobody looking at the
+   * source page actually sees, the same governing mistake as the line-
+   * clamp bug, just for one line instead of several. Never overlaps with
+   * materializeTextLinesForCapture below: that one requires 2+ measured
+   * line-tops (elementOwnsTextLineBoxes), this one only ever fires on a
+   * single-line (white-space:nowrap) element, so the same node is never a
+   * candidate for both.
+   *
+   * Truncates by binary-searching the longest prefix (via the same canvas
+   * text measurement used elsewhere in this file) whose rendered width
+   * plus a trailing "…" still fits the element's real available width —
+   * matching the browser's own visual cutoff without reimplementing its
+   * line-breaking engine. Only handles the element's own plain text
+   * content; an ellipsis-truncated element containing richly mixed inline
+   * markup (a bold word, a link) will lose that inner styling on the
+   * truncated copy — genuinely rare in practice (ellipsis is used almost
+   * exclusively on plain titles/filenames/labels), documented here rather
+   * than silently assumed general.
+   */
+  function materializeSingleLineEllipsisForCapture(root) {
+    const restores = [];
+    if (!root || root.nodeType !== 1) return function cleanup() {};
+
+    const candidates = [];
+    const collect = (el) => {
+      if (!el || el.nodeType !== 1) return;
+      if (Acopio.isOwnNode && Acopio.isOwnNode(el)) return;
+      const tag = el.tagName;
+      if (tag === "SCRIPT" || tag === "STYLE" || tag === "SVG" || tag === "TEXTAREA") return;
+      for (const child of Array.from(el.children || [])) collect(child);
+      try {
+        const cs = window.getComputedStyle(el);
+        if (cs.textOverflow !== "ellipsis") return;
+        if (cs.whiteSpace !== "nowrap") return; // ellipsis has no effect without nowrap
+        const ox = cs.overflowX || cs.overflow;
+        if (ox !== "hidden" && ox !== "clip") return;
+        if (el.scrollWidth <= el.clientWidth + 1) return; // not actually truncated — leave alone
+        if (!(el.textContent || "").trim()) return;
+        candidates.push(el);
+      } catch (_) {}
+    };
+    collect(root);
+
+    for (const el of candidates) {
+      try {
+        const cs = window.getComputedStyle(el);
+        const availPx =
+          el.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+        if (availPx <= 0) continue;
+        const fontCss = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize}/${cs.lineHeight} ${cs.fontFamily}`;
+        const full = el.textContent || "";
+        const ELLIPSIS = "…";
+        let lo = 0,
+          hi = full.length,
+          best = 0;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          const w = Acopio.measureTextWidthPx(full.slice(0, mid) + ELLIPSIS, fontCss);
+          if (w <= availPx) {
+            best = mid;
+            lo = mid + 1;
+          } else {
+            hi = mid - 1;
+          }
+        }
+        if (best >= full.length) continue; // measured as actually fitting — nothing to truncate
+        let truncated = full.slice(0, best);
+        // Back off one unit if the cut lands inside a surrogate pair (emoji, etc.)
+        if (best > 0 && /[\uD800-\uDBFF]/.test(truncated.slice(-1))) {
+          truncated = truncated.slice(0, -1);
+        }
+        restores.push({ el, html: el.innerHTML });
+        el.textContent = truncated.replace(/\s+$/, "") + ELLIPSIS;
+      } catch (_) {}
+    }
+
+    return function cleanup() {
+      for (let i = restores.length - 1; i >= 0; i--) {
+        try {
+          restores[i].el.innerHTML = restores[i].html;
+        } catch (_) {}
+      }
+      restores.length = 0;
+    };
   }
 
   /**
@@ -1253,6 +1473,66 @@
     }
 
     return { clamped, deoverlapped, parentsGrew };
+  }
+
+  /**
+   * A rotated/skewed element nested inside a larger capture (not the
+   * selection root) comes back from the vendor converter with `size` set to
+   * its rotated BOUNDING BOX while `transform` ALSO carries the real
+   * rotation matrix — Figma then draws that oversized box and rotates it
+   * AGAIN, compounding into a visibly wrong shape (verified by computing all
+   * four corners both ways: 3 of 4 land 8-45px off on a 100x60 test box).
+   *
+   * Fixed here, not upstream, because the AABB-vs-true-size relationship is
+   * exactly invertible from the emitted data alone — no live-DOM
+   * correlation needed. For any 2D linear map M applied to a box anchored
+   * at its own local origin, the width of the resulting bounding box is
+   * |w*M00| + |h*M01| and the height is |w*M10| + |h*M11| (a standard
+   * identity: for any two reals a,b the four values {0,a,b,a+b} always span
+   * exactly |a|+|b|). Since the emitted `size` IS that bounding box, this
+   * is a solvable 2x2 linear system for the true (w,h) — and because the
+   * emitted `transform` already correctly places local (0,0), re-applying
+   * the SAME unmodified transform to the corrected size reproduces the
+   * exact live corner positions (confirmed numerically against the live
+   * DOM's own rotated-rect corners before shipping this).
+   */
+  function repairRotatedFramesInDocument(doc) {
+    if (!doc || !Array.isArray(doc.nodeChanges)) return { fixed: 0 };
+    let fixed = 0;
+    for (const n of doc.nodeChanges) {
+      if (!n || !n.transform || !n.size) continue;
+      if (n.type !== "FRAME" && n.type !== "RECTANGLE" && n.type !== "ROUNDED_RECTANGLE") {
+        continue;
+      }
+      const t = n.transform;
+      const m00 = t.m00, m01 = t.m01, m10 = t.m10, m11 = t.m11;
+      if (![m00, m01, m10, m11].every(Number.isFinite)) continue;
+      // No rotation/skew present (plain translate or identity) — nothing to fix.
+      if (Math.abs(m01) < 1e-4 && Math.abs(m10) < 1e-4) continue;
+
+      const { w: aabbW, h: aabbH } = nodeSizeWH(n);
+      if (!Number.isFinite(aabbW) || !Number.isFinite(aabbH) || aabbW <= 0 || aabbH <= 0) {
+        continue;
+      }
+      const a00 = Math.abs(m00), a01 = Math.abs(m01), a10 = Math.abs(m10), a11 = Math.abs(m11);
+      const det = a00 * a11 - a01 * a10;
+      // Near-45°-family angles make the AABB→local-size system singular —
+      // leave those unrepaired rather than divide into a garbage result.
+      if (Math.abs(det) < 1e-3) continue;
+
+      const w = (a11 * aabbW - a01 * aabbH) / det;
+      const h = (a00 * aabbH - a10 * aabbW) / det;
+      // A rotated/skewed box's own AABB is never smaller than the box
+      // itself in either axis — if the solve doesn't respect that, this
+      // node's (size, transform) pair wasn't the bug this targets; leave it
+      // rather than risk corrupting an already-correct node.
+      if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) continue;
+      if (w > aabbW + 0.5 || h > aabbH + 0.5) continue;
+
+      n.size = { x: w, y: h };
+      fixed += 1;
+    }
+    return { fixed };
   }
 
   /**
@@ -1814,9 +2094,27 @@
     try {
       if (
         typeof Acopio !== "undefined" &&
+        Acopio.materializeSvgUseForCapture
+      ) {
+        // Before anything else touches media/text — a resolved <use> can
+        // itself contain nested elements that later steps (video/text/
+        // radius materializers) should be free to walk normally.
+        liveCleanups.push(Acopio.materializeSvgUseForCapture(liveEl));
+      }
+      if (
+        typeof Acopio !== "undefined" &&
         Acopio.materializeVideosForCapture
       ) {
         liveCleanups.push(Acopio.materializeVideosForCapture(liveEl));
+      }
+      if (
+        typeof Acopio !== "undefined" &&
+        Acopio.materializeBorderRadiusForCapture
+      ) {
+        // After video materialization — the synthesized still-frame <img>
+        // copies its source video's own border-radius verbatim and needs
+        // the same percentage-resolution fix applied to it too.
+        liveCleanups.push(Acopio.materializeBorderRadiusForCapture(liveEl));
       }
       if (
         typeof Acopio !== "undefined" &&
@@ -1844,6 +2142,16 @@
       }
       if (
         typeof Acopio !== "undefined" &&
+        Acopio.materializeClipPathForCapture
+      ) {
+        // Before the mask/clip rasterization fallback — an inscribed
+        // circle/ellipse resolved here as real border-radius+overflow needs
+        // no bitmap at all, and clears clip-path so that fallback's own
+        // detection correctly skips it afterward.
+        liveCleanups.push(Acopio.materializeClipPathForCapture(liveEl));
+      }
+      if (
+        typeof Acopio !== "undefined" &&
         Acopio.materializeMaskedClippedForCapture
       ) {
         liveCleanups.push(Acopio.materializeMaskedClippedForCapture(liveEl));
@@ -1861,6 +2169,20 @@
       ) {
         liveCleanups.push(Acopio.normalizeDisplayWhitespaceForCapture(liveEl));
       }
+      if (
+        typeof Acopio !== "undefined" &&
+        Acopio.materializeListMarkersForCapture
+      ) {
+        // Before ellipsis/line-splitting so a list item's bullet/number
+        // becomes part of the text those steps see, positioned first —
+        // matching how it actually reads on the page.
+        liveCleanups.push(Acopio.materializeListMarkersForCapture(liveEl));
+      }
+      // Single-line ellipsis truncation before multi-line splitting — the
+      // two never target the same node (one requires nowrap/single-line,
+      // the other requires 2+ measured line-tops) but resolving
+      // truncation first keeps the ordering easy to reason about.
+      liveCleanups.push(materializeSingleLineEllipsisForCapture(liveEl));
       // Line-split AFTER whitespace normalize so BR lines keep spaces.
       liveCleanups.push(materializeTextLinesForCapture(liveEl));
       if (
@@ -1915,6 +2237,14 @@
           : liveEl.cloneNode(true);
       if (!clone) throw new Error("Couldn't clone component for Figma.");
       applyFrozenStyles(liveEl, clone, "full");
+      // After the primary live/clone pairing above has fully completed —
+      // grafting extra, unmatched children into the clone any earlier
+      // would corrupt that call's recursive child-by-child pairing. No
+      // cleanup queued: these nodes live only on the clone, which this
+      // whole function discards wholesale (via the host wrapper's own
+      // removal) once conversion is done — nothing here ever touches the
+      // live page, so there's nothing on the live side to restore.
+      materializePortaledElementsForCapture(liveEl, clone);
       // Re-freeze on the clone itself — stylesheet animations can still
       // compute a mid-scroll matrix on the live tree between freeze and
       // style copy; the offscreen clone must be transform-clean for figit.
@@ -2087,9 +2417,21 @@
     try {
       if (
         typeof Acopio !== "undefined" &&
+        Acopio.materializeSvgUseForCapture
+      ) {
+        cleanups.push(Acopio.materializeSvgUseForCapture(liveEl));
+      }
+      if (
+        typeof Acopio !== "undefined" &&
         Acopio.materializeVideosForCapture
       ) {
         cleanups.push(Acopio.materializeVideosForCapture(liveEl));
+      }
+      if (
+        typeof Acopio !== "undefined" &&
+        Acopio.materializeBorderRadiusForCapture
+      ) {
+        cleanups.push(Acopio.materializeBorderRadiusForCapture(liveEl));
       }
       if (
         typeof Acopio !== "undefined" &&
@@ -2114,6 +2456,12 @@
         Acopio.freezeLineClampForCapture
       ) {
         cleanups.push(Acopio.freezeLineClampForCapture(liveEl));
+      }
+      if (
+        typeof Acopio !== "undefined" &&
+        Acopio.materializeClipPathForCapture
+      ) {
+        cleanups.push(Acopio.materializeClipPathForCapture(liveEl));
       }
       if (
         typeof Acopio !== "undefined" &&
@@ -2275,6 +2623,7 @@
     if (result.document) {
       repairTextNodesInDocument(result.document);
       repairMarqueeFramesInDocument(result.document);
+      repairRotatedFramesInDocument(result.document);
       // Ensure root never clips padded ascenders.
       const frames = (result.document.nodeChanges || []).filter((n) => n && n.type === "FRAME");
       for (const f of frames.slice(0, 3)) {

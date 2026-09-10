@@ -85,6 +85,13 @@
     return Acopio.escapeHtml(String(s == null ? "" : s)).replace(/\n/g, "<br>");
   }
 
+  // Hostnames are always browser-lowercased in practice (Acopio.hostname()
+  // reads location.hostname), but comparing case-insensitively anyway
+  // costs nothing and removes even the theoretical gap.
+  function sameHostname(a, b) {
+    return Boolean(a) && Boolean(b) && String(a).toLowerCase() === String(b).toLowerCase();
+  }
+
   function propHtml(label, value) {
     if (value == null || value === "") return "";
     return (
@@ -129,7 +136,7 @@
     return [];
   }
 
-  function renderCatalogItemHtml(item, index, imageSrc) {
+  function renderCatalogItemHtml(item, index, imageSrc, folderHostname) {
     const data = item.data || {};
     const num = String(index + 1).padStart(2, "0");
     const type = item.type || "item";
@@ -185,7 +192,22 @@
       }
     } else if (type === "font") {
       const sample = (data.sampleText && String(data.sampleText).trim()) || data.family || "Aa";
-      const style = typeof Acopio.fontInlineStyle === "function" ? Acopio.fontInlineStyle(data) : "";
+      let style = typeof Acopio.fontInlineStyle === "function" ? Acopio.fontInlineStyle(data) : "";
+      // Only the family NAME survives into a plain style string — meaningless
+      // in a standalone file with no idea what that font is. Embed the real
+      // harvested face (when collected) so this renders as actually
+      // collected, not a generic fallback.
+      if (Array.isArray(data.fontAssets) && data.fontAssets.length) {
+        const safeFamily = `acopio-font-${String(item.id || "x").replace(/[^a-z0-9]/gi, "").slice(0, 12)}`;
+        const faceBlock = H.fontFaceStyleBlock(data.fontAssets, safeFamily);
+        if (faceBlock) {
+          parts.push(faceBlock);
+          style = style.replace(
+            /^font-family:[^;]*/,
+            `font-family:'${safeFamily}',${data.fallbackStack || data.family || "sans-serif"}`
+          );
+        }
+      }
       parts.push(`<div class="font-sample" style="${style}">${escHtml(sample)}</div>`);
       const props = [
         propHtml("Font name", data.family || "?"),
@@ -227,7 +249,14 @@
     if (item.selector && type !== "note" && type !== "color" && type !== "font") {
       parts.push(`<p class="meta">Selector: <code>${escHtml(item.selector)}</code></p>`);
     }
-    if (item.sourceUrl) {
+    // A folder is already scoped to one site (the intro line above already
+    // says "N items from hostname") — repeating the identical source URL
+    // under every single item is noise, not information. Only worth
+    // showing when this item's own site genuinely differs from the
+    // folder's, which is real, useful context (or when the folder's
+    // hostname isn't known here at all — safer to show than silently hide).
+    const sameHostAsFolder = sameHostname(item.hostname, folderHostname);
+    if (item.sourceUrl && !sameHostAsFolder) {
       parts.push(`<p class="meta">Source: <a href="${escHtml(item.sourceUrl)}">${escHtml(item.sourceUrl)}</a></p>`);
     }
     // Personal annotation from Collect — separate from a note-type's captured text.
@@ -237,9 +266,24 @@
   }
 
   function buildCatalogHtml(items, opts = {}) {
-    const hostname = opts.hostname || "";
     const imageSrcById = opts.imageSrcById || {};
     const list = Array.isArray(items) ? items : [];
+    // Falls back to the list's own common hostname when the caller didn't
+    // pass one explicitly (exports always do today, since items are
+    // already grouped one-host-per-folder before this runs) — so this
+    // still works correctly if ever called on an ungrouped list directly.
+    // Left empty when the list itself mixes hosts: there's no single
+    // "this folder's site" to compare against, so every item's own source
+    // stays visible instead of guessing.
+    const hostname =
+      opts.hostname ||
+      (list.length && list.every((it) => sameHostname(it.hostname, list[0].hostname))
+        ? list[0].hostname
+        : "");
+    // Default (no opts.title) is only ever the combined, everything-in-one
+    // file — images.html/components.html always pass their own title.
+    const title = opts.title || "Acopio — Whole Collection";
+    const pageHeading = opts.pageHeading || "Acopio — Whole Collection";
     const counts = list.reduce((acc, item) => {
       const t = item.type || "item";
       acc[t] = (acc[t] || 0) + 1;
@@ -252,12 +296,12 @@
       "<!DOCTYPE html>",
       '<html lang="en"><head><meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width,initial-scale=1">',
-      "<title>Acopio — Design catalog</title>",
+      `<title>${escHtml(title)}</title>`,
       "<style>",
       CATALOG_STYLES,
       "</style></head><body>",
       '<div class="wrap">',
-      "<h1>Acopio — Design catalog</h1>",
+      `<h1>${escHtml(pageHeading)}</h1>`,
       `<p class="intro">${list.length} item${list.length === 1 ? "" : "s"}${hostname ? ` from ${escHtml(hostname)}` : ""}${countBits ? ` — ${escHtml(countBits)}` : ""}. Colors show swatches and codes (gradients show the blend and each stop); fonts show the sample and typography properties. Notes you added at collect time appear under each item as <strong>Your note</strong>.</p>`,
     ];
 
@@ -274,14 +318,14 @@
       if (!group || !group.length) return;
       parts.push(`<h2>${escHtml(catalogTypeLabel(type))}s</h2>`);
       group.forEach((item) => {
-        parts.push(renderCatalogItemHtml(item, index, imageSrcById[item.id] || ""));
+        parts.push(renderCatalogItemHtml(item, index, imageSrcById[item.id] || "", hostname));
         index += 1;
       });
       byType.delete(type);
     });
     byType.forEach((group) => {
       group.forEach((item) => {
-        parts.push(renderCatalogItemHtml(item, index, imageSrcById[item.id] || ""));
+        parts.push(renderCatalogItemHtml(item, index, imageSrcById[item.id] || "", hostname));
         index += 1;
       });
     });
@@ -335,14 +379,22 @@
   function buildCollectionReportHtml(entries, opts = {}) {
     const embedImages = opts.embedImages !== false;
     const esc = (s) => Acopio.escapeHtml(String(s)).replace(/\n/g, "<br>");
+    // Same reasoning as buildCatalogHtml: a report generated per-folder is
+    // already scoped to one site, so repeating that site's URL under every
+    // entry is noise. Left empty (show every Source) when entries mix hosts.
+    const reportHostname =
+      opts.hostname ||
+      (entries.length && entries.every((e) => sameHostname(e.hostname, entries[0].hostname))
+        ? entries[0].hostname
+        : "");
     const parts = [
       "<!DOCTYPE html>",
       "<html lang=\"en\"><head><meta charset=\"utf-8\">",
       "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
-      "<title>Acopio — Collection report</title>",
+      "<title>Acopio — Collection with Notes</title>",
       "<style>", REPORT_STYLES, "</style></head><body>",
       "<div class=\"wrap\">",
-      "<h1>Acopio — Collection report</h1>",
+      "<h1>Acopio — Collection with Notes</h1>",
       `<p class="intro">${entries.length} capture${entries.length === 1 ? "" : "s"} with notes — image, then your note. Print this page or save as PDF from your browser.</p>`,
     ];
 
@@ -361,7 +413,8 @@
       if (entry.selector) {
         parts.push(`<p class="meta">Selector: <code>${esc(entry.selector)}</code></p>`);
       }
-      if (entry.sourceUrl) {
+      const sameHostAsReport = sameHostname(entry.hostname, reportHostname);
+      if (entry.sourceUrl && !sameHostAsReport) {
         parts.push(`<p class="meta">Source: <a href="${esc(entry.sourceUrl)}">${esc(entry.sourceUrl)}</a></p>`);
       }
       parts.push("<div class=\"note-label\">Your note</div>");
@@ -375,8 +428,14 @@
   }
 
   function buildCollectionReportMarkdown(entries) {
+    // Same reasoning as buildCatalogHtml/buildCollectionReportHtml: a
+    // report per-folder is already scoped to one site.
+    const reportHostname =
+      entries.length && entries.every((e) => e.hostname && e.hostname === entries[0].hostname)
+        ? entries[0].hostname
+        : "";
     const lines = [
-      "# Acopio — Collection report",
+      "# Acopio — Collection with Notes",
       "",
       `${entries.length} capture${entries.length === 1 ? "" : "s"} with notes.`,
       "",
@@ -391,7 +450,8 @@
         lines.push("");
       }
       if (entry.selector) lines.push(`**Selector:** ${entry.selector}`);
-      if (entry.sourceUrl) lines.push(`**Source:** ${entry.sourceUrl}`);
+      const sameHostAsReport = sameHostname(entry.hostname, reportHostname);
+      if (entry.sourceUrl && !sameHostAsReport) lines.push(`**Source:** ${entry.sourceUrl}`);
       lines.push("");
       lines.push(`**Your note:** ${entry.note}`);
       lines.push("");
@@ -406,22 +466,25 @@
       "ACOPIO ZIP EXPORT — How to view this handoff",
       "============================================",
       "",
-      "RECOMMENDED: catalog.html",
+      "RECOMMENDED: 1-whole-collection.html",
       "  Double-click to open in Chrome, Safari, Firefox, or Edge.",
-      "  Colors: swatch + hex code (gradients show the full blend + each stop).",
-      "  Fonts: sample text + font name, weight, size, line height, tracking, color.",
+      "  Everything in this folder, combined — colors (swatch + hex, gradients",
+      "  show the full blend + each stop), fonts (sample + name/weight/size/",
+      "  line height/tracking/color), images, and components.",
       "  Notes you typed at Collect appear under each item as \"Your note\".",
       "  Use Print → Save as PDF for a PDF.",
       "",
       "Also in this folder (when present):",
-      "  collection-report.html — Image/component captures that have notes (with embedded images)",
-      "  collection-report.md   — Markdown with relative image paths (Obsidian, Notion import)",
+      "  2-components.html      — Just the components (present only alongside",
+      "                            3-images.html, when this export mixes the two)",
+      "  3-images.html           — Just the images (same condition as above)",
+      "  4-collection-with-notes.html — Image/component captures that have notes,",
+      "                            shown as image then your note (with embedded images)",
       "  color-*.png / font-*.png / component-*.png / image-*.png — Individual files",
-      "  color-*.txt / font-*.txt — Plain-text property sheets",
       "  notes-with-images.doc / .rtf — Word-oriented noted-visual packages",
       "",
       "Plain-text editors (Notepad, TextEdit plain mode) cannot show images or swatches.",
-      "Use catalog.html instead.",
+      "Use 1-whole-collection.html instead.",
       "",
     ].join("\n");
   }
@@ -456,29 +519,9 @@
     const hex = (item.data.hex || "color").replace("#", "").toUpperCase();
     const noteSlug = item.note ? `-${H.sanitizeFilename(item.note.slice(0, 30))}` : "";
     const blob = await H.colorSwatchPngBlob(item.data);
+    // Hex/RGB/alpha/CSS already render in catalog.html per-item — a sidecar
+    // .txt just duplicated it as a second, easy-to-miss file per color.
     folder.file(`color-${hex}${noteSlug}-${id6}.png`, blob);
-    const lines = [];
-    if (item.data.isGradient) {
-      const css = typeof item.data.gradientStops === "string" ? item.data.gradientStops : "";
-      const stops =
-        css && typeof Acopio.parseGradientStops === "function" ? Acopio.parseGradientStops(css) : [];
-      lines.push("Type: Gradient");
-      if (stops.length) lines.push(`Stops: ${stops.join(", ")}`);
-      if (css && typeof Acopio.parseGradientDirection === "function") {
-        lines.push(`Direction: ${Acopio.parseGradientDirection(css)}`);
-      }
-      if (css) lines.push(`CSS: ${css}`);
-    } else {
-      lines.push(`Hex: ${item.data.hex || "?"}`);
-      if (item.data.rgb) {
-        lines.push(`RGB: ${Math.round(item.data.rgb.r)}, ${Math.round(item.data.rgb.g)}, ${Math.round(item.data.rgb.b)}`);
-      }
-      if (item.data.alpha != null && Number(item.data.alpha) < 0.999) {
-        lines.push(`Alpha: ${item.data.alpha}`);
-      }
-    }
-    if (item.note) lines.push(`Note: ${item.note}`);
-    folder.file(`color-${hex}${noteSlug}-${id6}.txt`, lines.join("\n"));
   }
 
   async function writePairingToZip(folder, item) {
@@ -495,27 +538,20 @@
     const family = H.sanitizeFilename(item.data.family || "font");
     const size = item.data.sizePx ? `${item.data.sizePx}px` : "";
     const base = `font-${family}${size ? "-" + size : ""}-${id6}`;
+    // Font name/weight/size/line-height/color/sample already render in
+    // catalog.html per-item — a sidecar .txt just duplicated it as a
+    // second, easy-to-miss file per font.
     const blob = await H.fontSamplePngBlob(item.data);
     folder.file(`${base}.png`, blob);
-    const lines = [
-      `Font name: ${item.data.family || "?"}`,
-      `Weight: ${item.data.weight || "?"}`,
-      `Size: ${item.data.sizePx != null ? `${item.data.sizePx}px` : "?"}`,
-    ];
-    if (item.data.lineHeightPx != null) lines.push(`Line height: ${item.data.lineHeightPx}px`);
-    if (item.data.letterSpacingPx != null) lines.push(`Letter spacing: ${item.data.letterSpacingPx}px`);
-    if (item.data.colorHex) lines.push(`Color: ${String(item.data.colorHex).toUpperCase()}`);
-    if (item.data.sampleText) lines.push(`Sample: ${item.data.sampleText}`);
-    if (item.family) lines.push(`Role: ${item.family}`);
-    if (item.note) lines.push(`Note: ${item.note}`);
-    folder.file(`${base}.txt`, lines.join("\n"));
   }
 
   async function writeImageToZip(folder, item, notedVisuals) {
     const id6 = item.id.slice(0, 6);
     const hasNote = !!(item.note && String(item.note).trim());
     const dims = item.data.width && item.data.height ? `${item.data.width}x${item.data.height}` : "size-unknown";
-    const desc = H.sanitizeFilename(item.selector || "image");
+    // A raw CSS selector ("a.framer-9bdXY") in a filename identifies the DOM
+    // node, not the picture — prefer real alt text or the source filename.
+    const desc = H.sanitizeFilename(H.imageLabelFromItem(item) || "image");
     let imageFilename = null;
     let imageBytes = null;
 
@@ -545,6 +581,7 @@
         imageFile: imageFilename,
         sourceUrl: item.sourceUrl || "",
         selector: item.selector || "",
+        hostname: item.hostname || "",
       });
     }
     return imageFilename;
@@ -620,7 +657,12 @@
     const hasNote = !!(item.note && String(item.note).trim());
     const dims = item.data.boundingBoxWidth && item.data.boundingBoxHeight
       ? `${item.data.boundingBoxWidth}x${item.data.boundingBoxHeight}` : "size-unknown";
-    const desc = H.sanitizeFilename(item.selector || "component");
+    // A raw CSS selector ("div.framer-17c...") in a filename identifies the
+    // DOM node, not what this component actually is — prefer its own
+    // heading/label text (e.g. "Redefining Dashboards for Indian Fintech").
+    const desc = H.sanitizeFilename(
+      H.componentLabelFromOuterHtml(item.data.outerHTML) || item.selector || "component"
+    );
     const base = `component-${desc}-${dims}-${id6}`;
     const imageFilename = `${base}.png`;
     let componentImageBytes = await resolveComponentImageBytes(item);
@@ -644,6 +686,7 @@
         imageFile: componentImageBytes ? imageFilename : null,
         sourceUrl: item.sourceUrl || "",
         selector: item.selector || "",
+        hostname: item.hostname || "",
       });
     }
     return componentImageBytes && componentImageBytes.length ? imageFilename : null;
@@ -698,15 +741,48 @@
           if (writtenImage) imageSrcById[item.id] = writtenImage;
         }
 
+        // Numbered so a file browser's default alphabetical sort actually
+        // shows them in the order a person would want to open them —
+        // everything combined first, then narrowed by type, then (when
+        // there's anything to show) the notes view last. Numbers sort
+        // before letters, so these four cluster at the top ahead of the
+        // individual asset files (color-*.png, image-*.png, etc.).
+        const hostname = hostItems[0] && hostItems[0].hostname;
         folder.file(
-          "catalog.html",
-          buildCatalogHtml(hostItems, {
-            hostname: hostItems[0] && hostItems[0].hostname,
-            imageSrcById,
-          })
+          "1-whole-collection.html",
+          buildCatalogHtml(hostItems, { hostname, imageSrcById })
         );
-        folder.file("README.txt", buildExportReadme());
         wroteCatalog = true;
+
+        // A mixed export (components AND images together) also gets one
+        // file per type — the whole-collection file already has everything
+        // combined, these are for handing off just the images or just the
+        // components without the other type in the way. Skipped when the
+        // folder only has one of the two: the whole-collection file already
+        // IS that file, and a second copy would just be clutter.
+        const imageItems = hostItems.filter((item) => item.type === "image");
+        const componentItems = hostItems.filter((item) => item.type === "component");
+        if (imageItems.length > 0 && componentItems.length > 0) {
+          folder.file(
+            "2-components.html",
+            buildCatalogHtml(componentItems, {
+              hostname,
+              imageSrcById,
+              title: "Acopio — Components",
+              pageHeading: "Acopio — Components",
+            })
+          );
+          folder.file(
+            "3-images.html",
+            buildCatalogHtml(imageItems, {
+              hostname,
+              imageSrcById,
+              title: "Acopio — Images",
+              pageHeading: "Acopio — Images",
+            })
+          );
+        }
+        folder.file("README.txt", buildExportReadme());
 
         if (notedVisuals.length > 0) {
           anyNotedVisuals = true;
@@ -716,8 +792,7 @@
               imageBytes: entry.imageBytes ? await H.ensurePngBytes(entry.imageBytes) : null,
             }))
           );
-          folder.file("collection-report.html", buildCollectionReportHtml(normalized));
-          folder.file("collection-report.md", buildCollectionReportMarkdown(normalized));
+          folder.file("4-collection-with-notes.html", buildCollectionReportHtml(normalized, { hostname }));
         }
       }
       const blob = await zip.generateAsync({ type: "blob" });
@@ -737,11 +812,11 @@
           : `${count} item${count === 1 ? "" : "s"}`;
       const reportHint = wroteCatalog
         ? siteCount > 1
-          ? " Open catalog.html in each site folder for colors, fonts, and notes."
-          : " Open catalog.html for colors, fonts, and notes."
+          ? " Open 1-whole-collection.html in each site folder for colors, fonts, and notes."
+          : " Open 1-whole-collection.html for colors, fonts, and notes."
         : "";
       const notedHint = anyNotedVisuals
-        ? " collection-report.html has noted screenshots."
+        ? " 4-collection-with-notes.html has noted screenshots."
         : "";
       showFeedback(`ZIP downloaded — ${countLabel}.${reportHint}${notedHint}`, "success");
     } catch (err) {
